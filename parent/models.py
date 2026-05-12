@@ -13,6 +13,8 @@ def generate_numeric_code(length=6):
 class User(AbstractUser):
     ROLE_PARENT = "parent"
     ROLE_CHILD = "child"
+    Male = 'male'
+    Female = 'female'
 
     ROLE_CHOICES = (
         (ROLE_PARENT, "Parent"),
