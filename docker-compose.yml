@@ -15,8 +15,6 @@ services:
       POSTGRES_DB: Jojo
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "0200"
-    ports:
-      - "5432:5432"
     volumes:
       - jojo_postgres_data:/var/lib/postgresql/data
     restart: always
