@@ -29,8 +29,8 @@ class User(AbstractUser):
     )
     
     Gender = (
-        ('male', 'male'),
-        ('female', 'female'),
+        (Male, 'male'),
+        (Female, 'female'),
     )
 
     username = models.CharField(

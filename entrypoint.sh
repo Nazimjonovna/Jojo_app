@@ -36,14 +36,23 @@ email = "${DJANGO_SUPERUSER_EMAIL}"
 password = "${DJANGO_SUPERUSER_PASSWORD}"
 
 if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(
+    user = User.objects.create_superuser(
         username=username,
         email=email,
-        password=password,
-        role="parent",
-        phone="+998000000000",
-        language="uz_latn"
+        password=password
     )
+
+    if hasattr(user, "role"):
+        user.role = "parent"
+
+    if hasattr(user, "phone"):
+        user.phone = "+998000000000"
+
+    if hasattr(user, "language"):
+        user.language = "uz_latn"
+
+    user.save()
+
     print("Superuser created.")
 else:
     print("Superuser already exists.")
