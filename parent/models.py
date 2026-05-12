@@ -25,6 +25,11 @@ class User(AbstractUser):
         ("ru", "Русский"),
         ("en", "English"),
     )
+    
+    Gender = (
+        ('male', 'male'),
+        ('female', 'female'),
+    )
 
     username = models.CharField(
         max_length=150,
@@ -51,14 +56,12 @@ class User(AbstractUser):
         choices=LANGUAGE_CHOICES,
         default="uz_latn"
     )
-
+    gender = models.CharField(max_length=200, choices=Gender)
     avatar = models.ImageField(
         upload_to="avatars/",
         null=True,
         blank=True
     )
-
-    # Bu ikkisi fields.E304 xatosini yo'qotish uchun kerak
     groups = models.ManyToManyField(
         Group,
         verbose_name="groups",
@@ -70,7 +73,6 @@ class User(AbstractUser):
             "granted to each of their groups."
         ),
     )
-
     user_permissions = models.ManyToManyField(
         Permission,
         verbose_name="user permissions",
