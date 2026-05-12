@@ -13,3 +13,5 @@ daphne
 firebase-admin
 qrcode
 Pillow
+
+whitenoise
