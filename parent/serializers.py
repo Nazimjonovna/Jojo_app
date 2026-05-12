@@ -66,6 +66,7 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
             "last_name",
             "language",
             "avatar",
+            'gender',
         ]
         read_only_fields = ["id"]
 
@@ -74,12 +75,10 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Telefon raqam +998901234567 formatida bo‘lishi kerak."
             )
-
-        if User.objects.filter(phone=value, role=User.ROLE_PARENT).exists():
+        if User.objects.filter(phone=value).exists():
             raise serializers.ValidationError(
-                "Bu telefon raqam bilan parent oldin ro‘yxatdan o‘tgan."
+                "Bu telefon raqam bilan foydalanuvchi oldin ro‘yxatdan o‘tgan."
             )
-
         return value
 
     def validate_language(self, value):
@@ -92,15 +91,15 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        phone = validated_data.get("phone")
-
+        phone = validated_data.pop("phone")
         user = User.objects.create(
             username=phone,
             phone=phone,
             role=User.ROLE_PARENT,
-            password=make_password(password),
             **validated_data
         )
+        user.set_password(password)
+        user.save()
         return user
 
 

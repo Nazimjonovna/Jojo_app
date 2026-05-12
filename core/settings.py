@@ -40,6 +40,28 @@ REST_FRAMEWORK = {
     ),
 }
 
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+SWAGGER_SETTINGS = {
+
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': (
+                'Bearer <token> formatida kiriting. '
+                'Masalan: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+            ),
+        }
+    },
+
+    'USE_SESSION_AUTH': False,
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

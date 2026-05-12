@@ -24,7 +24,7 @@ urlpatterns = [
     path("auth/send-otp/", SendOTPView.as_view()),
     path("auth/verify-otp/", VerifyOTPView.as_view()),
     path("auth/parent/register/", ParentRegisterView.as_view()),
-    path("auth/parent/login/", ParentLoginView.as_view()),
+    # path("auth/parent/login/", ParentLoginView.as_view()),
     path("parent/pairing-code/", CreatePairingCodeView.as_view()),
     path("child/register-by-code/", ChildRegisterByCodeView.as_view()),
     path("parent/children/", MyChildrenView.as_view()),

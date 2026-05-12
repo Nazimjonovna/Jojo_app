@@ -68,9 +68,7 @@ class SendOTPView(APIView):
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         phone = serializer.validated_data["phone"]
-
         last_otp = OTPCode.objects.filter(
             phone=phone
         ).order_by("-created_at").first()
@@ -161,18 +159,15 @@ class VerifyOTPView(APIView):
 class ParentRegisterView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=ParentRegisterSerializer, tags = ['register'])
+    @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=['register'])
     def post(self, request):
         serializer = ParentRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         phone = serializer.validated_data["phone"]
-
         verified_otp = OTPCode.objects.filter(
             phone=phone,
             is_used=True
         ).order_by("-created_at").first()
-
         if not verified_otp:
             return Response(
                 {
@@ -181,10 +176,16 @@ class ParentRegisterView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+        if User.objects.filter(phone=phone).exists():
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu telefon raqam bilan user allaqachon ro‘yxatdan o‘tgan."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         user = serializer.save()
         tokens = get_tokens_for_user(user)
-
         return Response(
             {
                 "status": True,
