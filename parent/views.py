@@ -1,238 +1,870 @@
-from django.shortcuts import render
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from random import randint
-from rest_framework import status, generics
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from .serializers import (Userserializer, PhoneSerializer, SMSCodeSerializer, UserLoginSerializer,)
-from .models import User, Validatedcode, Verification
-from django.contrib.auth.hashers import make_password, check_password
-from rest_framework.parsers import MultiPartParser, FileUploadParser
+from datetime import timedelta
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
-# from get_sms import Getsms
-import datetime as d
-import pytz
-from django.conf import settings
-from django.utils.translation import gettext_lazy as _
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-import traceback
+from django.contrib.auth import authenticate
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .models import (
+    User,
+    OTPCode,
+    PairingCode,
+    ParentChild,
+    ChildLocation,
+    ChildLastLocation,
+    DeviceToken,
+    SafeRoute,
+    ChildRouteAssignment,
+    RouteAlert,
+    generate_numeric_code,
+)
+from .serializers import (
+    SendOTPSerializer,
+    VerifyOTPSerializer,
+    ParentRegisterSerializer,
+    ParentLoginSerializer,
+    UserSerializer,
+    UpdateLanguageSerializer,
+    PairingCodeSerializer,
+    ChildRegisterByCodeSerializer,
+    ChildSerializer,
+    ChildLocationSerializer,
+    ChildLastLocationSerializer,
+    DeviceTokenSerializer,
+    SafeRouteSerializer,
+    ChildRouteAssignmentSerializer,
+    RouteAlertSerializer,
+)
+from .services import process_child_location
 
 
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
 
-utc = pytz.timezone(settings.TIME_ZONE)
-min = 1
-def send_sms(phone_number, step_reset=None, change_phone=None):
-    try:
-        verify_code = randint(1111, 9999)
-        try:
-            obj = Verification.objects.get(phone=phone_number)
-        except Verification.DoesNotExist:
-            obj = Verification(phone=phone_number, verify_code=verify_code)
-            obj.step_reset=step_reset 
-            obj.step_change_phone=change_phone
-            obj.save()
-            context = {'phone_number': str(obj.phone), 'verify_code': obj.verify_code,
-                       'lifetime': _(f"{min} minutes")}
-            return context
-        time_now = d.datetime.now(utc)
-        diff = time_now - obj.created
-        three_minute = d.timedelta(minutes=min)
-        if diff <= three_minute:
-            time_left = str(three_minute - diff)
-            return {'message': _(f"Try again in {time_left[3:4]} minute {time_left[5:7]} seconds")}
-        obj.delete()
-        obj = Verification(phone=phone_number)
-        obj.verify_code=verify_code 
-        obj.step_reset=step_reset
-        obj.step_change_phone=change_phone
-        obj.save()
-        context = {'phone_number': str(obj.phone), 'verify_code': obj.verify_code, 'lifetime': _(f"{min} minutes")}
-        return context
-    except Exception as e:
-        print(f"\n[ERROR] error in send_sms <<<{e}>>>\n")
+    return {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
+    }
 
 
+def send_sms_code(phone, code):
+    """
+    Bu yerga Eskiz, Play Mobile yoki boshqa SMS provider integratsiya qilasan.
 
-class PhoneView(APIView):
-    queryset = User.objects.all()
-    serializer_class = PhoneSerializer
+    Hozircha test uchun print qilyapti.
+    Productionda code response ichida qaytmasligi kerak.
+    """
+    print(f"SMS CODE for {phone}: {code}")
+    return True
+
+
+class SendOTPView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=PhoneSerializer, tags = ['Register'])
-    def post(self, request, *args, **kwargs):
-        phone_number = str(request.data.get("phone"))
-        if phone_number.isdigit() and len(phone_number)>8:
-            user = User.objects.filter(phone__iexact=phone_number)
-            if user.exists():
-                return Response({
-                    "status": False,
-                    "detail": "Bu raqam avval registerdan otgan."
-                })
-            else:
-                code = send_sms(phone_number)
-                if 'verify_code' in code:
-                    code = str(code['verify_code'])
-                    try:
-                        validate = Validatedcode.objects.get(phone=phone_number)
-                        if validate.validated:
-                            validate.code = code
-                            validate.validated= False
-                            validate.save()
-                        
-                    except Validatedcode.DoesNotExist as e:
-                        phon = Validatedcode.objects.filter(phone__iexact=phone_number)
-                        print("expect")
-                        if not phon.exists():
-                            Validatedcode.objects.create(phone=phone_number, code=code, validated=False)
-                        else:
-                            Response({"phone": "mavjud"})
-
-                return Response({
-                    "status": True,
-                    "detail": "SMS xabarnoma jo'natildi",
-                    "code":code 
-                })
-        else:
-            if len(phone_number)<8:
-                return Response({"detail":"Telefon raqamingizni kod bilan kiriting!"})
-            else:    
-                return Response({
-                    "status": False,
-                    "detail": "Telefon raqamni kiriting ."
-                })
-
-
-    def send_code(phone, code):
-        if phone:
-            code = randint(999, 9999)
-            print(code)
-            return code
-        else:
-            return False
-
-
-class codeView(APIView):
-    permission_classes = [AllowAny]
-
-    @swagger_auto_schema(request_body=SMSCodeSerializer, tags = ['Register'])
+    @swagger_auto_schema(request_body=SendOTPSerializer, tags=['register'])
     def post(self, request):
-        phone_number = request.data.get('phone', True)
-        code_send = request.data.get('code', True)
-        if not phone_number and code_send:
-            return Response({
-                    'status': False,
-                    'detail': 'codeni va phone ni kiriting'
-                })
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        try:
-            verify = Validatedcode.objects.get(phone=phone_number, validated=False)
-            if verify.code == code_send:
-                    verify.count += 1
-                    verify.validated = True
-                    verify.save()
+        phone = serializer.validated_data["phone"]
 
-                    return Response({
-                        'status': True,
-                        'detail': "code to'g'ri"
-                        })
-            else:
-                return Response({
-                   'status': False,
-                   'error': "codeni to'g'ri kiriting"})
-            
-        except Validatedcode.DoesNotExist as e:
-            return Response({
-               'error': "code aktiv emas yoki mavjud emas, boshqa code oling"
-            })
+        last_otp = OTPCode.objects.filter(
+            phone=phone
+        ).order_by("-created_at").first()
 
-        
+        if last_otp:
+            seconds = (timezone.now() - last_otp.created_at).total_seconds()
 
+            if seconds < 60:
+                time_left = int(60 - seconds)
 
-class ValidatedcodeView(APIView):
-    @swagger_auto_schema(tags=['User'])
-    def post(self, request, *args, **kwargs):
-        phone = request.data.get('phone', False)
-        code_sent = request.data.get('code', False)
-
-        if phone and code_sent:
-            old = Validatedcode.objects.filter(phone__iexact=phone)
-            if old.exists():
-                old = old.first()
-                code = old.code
-                if str(code_sent) == str(code):
-                    old.validated = True
-                    old.save()   
-                    return Response({
-                        'status': True,
-                        'detail': "code to'g'ri"
-                        })
-                else:
-                    return Response({
-                        'status': False,
-                        'detail': "code noto'g'ri"
-                        })
-            else:
-                return Response({
-                    'status': False,
-                    'detail': "code aktiv emas yoki mavjud emas, boshqa code oling"
-                    })
-
-@method_decorator(csrf_exempt, name='dispatch')
-class RegisterUserView(generics.CreateAPIView):
-    permission_classes = [AllowAny, ]
-    serializer_class = Userserializer
-    parser_classes = [MultiPartParser, FileUploadParser]
-
-    @swagger_auto_schema(request_body=Userserializer, tags=['User'])
-    def post(self, request):
-        
-        try:
-            serializer = self.serializer_class(data=request.data)
-            if serializer.is_valid():
-                user_obj = serializer.save()
-                phone = serializer.validated_data.get('phone')
-                password = serializer.validated_data.get('password')
-                code = serializer.validated_data.get('code')
-                first_name = request.data.get('first_name')
-                last_name = request.data.get('last_name')
-                gender = request.data.get('gender')
-                birth_date = request.data.get('birth_date')
-                address = request.data.get('address')
-                city = request.data.get('city')
-                country = request.data.get('country')
-                postal_code = request.data.get('postal_code')
-                pasport = request.data.get('pasport')
-                pasport_seria = request.data.get('pasport_seria')
-                is_who = request.data.get('is_who')
-                verify = Validatedcode.objects.filter(phone__iexact=phone, validated=True)
-                if not verify.exists():
-                    return Response({
+                return Response(
+                    {
                         "status": False,
-                        "detail": _("You haven't entered a valid one-time secret code. Therefore, you cannot proceed with registration.")
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                        "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.",
+                        "time_left": time_left
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
 
-                hashed_password = make_password(password)
-                user_obj = User.objects.create(phone=phone, password=hashed_password, code=code, first_name=first_name,
-                                               gender=gender, birth_date=birth_date, address=address, last_name = last_name,
-                                               city=city, country=country, postal_code=postal_code,
-                                               pasport=pasport, pasport_seria=pasport_seria, is_who=is_who)
+        code = generate_numeric_code(6)
 
-                access_token = AccessToken().for_user(user_obj)
-                refresh_token = RefreshToken().for_user(user_obj)
+        OTPCode.objects.create(
+            phone=phone,
+            code=code,
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
 
-                return Response({
-                    "access": str(access_token),
-                    "refresh": str(refresh_token),
-                    "phone": str(user_obj.phone),
-                })
-            else:
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        send_sms_code(phone, code)
 
-        except Exception as e:
-            print(e)
-            return Response({
-                "status": False,
-                "detail": _("An error occurred while processing your request.")
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {
+                "status": True,
+                "detail": "SMS kod yuborildi.",
+                "code": code,  # TEST UCHUN. Productionda olib tashlanadi.
+                "lifetime": "5 minutes"
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=VerifyOTPSerializer, tags = ['register'])
+    def post(self, request):
+        serializer = VerifyOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data["phone"]
+        code = serializer.validated_data["code"]
+
+        otp = OTPCode.objects.filter(
+            phone=phone,
+            code=code,
+            is_used=False
+        ).order_by("-created_at").first()
+
+        if not otp:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SMS kod noto‘g‘ri."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if otp.is_expired():
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SMS kod muddati tugagan."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp.is_used = True
+        otp.save(update_fields=["is_used"])
+
+        return Response(
+            {
+                "status": True,
+                "detail": "SMS kod tasdiqlandi."
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentRegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=ParentRegisterSerializer, tags = ['register'])
+    def post(self, request):
+        serializer = ParentRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data["phone"]
+
+        verified_otp = OTPCode.objects.filter(
+            phone=phone,
+            is_used=True
+        ).order_by("-created_at").first()
+
+        if not verified_otp:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Avval SMS kodni tasdiqlang."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = serializer.save()
+        tokens = get_tokens_for_user(user)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.",
+                "user": UserSerializer(user).data,
+                "tokens": tokens,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ParentLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=ParentLoginSerializer, tags = ['register'])
+    def post(self, request):
+        serializer = ParentLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data["phone"]
+        password = serializer.validated_data["password"]
+
+        user = authenticate(
+            request=request,
+            username=phone,
+            password=password
+        )
+
+        if not user:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Telefon raqam yoki parol noto‘g‘ri."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu akkaunt parent emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        tokens = get_tokens_for_user(user)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Login muvaffaqiyatli.",
+                "user": UserSerializer(user).data,
+                "tokens": tokens,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['info'])
+    def get(self, request):
+        return Response(
+            {
+                "status": True,
+                "user": UserSerializer(request.user).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class UpdateLanguageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=UpdateLanguageSerializer, tags = ['settings'])
+    def patch(self, request):
+        serializer = UpdateLanguageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        request.user.language = serializer.validated_data["language"]
+        request.user.save(update_fields=["language"])
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Til muvaffaqiyatli o‘zgartirildi.",
+                "user": UserSerializer(request.user).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class CreatePairingCodeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['info'])
+    def post(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent pairing code yaratishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        code = generate_numeric_code(6)
+
+        while PairingCode.objects.filter(code=code, is_used=False).exists():
+            code = generate_numeric_code(6)
+
+        pairing = PairingCode.objects.create(
+            parent=request.user,
+            code=code,
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Pairing code yaratildi.",
+                "pairing": PairingCodeSerializer(pairing).data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ChildRegisterByCodeView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(request_body=ChildRegisterByCodeSerializer, tags = ['register'])
+    def post(self, request):
+        serializer = ChildRegisterByCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        code = serializer.validated_data["pairing_code"]
+        child_name = serializer.validated_data["child_name"]
+        language = serializer.validated_data["language"]
+
+        pairing = PairingCode.objects.filter(
+            code=code,
+            is_used=False
+        ).first()
+
+        if not pairing:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Pairing code noto‘g‘ri yoki ishlatilgan."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if pairing.is_expired():
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Pairing code muddati tugagan."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        child_username = f"child_{generate_numeric_code(10)}"
+
+        child = User.objects.create_user(
+            username=child_username,
+            password=generate_numeric_code(12),
+            first_name=child_name,
+            role=User.ROLE_CHILD,
+            language=language
+        )
+
+        ParentChild.objects.create(
+            parent=pairing.parent,
+            child=child
+        )
+
+        pairing.is_used = True
+        pairing.save(update_fields=["is_used"])
+
+        tokens = get_tokens_for_user(child)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Child muvaffaqiyatli ulandi.",
+                "child": ChildSerializer(child).data,
+                "tokens": tokens,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class MyChildrenView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['info'])
+    def get(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent bolalar ro‘yxatini ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        links = ParentChild.objects.filter(
+            parent=request.user
+        ).select_related("child")
+
+        children = [link.child for link in links]
+
+        return Response(
+            {
+                "status": True,
+                "children": ChildSerializer(children, many=True).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentRouteListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])
+    def get(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent route ro‘yxatini ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        routes = SafeRoute.objects.filter(
+            parent=request.user
+        ).prefetch_related("points").order_by("-created_at")
+
+        return Response(
+            {
+                "status": True,
+                "routes": SafeRouteSerializer(routes, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(request_body=SafeRouteSerializer, tags = ['location'])
+    def post(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent route yaratishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = SafeRouteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        route = serializer.save(parent=request.user)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Marshrut yaratildi.",
+                "route": SafeRouteSerializer(route).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ParentRouteDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])
+    def get_object(self, request, route_id):
+        try:
+            return SafeRoute.objects.get(
+                id=route_id,
+                parent=request.user
+            )
+        except SafeRoute.DoesNotExist:
+            return None
+
+    @swagger_auto_schema(tags = ['location'])
+    def get(self, request, route_id):
+        route = self.get_object(request, route_id)
+
+        if not route:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Route topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "route": SafeRouteSerializer(route).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(request_body=SafeRouteSerializer, tags = ['location'])
+    def patch(self, request, route_id):
+        route = self.get_object(request, route_id)
+
+        if not route:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Route topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SafeRouteSerializer(
+            route,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        route = serializer.save()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Route yangilandi.",
+                "route": SafeRouteSerializer(route).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(tags = ['location']) 
+    def delete(self, request, route_id):
+        route = self.get_object(request, route_id)
+
+        if not route:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Route topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        route.delete()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Route o‘chirildi.",
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class AssignRouteToChildView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ChildRouteAssignmentSerializer, tags = ['location'])
+    def post(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent route biriktirishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ChildRouteAssignmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        child = serializer.validated_data["child"]
+        route = serializer.validated_data["route"]
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child=child
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if route.parent_id != request.user.id:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu route sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        assignment = serializer.save(parent=request.user)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Route childga biriktirildi.",
+                "assignment": ChildRouteAssignmentSerializer(assignment).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ParentChildAssignmentsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])  
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child_id=child_id
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        assignments = ChildRouteAssignment.objects.filter(
+            parent=request.user,
+            child_id=child_id
+        ).select_related("route").order_by("-created_at")
+
+        return Response(
+            {
+                "status": True,
+                "assignments": ChildRouteAssignmentSerializer(
+                    assignments,
+                    many=True
+                ).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ChildActiveRoutesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child o‘z routelarini ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        assignments = ChildRouteAssignment.objects.filter(
+            child=request.user,
+            status=ChildRouteAssignment.STATUS_ACTIVE,
+            route__is_active=True,
+        ).select_related("route").prefetch_related("route__points")
+
+        return Response(
+            {
+                "status": True,
+                "assignments": ChildRouteAssignmentSerializer(
+                    assignments,
+                    many=True
+                ).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class SendChildLocationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ChildLocationSerializer, tags = ['location'])
+    def post(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child location yuborishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ChildLocationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        location, realtime_payload = process_child_location(
+            child=request.user,
+            latitude=serializer.validated_data["latitude"],
+            longitude=serializer.validated_data["longitude"],
+            accuracy=serializer.validated_data.get("accuracy"),
+            battery_level=serializer.validated_data.get("battery_level"),
+            speed=serializer.validated_data.get("speed"),
+            heading=serializer.validated_data.get("heading"),
+            source=ChildLocation.SOURCE_REST,
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Location saqlandi va real-time yuborildi.",
+                "location": ChildLocationSerializer(location).data,
+                "realtime_payload": realtime_payload,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ChildLastLocationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent location ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child_id=child_id
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            location = ChildLastLocation.objects.get(child_id=child_id)
+        except ChildLastLocation.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Location hali yuborilmagan."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "location": ChildLastLocationSerializer(location).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ChildLocationHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ChildLocationSerializer, tags = ['location'])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent location history ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child_id=child_id
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        locations = ChildLocation.objects.filter(
+            child_id=child_id
+        ).order_by("-created_at")[:100]
+
+        return Response(
+            {
+                "status": True,
+                "locations": ChildLocationSerializer(locations, many=True).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class RouteAlertListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags = ['location'])
+    def get(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent alertlarni ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        alerts = RouteAlert.objects.filter(
+            assignment__parent=request.user
+        ).select_related(
+            "child",
+            "assignment",
+            "assignment__route",
+        ).order_by("-created_at")[:100]
+
+        return Response(
+            {
+                "status": True,
+                "alerts": RouteAlertSerializer(alerts, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class DeviceTokenView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=DeviceTokenSerializer, tags = ['token'])
+    def post(self, request):
+        serializer = DeviceTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token = serializer.validated_data["token"]
+        device_type = serializer.validated_data["device_type"]
+
+        device, created = DeviceToken.objects.update_or_create(
+            token=token,
+            defaults={
+                "user": request.user,
+                "device_type": device_type,
+                "is_active": True,
+            }
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "FCM token saqlandi.",
+                "device": DeviceTokenSerializer(device).data,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )

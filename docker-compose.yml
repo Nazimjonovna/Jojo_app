@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: jojo_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  db:
+    image: postgres:16
+    container_name: jojo_postgres
+    environment:
+      POSTGRES_DB: Jojo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "0200"
+    ports:
+      - "5432:5432"
+    volumes:
+      - jojo_postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  web:
+    build: .
+    container_name: jojo_backend
+    command: daphne -b 0.0.0.0 -p 8000 core.asgi:application
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+volumes:
+  jojo_postgres_data:

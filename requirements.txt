@@ -1,0 +1,15 @@
+Django
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+drf-yasg
+python-dotenv
+psycopg2-binary
+
+channels
+channels-redis
+daphne
+
+firebase-admin
+qrcode
+Pillow
