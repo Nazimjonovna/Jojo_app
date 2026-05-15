@@ -34,8 +34,7 @@ class User(AbstractUser):
     )
 
     username = models.CharField(
-        max_length=150,
-        unique=True,
+        max_length=1500,
         null=True,
         blank=True
     )
@@ -95,11 +94,23 @@ class OTPCode(models.Model):
     code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
-
+    attempt_count = models.PositiveIntegerField(default=0)
+    first_attempt_at = models.DateTimeField(null=True, blank=True)
+    blocked_until = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
         return timezone.now() > self.expires_at
+
+    def is_blocked(self):
+        return self.blocked_until and timezone.now() < self.blocked_until
+
+    def block_time_left_seconds(self):
+        if not self.blocked_until:
+            return 0
+
+        seconds = int((self.blocked_until - timezone.now()).total_seconds())
+        return max(seconds, 0)
 
     def __str__(self):
         return f"{self.phone} - {self.code}"
@@ -341,30 +352,38 @@ class RouteAlert(models.Model):
 class DeviceToken(models.Model):
     DEVICE_ANDROID = "android"
     DEVICE_IOS = "ios"
-
     DEVICE_CHOICES = (
         (DEVICE_ANDROID, "Android"),
         (DEVICE_IOS, "iOS"),
     )
-
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="device_tokens"
     )
-
-    token = models.TextField(unique=True)
-
+    device_id = models.CharField(
+        max_length=255,
+        db_index=True
+    )
+    token = models.TextField()
     device_type = models.CharField(
         max_length=20,
         choices=DEVICE_CHOICES,
         default=DEVICE_ANDROID
     )
-
     is_active = models.BooleanField(default=True)
-
+    last_login_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "device_id"]),
+            models.Index(fields=["user", "is_active"]),
+        ]
+
     def __str__(self):
-        return f"{self.user_id} - {self.device_type}"
+        return f"{self.user_id} - {self.device_type} - {self.device_id}"

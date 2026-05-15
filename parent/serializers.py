@@ -50,10 +50,20 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 
 class ParentRegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(
+    device_id = serializers.CharField(
         write_only=True,
-        min_length=6,
-        max_length=128
+        max_length=255,
+        required=True
+    )
+    token = serializers.CharField(
+        write_only=True,
+        required=True,
+        allow_blank=False
+    )
+    device_type = serializers.ChoiceField(
+        write_only=True,
+        choices=["android", "ios"],
+        default="android"
     )
 
     class Meta:
@@ -61,12 +71,14 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "phone",
-            "password",
             "first_name",
             "last_name",
             "language",
+            "gender",
             "avatar",
-            'gender',
+            "device_id",
+            "token",
+            "device_type",
         ]
         read_only_fields = ["id"]
 
@@ -74,10 +86,6 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
         if not re.match(PHONE_REGEX, value):
             raise serializers.ValidationError(
                 "Telefon raqam +998901234567 formatida bo‘lishi kerak."
-            )
-        if User.objects.filter(phone=value).exists():
-            raise serializers.ValidationError(
-                "Bu telefon raqam bilan foydalanuvchi oldin ro‘yxatdan o‘tgan."
             )
         return value
 
@@ -89,8 +97,22 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_device_id(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("device_id majburiy.")
+        return value
+
+    def validate_token(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Firebase token majburiy.")
+        return value
+
     def create(self, validated_data):
-        password = validated_data.pop("password")
+        validated_data.pop("device_id", None)
+        validated_data.pop("token", None)
+        validated_data.pop("device_type", None)
         phone = validated_data.pop("phone")
         user = User.objects.create(
             username=phone,
@@ -98,7 +120,6 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
             role=User.ROLE_PARENT,
             **validated_data
         )
-        user.set_password(password)
         user.save()
         return user
 
@@ -270,18 +291,31 @@ class DeviceTokenSerializer(serializers.ModelSerializer):
         model = DeviceToken
         fields = [
             "id",
+            "device_id",
             "token",
             "device_type",
             "is_active",
+            "last_login_at",
             "created_at",
             "updated_at",
         ]
         read_only_fields = [
             "id",
             "is_active",
+            "last_login_at",
             "created_at",
             "updated_at",
         ]
+
+    def validate_device_id(self, value):
+        if not value:
+            raise serializers.ValidationError("device_id majburiy.")
+        return value
+
+    def validate_token(self, value):
+        if not value:
+            raise serializers.ValidationError("Firebase token majburiy.")
+        return value
 
 
 class SafeRoutePointSerializer(serializers.ModelSerializer):

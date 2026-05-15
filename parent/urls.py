@@ -17,6 +17,7 @@ from .views import (
     ParentChildAssignmentsView,
     ChildActiveRoutesView,
     RouteAlertListView,
+    DeviceLogoutView,
 )
 
 
@@ -28,6 +29,7 @@ urlpatterns = [
     path("parent/pairing-code/", CreatePairingCodeView.as_view()),
     path("child/register-by-code/", ChildRegisterByCodeView.as_view()),
     path("parent/children/", MyChildrenView.as_view()),
+    path("device-token/logout/", DeviceLogoutView.as_view(), name="device-token-logout"),
     # Location
     path(
         "child/location/",

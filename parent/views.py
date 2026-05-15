@@ -1,11 +1,15 @@
 from datetime import timedelta
-from drf_yasg.utils import swagger_auto_schema
+
 from django.contrib.auth import authenticate
 from django.utils import timezone
+
+from drf_yasg.utils import swagger_auto_schema
+
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import (
@@ -21,6 +25,7 @@ from .models import (
     RouteAlert,
     generate_numeric_code,
 )
+
 from .serializers import (
     SendOTPSerializer,
     VerifyOTPSerializer,
@@ -38,6 +43,7 @@ from .serializers import (
     ChildRouteAssignmentSerializer,
     RouteAlertSerializer,
 )
+
 from .services import process_child_location
 
 
@@ -53,7 +59,6 @@ def get_tokens_for_user(user):
 def send_sms_code(phone, code):
     """
     Bu yerga Eskiz, Play Mobile yoki boshqa SMS provider integratsiya qilasan.
-
     Hozircha test uchun print qilyapti.
     Productionda code response ichida qaytmasligi kerak.
     """
@@ -61,17 +66,85 @@ def send_sms_code(phone, code):
     return True
 
 
+def save_user_device(user, device_id, token, device_type="android"):
+    """
+    Parent: xohlagancha device qo'sha oladi.
+    Child: faqat bitta active device ishlata oladi.
+    Agar child boshqa device_id bilan kirsa, avval eski device logout qilinishi kerak.
+    """
+
+    if not device_id:
+        return {
+            "error": True,
+            "detail": "device_id majburiy."
+        }
+
+    if not token:
+        return {
+            "error": True,
+            "detail": "Firebase token majburiy."
+        }
+
+    if user.role == User.ROLE_CHILD:
+        active_device = DeviceToken.objects.filter(
+            user=user,
+            is_active=True
+        ).exclude(
+            device_id=device_id
+        ).first()
+
+        if active_device:
+            return {
+                "error": True,
+                "detail": "Bu child akkaunt boshqa qurilmada aktiv. Avval birinchi device_id dan logout qiling.",
+                "active_device_id": active_device.device_id,
+            }
+
+    device, created = DeviceToken.objects.update_or_create(
+        user=user,
+        device_id=device_id,
+        defaults={
+            "token": token,
+            "device_type": device_type,
+            "is_active": True,
+            "last_login_at": timezone.now(),
+        }
+    )
+
+    return {
+        "error": False,
+        "device": device,
+        "created": created,
+    }
+
+
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=SendOTPSerializer, tags=['register'])
+    @swagger_auto_schema(request_body=SendOTPSerializer, tags=["register"])
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         phone = serializer.validated_data["phone"]
+
         last_otp = OTPCode.objects.filter(
             phone=phone
         ).order_by("-created_at").first()
+
+        if last_otp and hasattr(last_otp, "is_blocked") and last_otp.is_blocked():
+            time_left = last_otp.block_time_left_seconds()
+
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Juda ko‘p noto‘g‘ri urinish. Keyinroq qayta urinib ko‘ring.",
+                    "blocked": True,
+                    "time_left_seconds": time_left,
+                    "time_left_minutes": round(time_left / 60, 1),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
 
         if last_otp:
             seconds = (timezone.now() - last_otp.created_at).total_seconds()
@@ -83,7 +156,7 @@ class SendOTPView(APIView):
                     {
                         "status": False,
                         "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.",
-                        "time_left": time_left
+                        "time_left": time_left,
                     },
                     status=status.HTTP_429_TOO_MANY_REQUESTS
                 )
@@ -102,8 +175,8 @@ class SendOTPView(APIView):
             {
                 "status": True,
                 "detail": "SMS kod yuborildi.",
-                "code": code,  # TEST UCHUN. Productionda olib tashlanadi.
-                "lifetime": "5 minutes"
+                "code": code,
+                "lifetime": "5 minutes",
             },
             status=status.HTTP_200_OK
         )
@@ -112,7 +185,7 @@ class SendOTPView(APIView):
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=VerifyOTPSerializer, tags = ['register'])
+    @swagger_auto_schema(request_body=VerifyOTPSerializer, tags=["register"])
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -122,7 +195,6 @@ class VerifyOTPView(APIView):
 
         otp = OTPCode.objects.filter(
             phone=phone,
-            code=code,
             is_used=False
         ).order_by("-created_at").first()
 
@@ -130,9 +202,23 @@ class VerifyOTPView(APIView):
             return Response(
                 {
                     "status": False,
-                    "detail": "SMS kod noto‘g‘ri."
+                    "detail": "Aktiv SMS kod topilmadi. Yangi kod oling."
                 },
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if hasattr(otp, "is_blocked") and otp.is_blocked():
+            time_left = otp.block_time_left_seconds()
+
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Juda ko‘p noto‘g‘ri urinish. 30 minutdan keyin qayta urinib ko‘ring.",
+                    "blocked": True,
+                    "time_left_seconds": time_left,
+                    "time_left_minutes": round(time_left / 60, 1),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
         if otp.is_expired():
@@ -144,13 +230,96 @@ class VerifyOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        now = timezone.now()
+
+        if hasattr(otp, "first_attempt_at"):
+            if otp.first_attempt_at and now - otp.first_attempt_at > timedelta(hours=1):
+                otp.attempt_count = 0
+                otp.first_attempt_at = None
+                otp.blocked_until = None
+                otp.save(
+                    update_fields=[
+                        "attempt_count",
+                        "first_attempt_at",
+                        "blocked_until",
+                    ]
+                )
+
+        if otp.code != code:
+            if hasattr(otp, "attempt_count"):
+                if not otp.first_attempt_at:
+                    otp.first_attempt_at = now
+
+                otp.attempt_count += 1
+                attempts_left = max(5 - otp.attempt_count, 0)
+
+                if otp.attempt_count >= 5:
+                    otp.blocked_until = now + timedelta(minutes=30)
+                    otp.save(
+                        update_fields=[
+                            "attempt_count",
+                            "first_attempt_at",
+                            "blocked_until",
+                        ]
+                    )
+
+                    return Response(
+                        {
+                            "status": False,
+                            "detail": "5 marta noto‘g‘ri kod kiritildi. 30 minutga bloklandi.",
+                            "blocked": True,
+                            "time_left_seconds": 30 * 60,
+                            "time_left_minutes": 30,
+                        },
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
+
+                otp.save(update_fields=["attempt_count", "first_attempt_at"])
+
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "SMS kod noto‘g‘ri.",
+                        "attempts_left": attempts_left,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SMS kod noto‘g‘ri."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         otp.is_used = True
         otp.save(update_fields=["is_used"])
+
+        user = User.objects.filter(
+            phone=phone,
+            role=User.ROLE_PARENT
+        ).first()
+
+        if user:
+            tokens = get_tokens_for_user(user)
+
+            return Response(
+                {
+                    "status": True,
+                    "is_registered": True,
+                    "detail": "SMS kod tasdiqlandi. User avval ro‘yxatdan o‘tgan.",
+                    "user": UserSerializer(user).data,
+                    "tokens": tokens,
+                },
+                status=status.HTTP_200_OK
+            )
 
         return Response(
             {
                 "status": True,
-                "detail": "SMS kod tasdiqlandi."
+                "is_registered": False,
+                "detail": "SMS kod tasdiqlandi. Endi register qiling."
             },
             status=status.HTTP_200_OK
         )
@@ -159,15 +328,21 @@ class VerifyOTPView(APIView):
 class ParentRegisterView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=['register'])
+    @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=["register"])
     def post(self, request):
         serializer = ParentRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         phone = serializer.validated_data["phone"]
+        device_id = serializer.validated_data["device_id"]
+        token = serializer.validated_data["token"]
+        device_type = serializer.validated_data.get("device_type", "android")
+
         verified_otp = OTPCode.objects.filter(
             phone=phone,
             is_used=True
         ).order_by("-created_at").first()
+
         if not verified_otp:
             return Response(
                 {
@@ -176,21 +351,72 @@ class ParentRegisterView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if User.objects.filter(phone=phone).exists():
+
+        existing_user = User.objects.filter(
+            phone=phone,
+            role=User.ROLE_PARENT
+        ).first()
+
+        if existing_user:
+            device_result = save_user_device(
+                user=existing_user,
+                device_id=device_id,
+                token=token,
+                device_type=device_type,
+            )
+
+            if device_result.get("error"):
+                return Response(
+                    {
+                        "status": False,
+                        "detail": device_result["detail"],
+                        "active_device_id": device_result.get("active_device_id"),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            tokens = get_tokens_for_user(existing_user)
+
+            return Response(
+                {
+                    "status": True,
+                    "is_registered": True,
+                    "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.",
+                    "user": UserSerializer(existing_user).data,
+                    "device": DeviceTokenSerializer(device_result["device"]).data,
+                    "tokens": tokens,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        user = serializer.save()
+
+        device_result = save_user_device(
+            user=user,
+            device_id=device_id,
+            token=token,
+            device_type=device_type,
+        )
+
+        if device_result.get("error"):
             return Response(
                 {
                     "status": False,
-                    "detail": "Bu telefon raqam bilan user allaqachon ro‘yxatdan o‘tgan."
+                    "detail": device_result["detail"],
+                    "active_device_id": device_result.get("active_device_id"),
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        user = serializer.save()
+
         tokens = get_tokens_for_user(user)
+
         return Response(
             {
                 "status": True,
+                "is_registered": False,
                 "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.",
                 "user": UserSerializer(user).data,
+                "device": DeviceTokenSerializer(device_result["device"]).data,
                 "tokens": tokens,
             },
             status=status.HTTP_201_CREATED
@@ -200,7 +426,7 @@ class ParentRegisterView(APIView):
 class ParentLoginView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=ParentLoginSerializer, tags = ['register'])
+    @swagger_auto_schema(request_body=ParentLoginSerializer, tags=["register"])
     def post(self, request):
         serializer = ParentLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -248,7 +474,7 @@ class ParentLoginView(APIView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['info'])
+    @swagger_auto_schema(tags=["info"])
     def get(self, request):
         return Response(
             {
@@ -262,7 +488,7 @@ class MeView(APIView):
 class UpdateLanguageView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(request_body=UpdateLanguageSerializer, tags = ['settings'])
+    @swagger_auto_schema(request_body=UpdateLanguageSerializer, tags=["settings"])
     def patch(self, request):
         serializer = UpdateLanguageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -283,7 +509,7 @@ class UpdateLanguageView(APIView):
 class CreatePairingCodeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['info'])
+    @swagger_auto_schema(tags=["info"])
     def post(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -318,7 +544,7 @@ class CreatePairingCodeView(APIView):
 class ChildRegisterByCodeView(APIView):
     permission_classes = [AllowAny]
 
-    @swagger_auto_schema(request_body=ChildRegisterByCodeSerializer, tags = ['register'])
+    @swagger_auto_schema(request_body=ChildRegisterByCodeSerializer, tags=["register"])
     def post(self, request):
         serializer = ChildRegisterByCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -326,6 +552,10 @@ class ChildRegisterByCodeView(APIView):
         code = serializer.validated_data["pairing_code"]
         child_name = serializer.validated_data["child_name"]
         language = serializer.validated_data["language"]
+
+        device_id = request.data.get("device_id")
+        token = request.data.get("token")
+        device_type = request.data.get("device_type", "android")
 
         pairing = PairingCode.objects.filter(
             code=code,
@@ -368,6 +598,28 @@ class ChildRegisterByCodeView(APIView):
         pairing.is_used = True
         pairing.save(update_fields=["is_used"])
 
+        device_data = None
+
+        if device_id and token:
+            device_result = save_user_device(
+                user=child,
+                device_id=device_id,
+                token=token,
+                device_type=device_type,
+            )
+
+            if device_result.get("error"):
+                return Response(
+                    {
+                        "status": False,
+                        "detail": device_result["detail"],
+                        "active_device_id": device_result.get("active_device_id"),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            device_data = DeviceTokenSerializer(device_result["device"]).data
+
         tokens = get_tokens_for_user(child)
 
         return Response(
@@ -375,6 +627,7 @@ class ChildRegisterByCodeView(APIView):
                 "status": True,
                 "detail": "Child muvaffaqiyatli ulandi.",
                 "child": ChildSerializer(child).data,
+                "device": device_data,
                 "tokens": tokens,
             },
             status=status.HTTP_201_CREATED
@@ -384,7 +637,7 @@ class ChildRegisterByCodeView(APIView):
 class MyChildrenView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['info'])
+    @swagger_auto_schema(tags=["info"])
     def get(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -413,7 +666,7 @@ class MyChildrenView(APIView):
 class ParentRouteListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -436,7 +689,7 @@ class ParentRouteListCreateView(APIView):
             status=status.HTTP_200_OK
         )
 
-    @swagger_auto_schema(request_body=SafeRouteSerializer, tags = ['location'])
+    @swagger_auto_schema(request_body=SafeRouteSerializer, tags=["location"])
     def post(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -465,7 +718,6 @@ class ParentRouteListCreateView(APIView):
 class ParentRouteDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])
     def get_object(self, request, route_id):
         try:
             return SafeRoute.objects.get(
@@ -475,7 +727,7 @@ class ParentRouteDetailView(APIView):
         except SafeRoute.DoesNotExist:
             return None
 
-    @swagger_auto_schema(tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request, route_id):
         route = self.get_object(request, route_id)
 
@@ -496,7 +748,7 @@ class ParentRouteDetailView(APIView):
             status=status.HTTP_200_OK
         )
 
-    @swagger_auto_schema(request_body=SafeRouteSerializer, tags = ['location'])
+    @swagger_auto_schema(request_body=SafeRouteSerializer, tags=["location"])
     def patch(self, request, route_id):
         route = self.get_object(request, route_id)
 
@@ -526,7 +778,7 @@ class ParentRouteDetailView(APIView):
             status=status.HTTP_200_OK
         )
 
-    @swagger_auto_schema(tags = ['location']) 
+    @swagger_auto_schema(tags=["location"])
     def delete(self, request, route_id):
         route = self.get_object(request, route_id)
 
@@ -553,7 +805,7 @@ class ParentRouteDetailView(APIView):
 class AssignRouteToChildView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(request_body=ChildRouteAssignmentSerializer, tags = ['location'])
+    @swagger_auto_schema(request_body=ChildRouteAssignmentSerializer, tags=["location"])
     def post(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -608,7 +860,7 @@ class AssignRouteToChildView(APIView):
 class ParentChildAssignmentsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])  
+    @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -653,7 +905,7 @@ class ParentChildAssignmentsView(APIView):
 class ChildActiveRoutesView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request):
         if request.user.role != User.ROLE_CHILD:
             return Response(
@@ -685,7 +937,7 @@ class ChildActiveRoutesView(APIView):
 class SendChildLocationView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(request_body=ChildLocationSerializer, tags = ['location'])
+    @swagger_auto_schema(request_body=ChildLocationSerializer, tags=["location"])
     def post(self, request):
         if request.user.role != User.ROLE_CHILD:
             return Response(
@@ -724,7 +976,7 @@ class SendChildLocationView(APIView):
 class ChildLastLocationView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -772,7 +1024,7 @@ class ChildLastLocationView(APIView):
 class ChildLocationHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(request_body=ChildLocationSerializer, tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -813,7 +1065,7 @@ class ChildLocationHistoryView(APIView):
 class RouteAlertListView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(tags = ['location'])
+    @swagger_auto_schema(tags=["location"])
     def get(self, request):
         if request.user.role != User.ROLE_PARENT:
             return Response(
@@ -844,28 +1096,83 @@ class RouteAlertListView(APIView):
 class DeviceTokenView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @swagger_auto_schema(request_body=DeviceTokenSerializer, tags = ['token'])
+    @swagger_auto_schema(request_body=DeviceTokenSerializer, tags=["device"])
     def post(self, request):
         serializer = DeviceTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        device_id = serializer.validated_data["device_id"]
         token = serializer.validated_data["token"]
         device_type = serializer.validated_data["device_type"]
 
-        device, created = DeviceToken.objects.update_or_create(
+        device_result = save_user_device(
+            user=request.user,
+            device_id=device_id,
             token=token,
-            defaults={
-                "user": request.user,
-                "device_type": device_type,
-                "is_active": True,
-            }
+            device_type=device_type,
         )
+
+        if device_result.get("error"):
+            return Response(
+                {
+                    "status": False,
+                    "detail": device_result["detail"],
+                    "active_device_id": device_result.get("active_device_id"),
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response(
             {
                 "status": True,
-                "detail": "FCM token saqlandi.",
-                "device": DeviceTokenSerializer(device).data,
+                "detail": "Device token saqlandi.",
+                "device": DeviceTokenSerializer(device_result["device"]).data,
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            status=(
+                status.HTTP_201_CREATED
+                if device_result["created"]
+                else status.HTTP_200_OK
+            )
+        )
+
+
+class DeviceLogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["device"])
+    def post(self, request):
+        device_id = request.data.get("device_id")
+
+        if not device_id:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "device_id majburiy."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        updated_count = DeviceToken.objects.filter(
+            user=request.user,
+            device_id=device_id,
+            is_active=True
+        ).update(
+            is_active=False
+        )
+
+        if updated_count == 0:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Aktiv device topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Device logout qilindi."
+            },
+            status=status.HTTP_200_OK
         )
