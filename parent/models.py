@@ -3,6 +3,7 @@ import string
 
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from django.db import models
+from django.contrib.auth.models import AbstractUser, Group, Permission, BaseUserManager
 from django.utils import timezone
 
 
@@ -10,11 +11,39 @@ def generate_numeric_code(length=6):
     return "".join(random.choices(string.digits, k=length))
 
 
+
+class UserManager(BaseUserManager):
+    def create_user(self, phone=None,  **extra_fields):
+        if not phone:
+            raise ValueError("Phone number is required")
+
+        user = self.model(phone=phone, **extra_fields)
+
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, phone=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("role", "parent")
+        extra_fields.setdefault("language", "uz_latn")
+
+        if extra_fields.get("is_staff") is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+
+        if extra_fields.get("is_superuser") is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(phone=phone, **extra_fields)
+
+
 class User(AbstractUser):
     ROLE_PARENT = "parent"
     ROLE_CHILD = "child"
-    Male = 'male'
-    Female = 'female'
+
+    Male = "male"
+    Female = "female"
 
     ROLE_CHOICES = (
         (ROLE_PARENT, "Parent"),
@@ -23,27 +52,25 @@ class User(AbstractUser):
 
     LANGUAGE_CHOICES = (
         ("uz_latn", "O‘zbek lotin"),
-        ("uz_cyrl", "Ўзбек кирилл"),
+        ("uz_cyrl", "Ўzbek кирилл"),
         ("ru", "Русский"),
         ("en", "English"),
     )
-    
-    Gender = (
-        (Male, 'male'),
-        (Female, 'female'),
+
+    GENDER_CHOICES = (
+        (Male, "male"),
+        (Female, "female"),
     )
 
     username = models.CharField(
-        max_length=1500,
+        max_length=150,
         null=True,
         blank=True
     )
 
     phone = models.CharField(
         max_length=20,
-        unique=True,
-        null=True,
-        blank=True
+        unique=True
     )
 
     role = models.CharField(
@@ -57,36 +84,43 @@ class User(AbstractUser):
         choices=LANGUAGE_CHOICES,
         default="uz_latn"
     )
-    gender = models.CharField(max_length=200, choices=Gender)
+
+    gender = models.CharField(
+        max_length=200,
+        choices=GENDER_CHOICES,
+        null=True,
+        blank=True
+    )
+
     avatar = models.ImageField(
         upload_to="avatars/",
         null=True,
         blank=True
     )
+
     groups = models.ManyToManyField(
         Group,
         verbose_name="groups",
         blank=True,
         related_name="jojo_user_groups",
         related_query_name="jojo_user",
-        help_text=(
-            "The groups this user belongs to. A user will get all permissions "
-            "granted to each of their groups."
-        ),
     )
+
     user_permissions = models.ManyToManyField(
         Permission,
         verbose_name="user permissions",
         blank=True,
         related_name="jojo_user_permissions",
         related_query_name="jojo_user_permission",
-        help_text="Specific permissions for this user.",
     )
 
+    USERNAME_FIELD = "phone"
+    REQUIRED_FIELDS = []
+
+    objects = UserManager()
+
     def __str__(self):
-        if self.phone:
-            return f"{self.phone} - {self.role}"
-        return f"{self.id} - {self.role}"
+        return f"{self.phone} - {self.role}"
 
 
 class OTPCode(models.Model):
