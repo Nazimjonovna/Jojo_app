@@ -1,85 +1,140 @@
 from django.urls import path
 
 from .views import (
-    SendChildLocationView,
-    ChildLastLocationView,
-    DeviceTokenView,
     SendOTPView,
     VerifyOTPView,
     ParentRegisterView,
-    ParentLoginView,
+
+    MeView,
+    UpdateLanguageView,
+
     CreatePairingCodeView,
     ChildRegisterByCodeView,
     MyChildrenView,
+
+    SendChildLocationView,
+    ChildLastLocationView,
+    ChildLocationHistoryView,
+
+    DeviceTokenView,
+    DeviceLogoutView,
+
     ParentRouteListCreateView,
     ParentRouteDetailView,
     AssignRouteToChildView,
     ParentChildAssignmentsView,
     ChildActiveRoutesView,
     RouteAlertListView,
-    DeviceLogoutView,
 )
 
 
 urlpatterns = [
-    path("auth/send-otp/", SendOTPView.as_view()),
-    path("auth/verify-otp/", VerifyOTPView.as_view()),
-    path("auth/parent/register/", ParentRegisterView.as_view()),
-    # path("auth/parent/login/", ParentLoginView.as_view()),
-    path("parent/pairing-code/", CreatePairingCodeView.as_view()),
-    path("child/register-by-code/", ChildRegisterByCodeView.as_view()),
-    path("parent/children/", MyChildrenView.as_view()),
-    path("device-token/logout/", DeviceLogoutView.as_view(), name="device-token-logout"),
+    # Auth / Register
+    path(
+        "auth/send-otp/",
+        SendOTPView.as_view(),
+        name="send-otp",
+    ),
+    path(
+        "auth/verify-otp/",
+        VerifyOTPView.as_view(),
+        name="verify-otp",
+    ),
+    path(
+        "auth/parent/register/",
+        ParentRegisterView.as_view(),
+        name="parent-register",
+    ),
+
+    # User
+    path(
+        "me/",
+        MeView.as_view(),
+        name="me",
+    ),
+    path(
+        "me/language/",
+        UpdateLanguageView.as_view(),
+        name="update-language",
+    ),
+
+    # Parent / Child pairing
+    path(
+        "parent/pairing-code/",
+        CreatePairingCodeView.as_view(),
+        name="create-pairing-code",
+    ),
+    path(
+        "parent/children/",
+        MyChildrenView.as_view(),
+        name="my-children",
+    ),
+    path(
+        "child/register-by-code/",
+        ChildRegisterByCodeView.as_view(),
+        name="child-register-by-code",
+    ),
+
     # Location
     path(
         "child/location/",
         SendChildLocationView.as_view(),
-        name="send-child-location"
+        name="send-child-location",
     ),
     path(
         "parent/children/<int:child_id>/last-location/",
         ChildLastLocationView.as_view(),
-        name="child-last-location"
+        name="child-last-location",
+    ),
+    path(
+        "parent/children/<int:child_id>/location-history/",
+        ChildLocationHistoryView.as_view(),
+        name="child-location-history",
+    ),
+
+    # Device / Firebase token
+    path(
+        "device-token/",
+        DeviceTokenView.as_view(),
+        name="device-token",
+    ),
+    path(
+        "device-token/logout/",
+        DeviceLogoutView.as_view(),
+        name="device-token-logout",
     ),
 
     # Routes
     path(
         "parent/routes/",
         ParentRouteListCreateView.as_view(),
-        name="parent-routes"
+        name="parent-routes",
     ),
     path(
         "parent/routes/<int:route_id>/",
         ParentRouteDetailView.as_view(),
-        name="parent-route-detail"
+        name="parent-route-detail",
     ),
     path(
         "parent/routes/assign/",
         AssignRouteToChildView.as_view(),
-        name="assign-route-to-child"
+        name="assign-route-to-child",
     ),
     path(
         "parent/children/<int:child_id>/routes/",
         ParentChildAssignmentsView.as_view(),
-        name="parent-child-routes"
+        name="parent-child-routes",
     ),
     path(
         "child/routes/active/",
         ChildActiveRoutesView.as_view(),
-        name="child-active-routes"
+        name="child-active-routes",
     ),
 
-    # Alerts
+    # Route alerts
     path(
         "parent/route-alerts/",
         RouteAlertListView.as_view(),
-        name="route-alerts"
-    ),
-
-    # Firebase token
-    path(
-        "device-token/",
-        DeviceTokenView.as_view(),
-        name="device-token"
+        name="route-alerts",
     ),
 ]

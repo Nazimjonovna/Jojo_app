@@ -1,6 +1,5 @@
 import re
 
-from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
 
 from .models import (
@@ -43,23 +42,24 @@ class VerifyOTPSerializer(serializers.Serializer):
 
     def validate_code(self, value):
         if not value.isdigit() or len(value) != 6:
-            raise serializers.ValidationError(
-                "SMS kod 6 xonali raqam bo‘lishi kerak."
-            )
+            raise serializers.ValidationError("SMS kod 6 xonali bo‘lishi kerak.")
         return value
 
 
 class ParentRegisterSerializer(serializers.ModelSerializer):
+    phone = serializers.CharField(max_length=20)
+
     device_id = serializers.CharField(
         write_only=True,
         max_length=255,
         required=True
     )
+
     token = serializers.CharField(
         write_only=True,
-        required=True,
-        allow_blank=False
+        required=True
     )
+
     device_type = serializers.ChoiceField(
         write_only=True,
         choices=["android", "ios"],
@@ -71,16 +71,20 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "phone",
-            "first_name",
-            "last_name",
-            "language",
+            "full_name",
             "gender",
+            "language",
             "avatar",
             "device_id",
             "token",
             "device_type",
         ]
         read_only_fields = ["id"]
+        extra_kwargs = {
+            "phone": {
+                "validators": []
+            }
+        }
 
     def validate_phone(self, value):
         if not re.match(PHONE_REGEX, value):
@@ -89,12 +93,9 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_language(self, value):
-        allowed_languages = ["uz_latn", "uz_cyrl", "ru", "en"]
-        if value not in allowed_languages:
-            raise serializers.ValidationError(
-                "Til uz_latn, uz_cyrl, ru yoki en bo‘lishi kerak."
-            )
+    def validate_full_name(self, value):
+        if value and len(value.strip()) < 2:
+            raise serializers.ValidationError("full_name juda qisqa.")
         return value
 
     def validate_device_id(self, value):
@@ -113,27 +114,17 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
         validated_data.pop("device_id", None)
         validated_data.pop("token", None)
         validated_data.pop("device_type", None)
+
         phone = validated_data.pop("phone")
-        user = User.objects.create(
-            username=phone,
+
+        user = User.objects.create_user(
             phone=phone,
+            username=phone,
             role=User.ROLE_PARENT,
             **validated_data
         )
-        user.save()
+
         return user
-
-
-class ParentLoginSerializer(serializers.Serializer):
-    phone = serializers.CharField(max_length=20)
-    password = serializers.CharField(write_only=True, max_length=128)
-
-    def validate_phone(self, value):
-        if not re.match(PHONE_REGEX, value):
-            raise serializers.ValidationError(
-                "Telefon raqam +998901234567 formatida bo‘lishi kerak."
-            )
-        return value
 
 
 class UpdateLanguageSerializer(serializers.Serializer):
@@ -150,6 +141,10 @@ class PairingCodeSerializer(serializers.ModelSerializer):
             "code",
             "expires_at",
             "is_used",
+            "child_name",
+            "child_gender",
+            "child_age",
+            "child_avatar",
             "created_at",
         ]
         read_only_fields = [
@@ -161,35 +156,45 @@ class PairingCodeSerializer(serializers.ModelSerializer):
         ]
 
 
-class ChildRegisterByCodeSerializer(serializers.Serializer):
-    pairing_code = serializers.CharField(max_length=10)
-    child_name = serializers.CharField(max_length=150)
-    language = serializers.ChoiceField(
-        choices=["uz_latn", "uz_cyrl", "ru", "en"],
-        default="uz_latn"
-    )
-
-    def validate_pairing_code(self, value):
-        if not value.isdigit():
-            raise serializers.ValidationError(
-                "Pairing code faqat raqamlardan iborat bo‘lishi kerak."
-            )
-
-        if len(value) != 6:
-            raise serializers.ValidationError(
-                "Pairing code 6 xonali bo‘lishi kerak."
-            )
-
-        return value
+class CreateChildPairingSerializer(serializers.Serializer):
+    child_name = serializers.CharField(max_length=255)
+    child_gender = serializers.ChoiceField(choices=["male", "female"])
+    child_age = serializers.IntegerField(min_value=1, max_value=18)
+    child_avatar = serializers.ImageField(required=False, allow_null=True)
 
     def validate_child_name(self, value):
         value = value.strip()
-
         if len(value) < 2:
-            raise serializers.ValidationError(
-                "Bola ismi kamida 2 ta belgidan iborat bo‘lishi kerak."
-            )
+            raise serializers.ValidationError("Bola ismi kamida 2 ta belgidan iborat bo‘lishi kerak.")
+        return value
 
+
+class ChildRegisterByCodeSerializer(serializers.Serializer):
+    pairing_code = serializers.CharField(max_length=10)
+
+    device_id = serializers.CharField(max_length=255, required=True)
+    token = serializers.CharField(required=True)
+    device_type = serializers.ChoiceField(
+        choices=["android", "ios"],
+        default="android",
+    )
+
+    def validate_pairing_code(self, value):
+        value = value.strip().upper()
+        if len(value) < 4:
+            raise serializers.ValidationError("Pairing code noto‘g‘ri.")
+        return value
+
+    def validate_device_id(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("device_id majburiy.")
+        return value
+
+    def validate_token(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Firebase token majburiy.")
         return value
 
 
@@ -199,9 +204,13 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "phone",
+            "username",
+            "full_name",
             "first_name",
             "last_name",
             "role",
+            "gender",
+            "age",
             "language",
             "avatar",
         ]
@@ -228,8 +237,11 @@ class ChildSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id",
+            "full_name",
             "first_name",
             "role",
+            "gender",
+            "age",
             "language",
             "avatar",
             "last_location",
@@ -266,23 +278,17 @@ class ChildLocationSerializer(serializers.ModelSerializer):
 
     def validate_latitude(self, value):
         if value < -90 or value > 90:
-            raise serializers.ValidationError(
-                "Latitude -90 va 90 orasida bo‘lishi kerak."
-            )
+            raise serializers.ValidationError("Latitude -90 va 90 orasida bo‘lishi kerak.")
         return value
 
     def validate_longitude(self, value):
         if value < -180 or value > 180:
-            raise serializers.ValidationError(
-                "Longitude -180 va 180 orasida bo‘lishi kerak."
-            )
+            raise serializers.ValidationError("Longitude -180 va 180 orasida bo‘lishi kerak.")
         return value
 
     def validate_battery_level(self, value):
         if value is not None and (value < 0 or value > 100):
-            raise serializers.ValidationError(
-                "Battery level 0 va 100 orasida bo‘lishi kerak."
-            )
+            raise serializers.ValidationError("Battery level 0 va 100 orasida bo‘lishi kerak.")
         return value
 
 
@@ -329,20 +335,6 @@ class SafeRoutePointSerializer(serializers.ModelSerializer):
             "title",
         ]
 
-    def validate_latitude(self, value):
-        if value < -90 or value > 90:
-            raise serializers.ValidationError(
-                "Latitude -90 va 90 orasida bo‘lishi kerak."
-            )
-        return value
-
-    def validate_longitude(self, value):
-        if value < -180 or value > 180:
-            raise serializers.ValidationError(
-                "Longitude -180 va 180 orasida bo‘lishi kerak."
-            )
-        return value
-
 
 class SafeRouteSerializer(serializers.ModelSerializer):
     points = SafeRoutePointSerializer(many=True, required=False)
@@ -358,32 +350,10 @@ class SafeRouteSerializer(serializers.ModelSerializer):
             "points",
             "created_at",
         ]
-        read_only_fields = [
-            "id",
-            "created_at",
-        ]
-
-    def validate_name(self, value):
-        value = value.strip()
-
-        if len(value) < 2:
-            raise serializers.ValidationError(
-                "Route nomi kamida 2 ta belgidan iborat bo‘lishi kerak."
-            )
-
-        return value
-
-    def validate_points(self, value):
-        if len(value) < 2:
-            raise serializers.ValidationError(
-                "Marshrut uchun kamida 2 ta nuqta kerak."
-            )
-
-        return value
+        read_only_fields = ["id", "created_at"]
 
     def create(self, validated_data):
         points_data = validated_data.pop("points", [])
-
         route = SafeRoute.objects.create(**validated_data)
 
         for index, point_data in enumerate(points_data):
@@ -401,15 +371,9 @@ class SafeRouteSerializer(serializers.ModelSerializer):
         points_data = validated_data.pop("points", None)
 
         instance.name = validated_data.get("name", instance.name)
-        instance.description = validated_data.get(
-            "description",
-            instance.description
-        )
+        instance.description = validated_data.get("description", instance.description)
         instance.color = validated_data.get("color", instance.color)
-        instance.is_active = validated_data.get(
-            "is_active",
-            instance.is_active
-        )
+        instance.is_active = validated_data.get("is_active", instance.is_active)
         instance.save()
 
         if points_data is not None:
@@ -433,12 +397,13 @@ class ChildRouteAssignmentSerializer(serializers.ModelSerializer):
     route_id = serializers.PrimaryKeyRelatedField(
         queryset=SafeRoute.objects.all(),
         source="route",
-        write_only=True
+        write_only=True,
     )
+
     child_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.filter(role=User.ROLE_CHILD),
         source="child",
-        write_only=True
+        write_only=True,
     )
 
     class Meta:
@@ -456,57 +421,14 @@ class ChildRouteAssignmentSerializer(serializers.ModelSerializer):
             "days_of_week",
             "created_at",
         ]
-        read_only_fields = [
-            "id",
-            "created_at",
-        ]
-
-    def validate_allowed_radius_meters(self, value):
-        if value < 10:
-            raise serializers.ValidationError(
-                "Allowed radius kamida 10 metr bo‘lishi kerak."
-            )
-
-        if value > 5000:
-            raise serializers.ValidationError(
-                "Allowed radius 5000 metrdan oshmasligi kerak."
-            )
-
-        return value
-
-    def validate_days_of_week(self, value):
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "days_of_week list bo‘lishi kerak. Masalan: [1, 2, 3, 4, 5]"
-            )
-
-        for day in value:
-            if day not in [1, 2, 3, 4, 5, 6, 7]:
-                raise serializers.ValidationError(
-                    "days_of_week ichida faqat 1 dan 7 gacha son bo‘lishi kerak."
-                )
-
-        return value
-
-    def validate(self, attrs):
-        start_time = attrs.get("start_time")
-        end_time = attrs.get("end_time")
-
-        if start_time and end_time and start_time >= end_time:
-            raise serializers.ValidationError(
-                {
-                    "end_time": "end_time start_time dan keyin bo‘lishi kerak."
-                }
-            )
-
-        return attrs
+        read_only_fields = ["id", "created_at"]
 
 
 class RouteAlertSerializer(serializers.ModelSerializer):
     child = ChildSerializer(read_only=True)
     route_name = serializers.CharField(
         source="assignment.route.name",
-        read_only=True
+        read_only=True,
     )
 
     class Meta:
@@ -520,3 +442,49 @@ class RouteAlertSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class CreateChildPairingSerializer(serializers.Serializer):
+    child_name = serializers.CharField(
+        max_length=255,
+        required=True
+    )
+
+    child_gender = serializers.ChoiceField(
+        choices=["male", "female"],
+        required=True
+    )
+
+    child_age = serializers.IntegerField(
+        min_value=1,
+        max_value=18,
+        required=True
+    )
+
+    child_avatar = serializers.ImageField(
+        required=False,
+        allow_null=True
+    )
+
+    def validate_child_name(self, value):
+        value = value.strip()
+
+        if len(value) < 2:
+            raise serializers.ValidationError(
+                "Bola ismi kamida 2 ta belgidan iborat bo‘lishi kerak."
+            )
+
+        return value
+
+    def validate_child_age(self, value):
+        if value < 1:
+            raise serializers.ValidationError(
+                "Bola yoshi kamida 1 bo‘lishi kerak."
+            )
+
+        if value > 18:
+            raise serializers.ValidationError(
+                "Bola yoshi 18 dan katta bo‘lmasligi kerak."
+            )
+
+        return value

@@ -1,9 +1,8 @@
 import random
 import string
 
-from django.contrib.auth.models import AbstractUser, Group, Permission
-from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission, BaseUserManager
+from django.db import models
 from django.utils import timezone
 
 
@@ -11,18 +10,22 @@ def generate_numeric_code(length=6):
     return "".join(random.choices(string.digits, k=length))
 
 
-
 class UserManager(BaseUserManager):
-    def create_user(self, phone=None,  **extra_fields):
+    def create_user(self, phone=None, password=None, **extra_fields):
         if not phone:
             raise ValueError("Phone number is required")
 
         user = self.model(phone=phone, **extra_fields)
 
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, phone=None, **extra_fields):
+    def create_superuser(self, phone=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
@@ -35,67 +38,81 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        return self.create_user(phone=phone, **extra_fields)
+        return self.create_user(phone=phone, password=password, **extra_fields)
 
 
 class User(AbstractUser):
     ROLE_PARENT = "parent"
     ROLE_CHILD = "child"
 
-    Male = "male"
-    Female = "female"
+    GENDER_MALE = "male"
+    GENDER_FEMALE = "female"
 
     ROLE_CHOICES = (
         (ROLE_PARENT, "Parent"),
         (ROLE_CHILD, "Child"),
     )
 
-    LANGUAGE_CHOICES = (
-        ("uz_latn", "O‘zbek lotin"),
-        ("uz_cyrl", "Ўzbek кирилл"),
-        ("ru", "Русский"),
-        ("en", "English"),
+    GENDER_CHOICES = (
+        (GENDER_MALE, "Male"),
+        (GENDER_FEMALE, "Female"),
     )
 
-    GENDER_CHOICES = (
-        (Male, "male"),
-        (Female, "female"),
+    LANGUAGE_CHOICES = (
+        ("uz_latn", "O‘zbek lotin"),
+        ("uz_cyrl", "Ўзбек кирилл"),
+        ("ru", "Русский"),
+        ("en", "English"),
     )
 
     username = models.CharField(
         max_length=150,
         null=True,
-        blank=True
+        blank=True,
     )
 
     phone = models.CharField(
         max_length=20,
-        unique=True
+        unique=True,
+        null=True,
+        blank=True,
+    )
+
+    full_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
     )
 
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
-        default=ROLE_PARENT
+        default=ROLE_PARENT,
+    )
+
+    gender = models.CharField(
+        max_length=20,
+        choices=GENDER_CHOICES,
+        null=True,
+        blank=True,
     )
 
     language = models.CharField(
         max_length=20,
         choices=LANGUAGE_CHOICES,
-        default="uz_latn"
-    )
-
-    gender = models.CharField(
-        max_length=200,
-        choices=GENDER_CHOICES,
-        null=True,
-        blank=True
+        default="uz_latn",
     )
 
     avatar = models.ImageField(
         upload_to="avatars/",
         null=True,
-        blank=True
+        blank=True,
+    )
+
+    # Child uchun
+    age = models.PositiveIntegerField(
+        null=True,
+        blank=True,
     )
 
     groups = models.ManyToManyField(
@@ -120,7 +137,9 @@ class User(AbstractUser):
     objects = UserManager()
 
     def __str__(self):
-        return f"{self.phone} - {self.role}"
+        if self.phone:
+            return f"{self.phone} - {self.role}"
+        return f"{self.id} - {self.role}"
 
 
 class OTPCode(models.Model):
@@ -128,9 +147,12 @@ class OTPCode(models.Model):
     code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
+
+    # 3-marta xato kiritilsa block
     attempt_count = models.PositiveIntegerField(default=0)
     first_attempt_at = models.DateTimeField(null=True, blank=True)
     blocked_until = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
@@ -154,11 +176,28 @@ class PairingCode(models.Model):
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="pairing_codes"
+        related_name="pairing_codes",
     )
+
+    # Figma’dagi BFKY4Y kabi kod uchun 6 belgili string
     code = models.CharField(max_length=10, unique=True)
+
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
+
+    child_name = models.CharField(max_length=255, null=True, blank=True)
+    child_gender = models.CharField(
+        max_length=20,
+        choices=User.GENDER_CHOICES,
+        null=True,
+        blank=True,
+    )
+    child_age = models.PositiveIntegerField(null=True, blank=True)
+    child_avatar = models.ImageField(
+        upload_to="children/",
+        null=True,
+        blank=True,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -173,12 +212,13 @@ class ParentChild(models.Model):
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="children_links"
+        related_name="children_links",
     )
+
     child = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="parent_links"
+        related_name="parent_links",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -204,7 +244,7 @@ class ChildLocation(models.Model):
     child = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="locations"
+        related_name="locations",
     )
 
     latitude = models.DecimalField(max_digits=10, decimal_places=7)
@@ -218,7 +258,7 @@ class ChildLocation(models.Model):
     source = models.CharField(
         max_length=20,
         choices=SOURCE_CHOICES,
-        default=SOURCE_REST
+        default=SOURCE_REST,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -231,7 +271,7 @@ class ChildLastLocation(models.Model):
     child = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name="last_location"
+        related_name="last_location",
     )
 
     latitude = models.DecimalField(max_digits=10, decimal_places=7)
@@ -252,7 +292,7 @@ class SafeRoute(models.Model):
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="safe_routes"
+        related_name="safe_routes",
     )
 
     name = models.CharField(max_length=150)
@@ -271,7 +311,7 @@ class SafeRoutePoint(models.Model):
     route = models.ForeignKey(
         SafeRoute,
         on_delete=models.CASCADE,
-        related_name="points"
+        related_name="points",
     )
 
     order = models.PositiveIntegerField(default=0)
@@ -302,25 +342,25 @@ class ChildRouteAssignment(models.Model):
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="route_assignments"
+        related_name="route_assignments",
     )
 
     child = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="assigned_routes"
+        related_name="assigned_routes",
     )
 
     route = models.ForeignKey(
         SafeRoute,
         on_delete=models.CASCADE,
-        related_name="assignments"
+        related_name="assignments",
     )
 
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default=STATUS_ACTIVE
+        default=STATUS_ACTIVE,
     )
 
     allowed_radius_meters = models.PositiveIntegerField(default=100)
@@ -330,7 +370,6 @@ class ChildRouteAssignment(models.Model):
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
 
-    # Masalan: [1, 2, 3, 4, 5] = Dushanba-Juma
     days_of_week = models.JSONField(default=list, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -354,18 +393,18 @@ class RouteAlert(models.Model):
     assignment = models.ForeignKey(
         ChildRouteAssignment,
         on_delete=models.CASCADE,
-        related_name="alerts"
+        related_name="alerts",
     )
 
     child = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="route_alerts"
+        related_name="route_alerts",
     )
 
     alert_type = models.CharField(
         max_length=30,
-        choices=ALERT_CHOICES
+        choices=ALERT_CHOICES,
     )
 
     distance_meters = models.FloatField(null=True, blank=True)
@@ -374,7 +413,7 @@ class RouteAlert(models.Model):
         ChildLocation,
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
+        blank=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -386,30 +425,36 @@ class RouteAlert(models.Model):
 class DeviceToken(models.Model):
     DEVICE_ANDROID = "android"
     DEVICE_IOS = "ios"
+
     DEVICE_CHOICES = (
         (DEVICE_ANDROID, "Android"),
         (DEVICE_IOS, "iOS"),
     )
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="device_tokens"
+        related_name="device_tokens",
     )
+
     device_id = models.CharField(
         max_length=255,
-        db_index=True
+        db_index=True,
     )
+
+    # Firebase FCM token
     token = models.TextField()
+
     device_type = models.CharField(
         max_length=20,
         choices=DEVICE_CHOICES,
-        default=DEVICE_ANDROID
+        default=DEVICE_ANDROID,
     )
+
     is_active = models.BooleanField(default=True)
-    last_login_at = models.DateTimeField(
-        null=True,
-        blank=True
-    )
+
+    last_login_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
