@@ -9,7 +9,6 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 def get_user_from_token(raw_token):
     if not raw_token:
         return AnonymousUser()
-
     try:
         jwt_authentication = JWTAuthentication()
         validated_token = jwt_authentication.get_validated_token(raw_token)
@@ -26,14 +25,10 @@ class JWTAuthMiddleware:
     async def __call__(self, scope, receive, send):
         query_string = scope.get("query_string", b"").decode()
         query_params = parse_qs(query_string)
-
         token = None
-
         if "token" in query_params:
             token = query_params["token"][0]
-
         scope["user"] = await get_user_from_token(token)
-
         return await self.inner(scope, receive, send)
 
 

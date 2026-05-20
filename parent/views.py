@@ -469,6 +469,28 @@ class CreatePairingCodeView(APIView):
         serializer = CreateChildPairingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        child_username = f"child_{generate_numeric_code(10)}"
+        child_phone = f"+998CHILD{generate_numeric_code(8)}"
+
+        child = User.objects.create_user(
+            phone=child_phone,
+            username=child_username,
+            full_name=serializer.validated_data["child_name"],
+            first_name=serializer.validated_data["child_name"],
+            role=User.ROLE_CHILD,
+            gender=serializer.validated_data["child_gender"],
+            age=serializer.validated_data["child_age"],
+            language=request.user.language,
+            avatar=serializer.validated_data.get("child_avatar"),
+            child_status=User.CHILD_STATUS_NON_ACTIVE,
+            pending_delete_at=timezone.now() + timedelta(days=3),
+        )
+
+        ParentChild.objects.create(
+            parent=request.user,
+            child=child,
+        )
+
         code = generate_numeric_code(6)
 
         while PairingCode.objects.filter(code=code, is_used=False).exists():
@@ -476,18 +498,20 @@ class CreatePairingCodeView(APIView):
 
         pairing = PairingCode.objects.create(
             parent=request.user,
+            child=child,
             code=code,
-            expires_at=timezone.now() + timedelta(minutes=10),
-            child_name=serializer.validated_data["child_name"],
-            child_gender=serializer.validated_data["child_gender"],
-            child_age=serializer.validated_data["child_age"],
-            child_avatar=serializer.validated_data.get("child_avatar"),
+            expires_at=timezone.now() + timedelta(days=3),
+            child_name=child.full_name,
+            child_gender=child.gender,
+            child_age=child.age,
+            child_avatar=child.avatar,
         )
 
         return Response(
             {
                 "status": True,
-                "detail": "Bola qo‘shish kodi yaratildi.",
+                "detail": "Bola non-active holatda yaratildi. 3 kun ichida child app orqali ulanishi kerak.",
+                "child": ChildSerializer(child).data,
                 "pairing": PairingCodeSerializer(pairing).data,
                 "qr_payload": {
                     "type": "jojo_child_pairing",
@@ -496,7 +520,6 @@ class CreatePairingCodeView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 class ChildRegisterByCodeView(APIView):
     permission_classes = [AllowAny]
@@ -514,7 +537,7 @@ class ChildRegisterByCodeView(APIView):
         pairing = PairingCode.objects.filter(
             code=code,
             is_used=False,
-        ).first()
+        ).select_related("child", "parent").first()
 
         if not pairing:
             return Response(
@@ -529,29 +552,41 @@ class ChildRegisterByCodeView(APIView):
             return Response(
                 {
                     "status": False,
-                    "detail": "Pairing code muddati tugagan."
+                    "detail": "Pairing code muddati tugagan. Parent qaytadan bola qo‘shishi kerak."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        child_username = f"child_{generate_numeric_code(10)}"
+        child = pairing.child
 
-        child = User.objects.create_user(
-            phone=f"+998CHILD{generate_numeric_code(8)}",
-            username=child_username,
-            full_name=pairing.child_name,
-            first_name=pairing.child_name,
-            role=User.ROLE_CHILD,
-            gender=pairing.child_gender,
-            age=pairing.child_age,
-            language=pairing.parent.language,
-            avatar=pairing.child_avatar,
-        )
+        if not child:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu pairing code uchun child topilmadi."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        ParentChild.objects.create(
-            parent=pairing.parent,
-            child=child,
-        )
+        if child.child_status == User.CHILD_STATUS_ACTIVE:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child allaqachon active holatda."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if child.is_child_pending_expired():
+            child.delete()
+
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Pairing muddati tugagan. Bola DB’dan o‘chirildi. Parent qaytadan qo‘shishi kerak."
+                },
+                status=status.HTTP_410_GONE,
+            )
 
         device_result = save_user_device(
             user=child,
@@ -561,8 +596,6 @@ class ChildRegisterByCodeView(APIView):
         )
 
         if device_result.get("error"):
-            child.delete()
-
             return Response(
                 {
                     "status": False,
@@ -572,6 +605,10 @@ class ChildRegisterByCodeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        child.child_status = User.CHILD_STATUS_ACTIVE
+        child.pending_delete_at = None
+        child.save(update_fields=["child_status", "pending_delete_at"])
+
         pairing.is_used = True
         pairing.save(update_fields=["is_used"])
 
@@ -580,12 +617,12 @@ class ChildRegisterByCodeView(APIView):
         return Response(
             {
                 "status": True,
-                "detail": "Child muvaffaqiyatli ulandi.",
+                "detail": "Child muvaffaqiyatli active qilindi.",
                 "child": ChildSerializer(child).data,
                 "device": DeviceTokenSerializer(device_result["device"]).data,
                 "tokens": tokens,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_200_OK,
         )
 
 
@@ -600,8 +637,19 @@ class MyChildrenView(APIView):
                     "status": False,
                     "detail": "Faqat parent bolalar ro‘yxatini ko‘ra oladi."
                 },
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
+
+        expired_children = User.objects.filter(
+            parent_links__parent=request.user,
+            role=User.ROLE_CHILD,
+            child_status=User.CHILD_STATUS_NON_ACTIVE,
+            pending_delete_at__isnull=False,
+            pending_delete_at__lte=timezone.now(),
+        )
+
+        expired_count = expired_children.count()
+        expired_children.delete()
 
         links = ParentChild.objects.filter(
             parent=request.user
@@ -609,12 +657,24 @@ class MyChildrenView(APIView):
 
         children = [link.child for link in links]
 
+        active_children = [
+            child for child in children
+            if child.child_status == User.CHILD_STATUS_ACTIVE
+        ]
+
+        non_active_children = [
+            child for child in children
+            if child.child_status == User.CHILD_STATUS_NON_ACTIVE
+        ]
+
         return Response(
             {
                 "status": True,
-                "children": ChildSerializer(children, many=True).data
+                "deleted_expired_children_count": expired_count,
+                "active_children": ChildSerializer(active_children, many=True).data,
+                "non_active_children": ChildSerializer(non_active_children, many=True).data,
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
 

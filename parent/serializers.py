@@ -157,15 +157,35 @@ class PairingCodeSerializer(serializers.ModelSerializer):
 
 
 class CreateChildPairingSerializer(serializers.Serializer):
-    child_name = serializers.CharField(max_length=255)
-    child_gender = serializers.ChoiceField(choices=["male", "female"])
-    child_age = serializers.IntegerField(min_value=1, max_value=18)
-    child_avatar = serializers.ImageField(required=False, allow_null=True)
+    child_name = serializers.CharField(
+        max_length=255,
+        required=True
+    )
+
+    child_gender = serializers.ChoiceField(
+        choices=["male", "female"],
+        required=True
+    )
+
+    child_age = serializers.IntegerField(
+        min_value=1,
+        max_value=18,
+        required=True
+    )
+
+    child_avatar = serializers.ImageField(
+        required=False,
+        allow_null=True
+    )
 
     def validate_child_name(self, value):
         value = value.strip()
+
         if len(value) < 2:
-            raise serializers.ValidationError("Bola ismi kamida 2 ta belgidan iborat bo‘lishi kerak.")
+            raise serializers.ValidationError(
+                "Bola ismi kamida 2 ta belgidan iborat bo‘lishi kerak."
+            )
+
         return value
 
 
@@ -232,11 +252,15 @@ class ChildLastLocationSerializer(serializers.ModelSerializer):
 
 class ChildSerializer(serializers.ModelSerializer):
     last_location = serializers.SerializerMethodField()
+    pending_delete_time_left_seconds = serializers.SerializerMethodField()
+    pending_delete_time_left_days = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id",
+            "phone",
+            "username",
             "full_name",
             "first_name",
             "role",
@@ -244,6 +268,10 @@ class ChildSerializer(serializers.ModelSerializer):
             "age",
             "language",
             "avatar",
+            "child_status",
+            "pending_delete_at",
+            "pending_delete_time_left_seconds",
+            "pending_delete_time_left_days",
             "last_location",
         ]
 
@@ -252,6 +280,23 @@ class ChildSerializer(serializers.ModelSerializer):
             return ChildLastLocationSerializer(obj.last_location).data
         except ChildLastLocation.DoesNotExist:
             return None
+
+    def get_pending_delete_time_left_seconds(self, obj):
+        if obj.role != User.ROLE_CHILD:
+            return None
+
+        if obj.child_status != User.CHILD_STATUS_NON_ACTIVE:
+            return None
+
+        return obj.pending_delete_time_left_seconds()
+
+    def get_pending_delete_time_left_days(self, obj):
+        seconds = self.get_pending_delete_time_left_seconds(obj)
+
+        if seconds is None:
+            return None
+
+        return round(seconds / 86400, 2)
 
 
 class ChildLocationSerializer(serializers.ModelSerializer):
