@@ -315,7 +315,7 @@ class VerifyOTPView(APIView):
                 "is_registered": False,
                 "detail": "SMS kod tasdiqlandi. Endi register qiling."
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_201_CREATED
         )
 
 
@@ -466,6 +466,101 @@ class CreatePairingCodeView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        child_id = request.data.get("child_id")
+
+        if child_id:
+            has_access = ParentChild.objects.filter(
+                parent=request.user,
+                child_id=child_id,
+            ).exists()
+
+            if not has_access:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Bu child sizga tegishli emas."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            child = User.objects.filter(
+                id=child_id,
+                role=User.ROLE_CHILD,
+            ).first()
+
+            if not child:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Child topilmadi."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if child.child_status == User.CHILD_STATUS_ACTIVE:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Bu child allaqachon active. Pairing code kerak emas."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            existing_pairing = PairingCode.objects.filter(
+                parent=request.user,
+                child=child,
+                is_used=False,
+            ).order_by("-created_at").first()
+
+            if existing_pairing:
+                return Response(
+                    {
+                        "status": True,
+                        "already_exists": True,
+                        "detail": f"Bu pairing code {child.full_name or child.first_name} uchun avval olingan.",
+                        "child": ChildSerializer(child).data,
+                        "pairing": PairingCodeSerializer(existing_pairing).data,
+                        "qr_payload": {
+                            "type": "jojo_child_pairing",
+                            "code": existing_pairing.code,
+                            "child_id": child.id,
+                        },
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            code = generate_numeric_code(6)
+
+            while PairingCode.objects.filter(code=code, is_used=False).exists():
+                code = generate_numeric_code(6)
+
+            pairing = PairingCode.objects.create(
+                parent=request.user,
+                child=child,
+                code=code,
+                expires_at=timezone.now() + timedelta(days=3),
+                child_name=child.full_name or child.first_name,
+                child_gender=child.gender,
+                child_age=child.age,
+                child_avatar=child.avatar,
+            )
+
+            return Response(
+                {
+                    "status": True,
+                    "already_exists": False,
+                    "detail": f"{child.full_name or child.first_name} uchun pairing code yaratildi.",
+                    "child": ChildSerializer(child).data,
+                    "pairing": PairingCodeSerializer(pairing).data,
+                    "qr_payload": {
+                        "type": "jojo_child_pairing",
+                        "code": pairing.code,
+                        "child_id": child.id,
+                    },
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
         serializer = CreateChildPairingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -491,6 +586,29 @@ class CreatePairingCodeView(APIView):
             child=child,
         )
 
+        existing_pairing = PairingCode.objects.filter(
+            parent=request.user,
+            child=child,
+            is_used=False,
+        ).order_by("-created_at").first()
+
+        if existing_pairing:
+            return Response(
+                {
+                    "status": True,
+                    "already_exists": True,
+                    "detail": f"Bu pairing code {child.full_name or child.first_name} uchun avval olingan.",
+                    "child": ChildSerializer(child).data,
+                    "pairing": PairingCodeSerializer(existing_pairing).data,
+                    "qr_payload": {
+                        "type": "jojo_child_pairing",
+                        "code": existing_pairing.code,
+                        "child_id": child.id,
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
         code = generate_numeric_code(6)
 
         while PairingCode.objects.filter(code=code, is_used=False).exists():
@@ -510,12 +628,14 @@ class CreatePairingCodeView(APIView):
         return Response(
             {
                 "status": True,
-                "detail": "Bola non-active holatda yaratildi. 3 kun ichida child app orqali ulanishi kerak.",
+                "already_exists": False,
+                "detail": "Bola non-active holatda yaratildi. Pairing code 3 kun ichida ishlatilishi kerak.",
                 "child": ChildSerializer(child).data,
                 "pairing": PairingCodeSerializer(pairing).data,
                 "qr_payload": {
                     "type": "jojo_child_pairing",
                     "code": pairing.code,
+                    "child_id": child.id,
                 },
             },
             status=status.HTTP_201_CREATED,
@@ -673,6 +793,96 @@ class MyChildrenView(APIView):
                 "deleted_expired_children_count": expired_count,
                 "active_children": ChildSerializer(active_children, many=True).data,
                 "non_active_children": ChildSerializer(non_active_children, many=True).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+
+class ParentChildLogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["child"])
+    def post(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent child logout qila oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child_id=child_id,
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        child = User.objects.filter(
+            id=child_id,
+            role=User.ROLE_CHILD,
+        ).first()
+
+        if not child:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Child topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        DeviceToken.objects.filter(
+            user=child,
+            is_active=True,
+        ).update(
+            is_active=False,
+        )
+
+        child.child_status = User.CHILD_STATUS_NON_ACTIVE
+        child.pending_delete_at = timezone.now() + timedelta(days=3)
+        child.save(update_fields=["child_status", "pending_delete_at"])
+
+        existing_pairing = PairingCode.objects.filter(
+            parent=request.user,
+            child=child,
+            is_used=False,
+        ).order_by("-created_at").first()
+
+        if not existing_pairing:
+            code = generate_numeric_code(6)
+
+            while PairingCode.objects.filter(code=code, is_used=False).exists():
+                code = generate_numeric_code(6)
+
+            existing_pairing = PairingCode.objects.create(
+                parent=request.user,
+                child=child,
+                code=code,
+                expires_at=timezone.now() + timedelta(days=3),
+                child_name=child.full_name or child.first_name,
+                child_gender=child.gender,
+                child_age=child.age,
+                child_avatar=child.avatar,
+            )
+        else:
+            existing_pairing.expires_at = timezone.now() + timedelta(days=3)
+            existing_pairing.save(update_fields=["expires_at"])
+
+        return Response(
+            {
+                "status": True,
+                "detail": f"{child.full_name or child.first_name} logout qilindi va non-active holatga o‘tkazildi.",
+                "child": ChildSerializer(child).data,
+                "pairing": PairingCodeSerializer(existing_pairing).data,
             },
             status=status.HTTP_200_OK,
         )

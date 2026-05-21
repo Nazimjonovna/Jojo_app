@@ -254,6 +254,7 @@ class ChildSerializer(serializers.ModelSerializer):
     last_location = serializers.SerializerMethodField()
     pending_delete_time_left_seconds = serializers.SerializerMethodField()
     pending_delete_time_left_days = serializers.SerializerMethodField()
+    pairing_code = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -272,6 +273,7 @@ class ChildSerializer(serializers.ModelSerializer):
             "pending_delete_at",
             "pending_delete_time_left_seconds",
             "pending_delete_time_left_days",
+            "pairing_code",
             "last_location",
         ]
 
@@ -297,6 +299,28 @@ class ChildSerializer(serializers.ModelSerializer):
             return None
 
         return round(seconds / 86400, 2)
+
+    def get_pairing_code(self, obj):
+        if obj.role != User.ROLE_CHILD:
+            return None
+
+        if obj.child_status != User.CHILD_STATUS_NON_ACTIVE:
+            return None
+
+        pairing = obj.child_pairing_codes.filter(
+            is_used=False
+        ).order_by("-created_at").first()
+
+        if not pairing:
+            return None
+
+        return {
+            "id": pairing.id,
+            "code": pairing.code,
+            "expires_at": pairing.expires_at,
+            "is_used": pairing.is_used,
+            "created_at": pairing.created_at,
+        }
 
 
 class ChildLocationSerializer(serializers.ModelSerializer):

@@ -7,6 +7,7 @@ from .views import (
 
     MeView,
     UpdateLanguageView,
+    ParentChildLogoutView,
 
     CreatePairingCodeView,
     ChildRegisterByCodeView,
@@ -73,6 +74,11 @@ urlpatterns = [
         "child/register-by-code/",
         ChildRegisterByCodeView.as_view(),
         name="child-register-by-code",
+    ),
+    path(
+    "parent/children/<int:child_id>/logout/",
+    ParentChildLogoutView.as_view(),
+    name="parent-child-logout",
     ),
 
     # Location
