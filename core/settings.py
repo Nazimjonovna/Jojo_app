@@ -165,17 +165,58 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:8000",
+    "http://127.0.0.1:8000",
+
     "http://5.189.151.237",
-    'http://localhost:5173',
+    "http://5.189.151.237:8000",
+
+    "http://jojoapp.uz",
+    "https://jojoapp.uz",
+    "http://www.jojoapp.uz",
+    "https://www.jojoapp.uz",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
 CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:8000",
+    "http://127.0.0.1:8000",
+
     "http://5.189.151.237",
-    'http://localhost:5173',
+    "http://5.189.151.237:8000",
+
+    "http://jojoapp.uz",
+    "https://jojoapp.uz",
+    "http://www.jojoapp.uz",
+    "https://www.jojoapp.uz",
 ]
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
