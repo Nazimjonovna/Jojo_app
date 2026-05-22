@@ -12,6 +12,7 @@ from .models import (
     SafeRoutePoint,
     ChildRouteAssignment,
     RouteAlert,
+    SavedLocation
 )
 
 
@@ -554,6 +555,68 @@ class CreateChildPairingSerializer(serializers.Serializer):
         if value > 18:
             raise serializers.ValidationError(
                 "Bola yoshi 18 dan katta bo‘lmasligi kerak."
+            )
+
+        return value
+    
+    
+class SavedLocationSerializer(serializers.ModelSerializer):
+    child_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(role=User.ROLE_CHILD),
+        source="child",
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+
+    child = ChildSerializer(read_only=True)
+
+    class Meta:
+        model = SavedLocation
+        fields = [
+            "id",
+            "child_id",
+            "child",
+            "name",
+            "location_type",
+            "latitude",
+            "longitude",
+            "radius_meters",
+            "address",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "child",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_latitude(self, value):
+        if value < -90 or value > 90:
+            raise serializers.ValidationError(
+                "Latitude -90 va 90 orasida bo‘lishi kerak."
+            )
+        return value
+
+    def validate_longitude(self, value):
+        if value < -180 or value > 180:
+            raise serializers.ValidationError(
+                "Longitude -180 va 180 orasida bo‘lishi kerak."
+            )
+        return value
+
+    def validate_radius_meters(self, value):
+        if value < 10:
+            raise serializers.ValidationError(
+                "Radius kamida 10 metr bo‘lishi kerak."
+            )
+
+        if value > 10000:
+            raise serializers.ValidationError(
+                "Radius 10000 metrdan oshmasligi kerak."
             )
 
         return value

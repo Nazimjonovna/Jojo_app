@@ -24,6 +24,7 @@ from .models import (
     ChildRouteAssignment,
     RouteAlert,
     generate_numeric_code,
+    SavedLocation, 
 )
 
 from .serializers import (
@@ -42,6 +43,7 @@ from .serializers import (
     ChildRouteAssignmentSerializer,
     RouteAlertSerializer,
     CreateChildPairingSerializer,
+    SavedLocationSerializer
 )
 
 from .services import process_child_location
@@ -1398,6 +1400,229 @@ class DeviceLogoutView(APIView):
             {
                 "status": True,
                 "detail": "Device logout qilindi."
+            },
+            status=status.HTTP_200_OK
+        )
+        
+        
+class SavedLocationListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["saved-location"])
+    def get(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent saved location ro‘yxatini ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        child_id = request.query_params.get("child_id")
+
+        locations = SavedLocation.objects.filter(
+            parent=request.user
+        ).select_related("child")
+
+        if child_id:
+            has_access = ParentChild.objects.filter(
+                parent=request.user,
+                child_id=child_id
+            ).exists()
+
+            if not has_access:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Bu child sizga tegishli emas."
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            locations = locations.filter(child_id=child_id)
+
+        return Response(
+            {
+                "status": True,
+                "saved_locations": SavedLocationSerializer(
+                    locations,
+                    many=True
+                ).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(request_body=SavedLocationSerializer, tags=["saved-location"])
+    def post(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent saved location qo‘sha oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = SavedLocationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        child = serializer.validated_data.get("child")
+
+        if child:
+            has_access = ParentChild.objects.filter(
+                parent=request.user,
+                child=child
+            ).exists()
+
+            if not has_access:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Bu child sizga tegishli emas."
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        saved_location = serializer.save(parent=request.user)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Saved location yaratildi.",
+                "saved_location": SavedLocationSerializer(saved_location).data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class SavedLocationDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, request, location_id):
+        try:
+            return SavedLocation.objects.select_related("child").get(
+                id=location_id,
+                parent=request.user
+            )
+        except SavedLocation.DoesNotExist:
+            return None
+
+    @swagger_auto_schema(tags=["saved-location"])
+    def get(self, request, location_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        saved_location = self.get_object(request, location_id)
+
+        if not saved_location:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Saved location topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "saved_location": SavedLocationSerializer(saved_location).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(request_body=SavedLocationSerializer, tags=["saved-location"])
+    def patch(self, request, location_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent o‘zgartira oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        saved_location = self.get_object(request, location_id)
+
+        if not saved_location:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Saved location topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SavedLocationSerializer(
+            saved_location,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+
+        child = serializer.validated_data.get("child")
+
+        if child:
+            has_access = ParentChild.objects.filter(
+                parent=request.user,
+                child=child
+            ).exists()
+
+            if not has_access:
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "Bu child sizga tegishli emas."
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        saved_location = serializer.save()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Saved location yangilandi.",
+                "saved_location": SavedLocationSerializer(saved_location).data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @swagger_auto_schema(tags=["saved-location"])
+    def delete(self, request, location_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent o‘chira oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        saved_location = self.get_object(request, location_id)
+
+        if not saved_location:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Saved location topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        saved_location.delete()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Saved location o‘chirildi."
             },
             status=status.HTTP_200_OK
         )

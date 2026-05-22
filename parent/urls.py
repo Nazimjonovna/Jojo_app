@@ -1,5 +1,5 @@
 from django.urls import path
-
+from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     SendOTPView,
     VerifyOTPView,
@@ -26,6 +26,9 @@ from .views import (
     ParentChildAssignmentsView,
     ChildActiveRoutesView,
     RouteAlertListView,
+    
+    SavedLocationListCreateView,
+    SavedLocationDetailView,
 )
 
 
@@ -142,5 +145,24 @@ urlpatterns = [
         "parent/route-alerts/",
         RouteAlertListView.as_view(),
         name="route-alerts",
+    ),
+    
+    # JWT refresh
+    path(
+        "auth/token/refresh/",
+        TokenRefreshView.as_view(),
+        name="token-refresh",
+    ),
+
+    # Saved locations
+    path(
+        "parent/saved-locations/",
+        SavedLocationListCreateView.as_view(),
+        name="saved-location-list-create",
+    ),
+    path(
+        "parent/saved-locations/<int:location_id>/",
+        SavedLocationDetailView.as_view(),
+        name="saved-location-detail",
     ),
 ]
