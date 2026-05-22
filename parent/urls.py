@@ -29,6 +29,19 @@ from .views import (
     
     SavedLocationListCreateView,
     SavedLocationDetailView,
+    
+    KidsGameCategoryListView,
+    KidsGameListView,
+    KidsGameDetailView,
+    KidsShopCategoryListView,
+    KidsShopItemListView,
+    KidsShopItemDetailView,
+    KidsWalletView,
+    KidsTransactionListView,
+    KidsShopPurchaseView,
+    KidsSOSCreateView,
+    ParentSOSAlertListView,
+    ParentSOSAlertResolveView,
 )
 
 
@@ -165,4 +178,24 @@ urlpatterns = [
         SavedLocationDetailView.as_view(),
         name="saved-location-detail",
     ),
+    
+    # Kids games
+    path("kids/games/categories/", KidsGameCategoryListView.as_view(), name="kids-game-categories"),
+    path("kids/games/", KidsGameListView.as_view(), name="kids-games"),
+    path("kids/games/<int:game_id>/", KidsGameDetailView.as_view(), name="kids-game-detail"),
+
+    # Kids shop
+    path("kids/shop/categories/", KidsShopCategoryListView.as_view(), name="kids-shop-categories"),
+    path("kids/shop/items/", KidsShopItemListView.as_view(), name="kids-shop-items"),
+    path("kids/shop/items/<int:item_id>/", KidsShopItemDetailView.as_view(), name="kids-shop-item-detail"),
+    path("kids/shop/purchase/", KidsShopPurchaseView.as_view(), name="kids-shop-purchase"),
+
+    # Kids wallet
+    path("kids/wallet/", KidsWalletView.as_view(), name="kids-wallet"),
+    path("kids/transactions/", KidsTransactionListView.as_view(), name="kids-transactions"),
+
+    # SOS
+    path("kids/sos/", KidsSOSCreateView.as_view(), name="kids-sos"),
+    path("parent/sos-alerts/", ParentSOSAlertListView.as_view(), name="parent-sos-alerts"),
+    path("parent/sos-alerts/<int:sos_id>/resolve/", ParentSOSAlertResolveView.as_view(), name="parent-sos-resolve"),
 ]

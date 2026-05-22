@@ -12,7 +12,15 @@ from .models import (
     SafeRoutePoint,
     ChildRouteAssignment,
     RouteAlert,
-    SavedLocation
+    SavedLocation,
+    GameCategory,
+    GameItem,
+    ShopCategory,
+    ShopItem,
+    ChildWallet,
+    ChildTransaction,
+    ShopPurchase,
+    SOSAlert,
 )
 
 
@@ -561,22 +569,11 @@ class CreateChildPairingSerializer(serializers.Serializer):
     
     
 class SavedLocationSerializer(serializers.ModelSerializer):
-    child_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.filter(role=User.ROLE_CHILD),
-        source="child",
-        required=False,
-        allow_null=True,
-        write_only=True
-    )
-
-    child = ChildSerializer(read_only=True)
 
     class Meta:
         model = SavedLocation
         fields = [
             "id",
-            "child_id",
-            "child",
             "name",
             "location_type",
             "latitude",
@@ -589,7 +586,6 @@ class SavedLocationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "child",
             "created_at",
             "updated_at",
         ]
@@ -620,3 +616,167 @@ class SavedLocationSerializer(serializers.ModelSerializer):
             )
 
         return value
+    
+    
+class GameCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GameCategory
+        fields = [
+            "id",
+            "name",
+            "icon",
+            "is_active",
+            "order",
+            "created_at",
+        ]
+
+
+class GameItemSerializer(serializers.ModelSerializer):
+    category = GameCategorySerializer(read_only=True)
+
+    class Meta:
+        model = GameItem
+        fields = [
+            "id",
+            "category",
+            "title",
+            "description",
+            "thumbnail",
+            "banner",
+            "game_url",
+            "screen_key",
+            "age_min",
+            "age_max",
+            "reward_points",
+            "is_active",
+            "is_featured",
+            "order",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ShopCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShopCategory
+        fields = [
+            "id",
+            "name",
+            "icon",
+            "is_active",
+            "order",
+            "created_at",
+        ]
+
+
+class ShopItemSerializer(serializers.ModelSerializer):
+    category = ShopCategorySerializer(read_only=True)
+
+    class Meta:
+        model = ShopItem
+        fields = [
+            "id",
+            "category",
+            "title",
+            "description",
+            "image",
+            "price_points",
+            "stock",
+            "age_min",
+            "age_max",
+            "is_active",
+            "is_featured",
+            "order",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ChildWalletSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChildWallet
+        fields = [
+            "id",
+            "balance",
+            "updated_at",
+        ]
+
+
+class ChildTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChildTransaction
+        fields = [
+            "id",
+            "amount",
+            "transaction_type",
+            "source",
+            "description",
+            "created_at",
+        ]
+
+
+class ShopPurchaseSerializer(serializers.ModelSerializer):
+    item = ShopItemSerializer(read_only=True)
+
+    class Meta:
+        model = ShopPurchase
+        fields = [
+            "id",
+            "item",
+            "price_points",
+            "status",
+            "created_at",
+        ]
+
+
+class ShopPurchaseCreateSerializer(serializers.Serializer):
+    item_id = serializers.IntegerField()
+
+
+class SOSAlertSerializer(serializers.ModelSerializer):
+    child = ChildSerializer(read_only=True)
+    parent = UserSerializer(read_only=True)
+
+    class Meta:
+        model = SOSAlert
+        fields = [
+            "id",
+            "child",
+            "parent",
+            "latitude",
+            "longitude",
+            "address",
+            "note",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class CreateSOSAlertSerializer(serializers.Serializer):
+    latitude = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        required=False,
+        allow_null=True
+    )
+
+    longitude = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        required=False,
+        allow_null=True
+    )
+
+    address = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        allow_null=True
+    )
+
+    note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True
+    )

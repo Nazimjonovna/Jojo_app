@@ -515,42 +515,26 @@ class SavedLocation(models.Model):
     LOCATION_HOME = "home"
     LOCATION_SCHOOL = "school"
     LOCATION_OTHER = "other"
-
     LOCATION_TYPE_CHOICES = (
         (LOCATION_HOME, "Home"),
         (LOCATION_SCHOOL, "School"),
         (LOCATION_OTHER, "Other"),
     )
-
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="parent_saved_locations",
         related_query_name="parent_saved_location",
     )
-
-    child = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="child_saved_locations",
-        related_query_name="child_saved_location",
-        null=True,
-        blank=True,
-    )
-
     name = models.CharField(max_length=150)
-
     location_type = models.CharField(
         max_length=20,
         choices=LOCATION_TYPE_CHOICES,
         default=LOCATION_OTHER,
     )
-
     latitude = models.DecimalField(max_digits=10, decimal_places=7)
     longitude = models.DecimalField(max_digits=10, decimal_places=7)
-
     radius_meters = models.PositiveIntegerField(default=100)
-
     address = models.CharField(
         max_length=255,
         null=True,
@@ -567,3 +551,306 @@ class SavedLocation(models.Model):
 
     def __str__(self):
         return f"{self.name} - parent {self.parent_id}"
+    
+    
+class GameCategory(models.Model):
+    name = models.CharField(max_length=150)
+    icon = models.ImageField(
+        upload_to="games/categories/",
+        null=True,
+        blank=True
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class GameItem(models.Model):
+    category = models.ForeignKey(
+        GameCategory,
+        on_delete=models.CASCADE,
+        related_name="games"
+    )
+
+    title = models.CharField(max_length=150)
+
+    description = models.TextField(
+        null=True,
+        blank=True
+    )
+
+    thumbnail = models.ImageField(
+        upload_to="games/thumbnails/",
+        null=True,
+        blank=True
+    )
+
+    banner = models.ImageField(
+        upload_to="games/banners/",
+        null=True,
+        blank=True
+    )
+
+    # Agar o‘yin webview orqali ochilsa
+    game_url = models.URLField(
+        null=True,
+        blank=True
+    )
+
+    # Agar Flutter ichida local screen ochilsa
+    screen_key = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True
+    )
+
+    age_min = models.PositiveIntegerField(default=1)
+    age_max = models.PositiveIntegerField(default=18)
+
+    reward_points = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class ShopCategory(models.Model):
+    name = models.CharField(max_length=150)
+
+    icon = models.ImageField(
+        upload_to="shop/categories/",
+        null=True,
+        blank=True
+    )
+
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class ShopItem(models.Model):
+    category = models.ForeignKey(
+        ShopCategory,
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+
+    title = models.CharField(max_length=150)
+
+    description = models.TextField(
+        null=True,
+        blank=True
+    )
+
+    image = models.ImageField(
+        upload_to="shop/items/",
+        null=True,
+        blank=True
+    )
+
+    price_points = models.PositiveIntegerField(default=0)
+
+    stock = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
+    age_min = models.PositiveIntegerField(default=1)
+    age_max = models.PositiveIntegerField(default=18)
+
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+class ChildWallet(models.Model):
+    child = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="wallet"
+    )
+
+    balance = models.PositiveIntegerField(default=0)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.child_id} - {self.balance}"
+
+
+class ChildTransaction(models.Model):
+    TYPE_EARN = "earn"
+    TYPE_SPEND = "spend"
+
+    TYPE_CHOICES = (
+        (TYPE_EARN, "Earn"),
+        (TYPE_SPEND, "Spend"),
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="transactions"
+    )
+
+    amount = models.IntegerField()
+
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES
+    )
+
+    source = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True
+    )
+
+    description = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.child_id} - {self.transaction_type} - {self.amount}"
+
+
+class ShopPurchase(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="shop_purchases"
+    )
+
+    item = models.ForeignKey(
+        ShopItem,
+        on_delete=models.CASCADE,
+        related_name="purchases"
+    )
+
+    price_points = models.PositiveIntegerField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.child_id} - {self.item_id} - {self.status}"
+
+
+class SOSAlert(models.Model):
+    STATUS_NEW = "new"
+    STATUS_VIEWED = "viewed"
+    STATUS_RESOLVED = "resolved"
+
+    STATUS_CHOICES = (
+        (STATUS_NEW, "New"),
+        (STATUS_VIEWED, "Viewed"),
+        (STATUS_RESOLVED, "Resolved"),
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="sos_alerts"
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="received_sos_alerts"
+    )
+
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True
+    )
+
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True
+    )
+
+    address = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
+    note = models.TextField(
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_NEW
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"SOS {self.child_id} -> {self.parent_id}"

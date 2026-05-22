@@ -25,6 +25,14 @@ from .models import (
     RouteAlert,
     generate_numeric_code,
     SavedLocation, 
+    GameCategory,
+    GameItem,
+    ShopCategory,
+    ShopItem,
+    ChildWallet,
+    ChildTransaction,
+    ShopPurchase,
+    SOSAlert,
 )
 
 from .serializers import (
@@ -43,7 +51,17 @@ from .serializers import (
     ChildRouteAssignmentSerializer,
     RouteAlertSerializer,
     CreateChildPairingSerializer,
-    SavedLocationSerializer
+    SavedLocationSerializer,
+    GameCategorySerializer,
+    GameItemSerializer,
+    ShopCategorySerializer,
+    ShopItemSerializer,
+    ChildWalletSerializer,
+    ChildTransactionSerializer,
+    ShopPurchaseSerializer,
+    ShopPurchaseCreateSerializer,
+    SOSAlertSerializer,
+    CreateSOSAlertSerializer,
 )
 
 from .services import process_child_location
@@ -1419,28 +1437,9 @@ class SavedLocationListCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        child_id = request.query_params.get("child_id")
-
         locations = SavedLocation.objects.filter(
             parent=request.user
-        ).select_related("child")
-
-        if child_id:
-            has_access = ParentChild.objects.filter(
-                parent=request.user,
-                child_id=child_id
-            ).exists()
-
-            if not has_access:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Bu child sizga tegishli emas."
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            locations = locations.filter(child_id=child_id)
+        ).order_by("-created_at")
 
         return Response(
             {
@@ -1467,23 +1466,6 @@ class SavedLocationListCreateView(APIView):
         serializer = SavedLocationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        child = serializer.validated_data.get("child")
-
-        if child:
-            has_access = ParentChild.objects.filter(
-                parent=request.user,
-                child=child
-            ).exists()
-
-            if not has_access:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Bu child sizga tegishli emas."
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
         saved_location = serializer.save(parent=request.user)
 
         return Response(
@@ -1501,7 +1483,7 @@ class SavedLocationDetailView(APIView):
 
     def get_object(self, request, location_id):
         try:
-            return SavedLocation.objects.select_related("child").get(
+            return SavedLocation.objects.get(
                 id=location_id,
                 parent=request.user
             )
@@ -1567,23 +1549,6 @@ class SavedLocationDetailView(APIView):
         )
         serializer.is_valid(raise_exception=True)
 
-        child = serializer.validated_data.get("child")
-
-        if child:
-            has_access = ParentChild.objects.filter(
-                parent=request.user,
-                child=child
-            ).exists()
-
-            if not has_access:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Bu child sizga tegishli emas."
-                    },
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
         saved_location = serializer.save()
 
         return Response(
@@ -1623,6 +1588,470 @@ class SavedLocationDetailView(APIView):
             {
                 "status": True,
                 "detail": "Saved location o‘chirildi."
+            },
+            status=status.HTTP_200_OK
+        )
+        
+        
+class KidsGameCategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child games category ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        categories = GameCategory.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+
+        return Response(
+            {
+                "status": True,
+                "categories": GameCategorySerializer(categories, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsGameListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child games ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        category_id = request.query_params.get("category_id")
+        featured = request.query_params.get("featured")
+
+        games = GameItem.objects.filter(
+            is_active=True,
+            age_min__lte=request.user.age or 18,
+            age_max__gte=request.user.age or 1,
+        ).select_related("category")
+
+        if category_id:
+            games = games.filter(category_id=category_id)
+
+        if featured == "true":
+            games = games.filter(is_featured=True)
+
+        games = games.order_by("order", "-created_at")
+
+        return Response(
+            {
+                "status": True,
+                "games": GameItemSerializer(games, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsGameDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, game_id):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child game ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            game = GameItem.objects.select_related("category").get(
+                id=game_id,
+                is_active=True
+            )
+        except GameItem.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Game topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "game": GameItemSerializer(game).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsShopCategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child shop category ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        categories = ShopCategory.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+
+        return Response(
+            {
+                "status": True,
+                "categories": ShopCategorySerializer(categories, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsShopItemListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child shop item ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        category_id = request.query_params.get("category_id")
+        featured = request.query_params.get("featured")
+
+        items = ShopItem.objects.filter(
+            is_active=True,
+            age_min__lte=request.user.age or 18,
+            age_max__gte=request.user.age or 1,
+        ).select_related("category")
+
+        if category_id:
+            items = items.filter(category_id=category_id)
+
+        if featured == "true":
+            items = items.filter(is_featured=True)
+
+        items = items.order_by("order", "-created_at")
+
+        return Response(
+            {
+                "status": True,
+                "items": ShopItemSerializer(items, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsShopItemDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, item_id):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child shop item ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            item = ShopItem.objects.select_related("category").get(
+                id=item_id,
+                is_active=True
+            )
+        except ShopItem.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Shop item topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "status": True,
+                "item": ShopItemSerializer(item).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsWalletView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child wallet ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        wallet, _ = ChildWallet.objects.get_or_create(
+            child=request.user
+        )
+
+        return Response(
+            {
+                "status": True,
+                "wallet": ChildWalletSerializer(wallet).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsTransactionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child transaction ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        transactions = ChildTransaction.objects.filter(
+            child=request.user
+        ).order_by("-created_at")[:100]
+
+        return Response(
+            {
+                "status": True,
+                "transactions": ChildTransactionSerializer(
+                    transactions,
+                    many=True
+                ).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class KidsShopPurchaseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child purchase qila oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ShopPurchaseCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        item_id = serializer.validated_data["item_id"]
+
+        try:
+            item = ShopItem.objects.get(
+                id=item_id,
+                is_active=True
+            )
+        except ShopItem.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Shop item topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        wallet, _ = ChildWallet.objects.get_or_create(
+            child=request.user
+        )
+
+        if wallet.balance < item.price_points:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Balans yetarli emas.",
+                    "balance": wallet.balance,
+                    "price_points": item.price_points,
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        wallet.balance -= item.price_points
+        wallet.save(update_fields=["balance"])
+
+        purchase = ShopPurchase.objects.create(
+            child=request.user,
+            item=item,
+            price_points=item.price_points,
+            status=ShopPurchase.STATUS_PENDING,
+        )
+
+        ChildTransaction.objects.create(
+            child=request.user,
+            amount=-item.price_points,
+            transaction_type=ChildTransaction.TYPE_SPEND,
+            source="shop_purchase",
+            description=f"Purchased {item.title}",
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Shop item sotib olindi. Parent/admin tasdiqlashi mumkin.",
+                "wallet": ChildWalletSerializer(wallet).data,
+                "purchase": ShopPurchaseSerializer(purchase).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class KidsSOSCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child SOS yubora oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = CreateSOSAlertSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        parent_link = ParentChild.objects.filter(
+            child=request.user
+        ).select_related("parent").first()
+
+        if not parent_link:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child uchun parent topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        parent = parent_link.parent
+
+        latitude = serializer.validated_data.get("latitude")
+        longitude = serializer.validated_data.get("longitude")
+
+        if latitude is None or longitude is None:
+            try:
+                last_location = request.user.last_location
+                latitude = last_location.latitude
+                longitude = last_location.longitude
+            except ChildLastLocation.DoesNotExist:
+                pass
+
+        sos = SOSAlert.objects.create(
+            child=request.user,
+            parent=parent,
+            latitude=latitude,
+            longitude=longitude,
+            address=serializer.validated_data.get("address"),
+            note=serializer.validated_data.get("note"),
+        )
+
+        # Bu joyga keyin Firebase push notification ulanadi.
+        # parent.device_tokens.filter(is_active=True) orqali FCM tokenlarga yuboriladi.
+
+        return Response(
+            {
+                "status": True,
+                "detail": "SOS yuborildi.",
+                "sos": SOSAlertSerializer(sos).data,
+                "parent_phone": parent.phone,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ParentSOSAlertListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent SOS alertlarni ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        alerts = SOSAlert.objects.filter(
+            parent=request.user
+        ).select_related("child", "parent").order_by("-created_at")[:100]
+
+        return Response(
+            {
+                "status": True,
+                "alerts": SOSAlertSerializer(alerts, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentSOSAlertResolveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, sos_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent SOS alertni yopishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            sos = SOSAlert.objects.get(
+                id=sos_id,
+                parent=request.user
+            )
+        except SOSAlert.DoesNotExist:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SOS alert topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        sos.status = SOSAlert.STATUS_RESOLVED
+        sos.save(update_fields=["status", "updated_at"])
+
+        return Response(
+            {
+                "status": True,
+                "detail": "SOS alert resolved qilindi.",
+                "sos": SOSAlertSerializer(sos).data,
             },
             status=status.HTTP_200_OK
         )
