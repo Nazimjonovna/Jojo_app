@@ -218,6 +218,9 @@ CSRF_TRUSTED_ORIGINS = [
     "https://jojoapp.uz",
     "http://www.jojoapp.uz",
     "https://www.jojoapp.uz",
+    
+    "http://api.jojoapp.uz",
+    "https://api.jojoapp.uz",
 ]
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
