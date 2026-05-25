@@ -17,6 +17,7 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 # Application definition
 
 INSTALLED_APPS = [
+    "jazzmin",
     "daphne",
     'django.contrib.admin',
     'django.contrib.auth',
@@ -232,3 +233,99 @@ FIREBASE_CREDENTIALS = os.getenv(
     "FIREBASE_CREDENTIALS",
     BASE_DIR / "firebase-service-account.json"
 )
+
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Jojo Admin",
+    "site_header": "Jojo Admin",
+    "site_brand": "Jojo",
+    "welcome_sign": "Jojo Admin Panel",
+    "copyright": "Jojo App",
+
+    "show_sidebar": True,
+    "navigation_expanded": True,
+
+    "topmenu_links": [
+        {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_group"]},
+        {"name": "API Docs", "url": "/swagger/", "new_window": True},
+    ],
+
+    "icons": {
+        "parent.User": "fas fa-users",
+        "parent.OTPCode": "fas fa-key",
+        "parent.PairingCode": "fas fa-qrcode",
+        "parent.ParentChild": "fas fa-child",
+
+        "parent.ChildLocation": "fas fa-map-marker-alt",
+        "parent.ChildLastLocation": "fas fa-location-arrow",
+        "parent.SavedLocation": "fas fa-map-pin",
+
+        "parent.SafeRoute": "fas fa-route",
+        "parent.SafeRoutePoint": "fas fa-map-signs",
+        "parent.ChildRouteAssignment": "fas fa-road",
+        "parent.RouteAlert": "fas fa-exclamation-triangle",
+
+        "parent.DeviceToken": "fas fa-mobile-alt",
+
+        "parent.GameCategory": "fas fa-gamepad",
+        "parent.GameItem": "fas fa-puzzle-piece",
+
+        "parent.ShopCategory": "fas fa-store",
+        "parent.ShopItem": "fas fa-shopping-bag",
+        "parent.ShopPurchase": "fas fa-receipt",
+
+        "parent.ChildWallet": "fas fa-wallet",
+        "parent.ChildTransaction": "fas fa-coins",
+
+        "parent.SOSAlert": "fas fa-bell",
+        "auth.Group": "fas fa-user-shield",
+    },
+
+    "order_with_respect_to": [
+        "parent.User",
+        "parent.ParentChild",
+        "parent.PairingCode",
+
+        "parent.GameCategory",
+        "parent.GameItem",
+
+        "parent.ShopCategory",
+        "parent.ShopItem",
+        "parent.ShopPurchase",
+
+        "parent.ChildWallet",
+        "parent.ChildTransaction",
+
+        "parent.ChildLocation",
+        "parent.ChildLastLocation",
+        "parent.SavedLocation",
+
+        "parent.SafeRoute",
+        "parent.ChildRouteAssignment",
+        "parent.RouteAlert",
+
+        "parent.SOSAlert",
+        "parent.DeviceToken",
+    ],
+
+    "hide_apps": [],
+    "hide_models": [],
+}
+
+
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",
+    "dark_mode_theme": "darkly",
+    "navbar": "navbar-white navbar-light",
+    "sidebar": "sidebar-dark-primary",
+    "brand_colour": "navbar-primary",
+    "accent": "accent-primary",
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success",
+    },
+}
