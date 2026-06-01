@@ -23,6 +23,10 @@ from .models import (
     ChildTransaction,
     ShopPurchase,
     SOSAlert,
+    ChildInstalledApp,
+    ChildAppLimit,
+    ChildBlockedApp,
+    ChildAppUsage,
 )
 
 
@@ -50,6 +54,10 @@ SUPPORT_ADMIN_MODELS = {
     "ChildWallet",
     "ChildTransaction",
     "ShopPurchase",
+    "ChildInstalledApp",
+    "ChildAppLimit",
+    "ChildBlockedApp",
+    "ChildAppUsage",
 }
 
 
@@ -63,6 +71,8 @@ SUPPORT_READONLY_MODELS = {
     "ChildWallet",
     "ChildTransaction",
     "ShopPurchase",
+    "ChildInstalledApp",
+    "ChildAppUsage",
 }
 
 
@@ -717,3 +727,85 @@ class GroupAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+    
+
+@admin.register(ChildInstalledApp)
+class ChildInstalledAppAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "app_name",
+        "package_name",
+        "category",
+        "is_system_app",
+        "is_active",
+        "last_synced_at",
+    )
+    list_filter = ("is_system_app", "is_active", "category")
+    search_fields = ("child__phone", "child__full_name", "app_name", "package_name")
+    readonly_fields = (
+        "child",
+        "app_name",
+        "package_name",
+        "category",
+        "is_system_app",
+        "is_active",
+        "last_synced_at",
+        "created_at",
+    )
+
+
+@admin.register(ChildAppLimit)
+class ChildAppLimitAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "app",
+        "daily_limit_seconds",
+        "is_enabled",
+        "created_by",
+        "updated_at",
+    )
+    list_filter = ("is_enabled",)
+    search_fields = ("child__phone", "child__full_name", "app__app_name", "app__package_name")
+
+
+@admin.register(ChildBlockedApp)
+class ChildBlockedAppAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "app",
+        "is_blocked",
+        "reason",
+        "created_by",
+        "updated_at",
+    )
+    list_filter = ("is_blocked",)
+    search_fields = ("child__phone", "child__full_name", "app__app_name", "app__package_name")
+
+
+@admin.register(ChildAppUsage)
+class ChildAppUsageAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "app",
+        "usage_date",
+        "total_usage_seconds",
+        "open_count",
+        "updated_at",
+    )
+    list_filter = ("usage_date",)
+    search_fields = ("child__phone", "child__full_name", "app__app_name", "app__package_name")
+    readonly_fields = (
+        "child",
+        "app",
+        "usage_date",
+        "total_usage_seconds",
+        "first_opened_at",
+        "last_opened_at",
+        "open_count",
+        "updated_at",
+        "created_at",
+    )

@@ -4,32 +4,25 @@ from .views import (
     SendOTPView,
     VerifyOTPView,
     ParentRegisterView,
-
     MeView,
     UpdateLanguageView,
     ParentChildLogoutView,
-
     CreatePairingCodeView,
     ChildRegisterByCodeView,
     MyChildrenView,
-
     SendChildLocationView,
     ChildLastLocationView,
     ChildLocationHistoryView,
-
     DeviceTokenView,
     DeviceLogoutView,
-
     ParentRouteListCreateView,
     ParentRouteDetailView,
     AssignRouteToChildView,
     ParentChildAssignmentsView,
     ChildActiveRoutesView,
     RouteAlertListView,
-    
     SavedLocationListCreateView,
     SavedLocationDetailView,
-    
     KidsGameCategoryListView,
     KidsGameListView,
     KidsGameDetailView,
@@ -42,6 +35,13 @@ from .views import (
     KidsSOSCreateView,
     ParentSOSAlertListView,
     ParentSOSAlertResolveView,
+    ChildAppSyncView,
+    ChildAppUsageSyncView,
+    ChildAppPolicyView,
+    ParentChildAppListView,
+    ParentSetChildAppLimitView,
+    ParentBlockChildAppView,
+    ParentChildAppUsageStatsView,
 )
 
 
@@ -198,4 +198,14 @@ urlpatterns = [
     path("kids/sos/", KidsSOSCreateView.as_view(), name="kids-sos"),
     path("parent/sos-alerts/", ParentSOSAlertListView.as_view(), name="parent-sos-alerts"),
     path("parent/sos-alerts/<int:sos_id>/resolve/", ParentSOSAlertResolveView.as_view(), name="parent-sos-resolve"),
+    
+    path("child/apps/sync/", ChildAppSyncView.as_view(), name="child-app-sync"),
+    path("child/apps/usage/sync/", ChildAppUsageSyncView.as_view(), name="child-app-usage-sync"),
+    path("child/apps/policies/", ChildAppPolicyView.as_view(), name="child-app-policies"),
+
+    path("parent/children/<int:child_id>/apps/", ParentChildAppListView.as_view(), name="parent-child-apps"),
+    path("parent/children/<int:child_id>/apps/usage/", ParentChildAppUsageStatsView.as_view(), name="parent-child-app-usage"),
+    path("parent/children/<int:child_id>/apps/<int:app_id>/limit/", ParentSetChildAppLimitView.as_view(), name="parent-child-app-limit"),
+    path("parent/children/<int:child_id>/apps/<int:app_id>/block/", ParentBlockChildAppView.as_view(), name="parent-child-app-block"),
+    path("parent/children/<int:child_id>/location-history/",ChildLocationHistoryView.as_view(),name="child-location-history"),
 ]

@@ -308,6 +308,9 @@ class ChildLocation(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["created_at"]
+
     def __str__(self):
         return f"{self.child_id}: {self.latitude}, {self.longitude}"
 
@@ -854,3 +857,135 @@ class SOSAlert(models.Model):
 
     def __str__(self):
         return f"SOS {self.child_id} -> {self.parent_id}"
+    
+    
+class ChildInstalledApp(models.Model):
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="installed_apps"
+    )
+
+    app_name = models.CharField(max_length=150)
+    package_name = models.CharField(max_length=255)
+
+    category = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True
+    )
+
+    is_system_app = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    last_synced_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("child", "package_name")
+        ordering = ["app_name"]
+
+    def __str__(self):
+        return f"{self.child_id} - {self.app_name}"
+
+
+class ChildAppUsage(models.Model):
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="app_usages"
+    )
+
+    app = models.ForeignKey(
+        ChildInstalledApp,
+        on_delete=models.CASCADE,
+        related_name="usages"
+    )
+
+    usage_date = models.DateField()
+
+    total_usage_seconds = models.PositiveIntegerField(default=0)
+    open_count = models.PositiveIntegerField(default=0)
+
+    first_opened_at = models.DateTimeField(null=True, blank=True)
+    last_opened_at = models.DateTimeField(null=True, blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("child", "app", "usage_date")
+        ordering = ["-usage_date", "-total_usage_seconds"]
+
+    def __str__(self):
+        return f"{self.child_id} - {self.app.package_name} - {self.usage_date}"
+
+
+class ChildAppLimit(models.Model):
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="app_limits"
+    )
+
+    app = models.OneToOneField(
+        ChildInstalledApp,
+        on_delete=models.CASCADE,
+        related_name="limit"
+    )
+
+    daily_limit_seconds = models.PositiveIntegerField(default=0)
+    is_enabled = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_child_app_limits"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def daily_limit_minutes(self):
+        return round(self.daily_limit_seconds / 60)
+
+    def __str__(self):
+        return f"{self.child_id} - {self.app.package_name} - {self.daily_limit_seconds}s"
+
+
+class ChildBlockedApp(models.Model):
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blocked_apps"
+    )
+
+    app = models.OneToOneField(
+        ChildInstalledApp,
+        on_delete=models.CASCADE,
+        related_name="block"
+    )
+
+    is_blocked = models.BooleanField(default=True)
+
+    reason = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_child_app_blocks"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.child_id} - {self.app.package_name} - blocked={self.is_blocked}"

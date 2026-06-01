@@ -7,10 +7,14 @@ from .services import process_child_location
 
 class ParentTrackingConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
-        user = self.scope["user"]
+        user = self.scope.get("user")
 
-        if user.is_anonymous or user.role != User.ROLE_PARENT:
-            await self.close()
+        if not user or user.is_anonymous:
+            await self.close(code=4001)
+            return
+
+        if user.role != User.ROLE_PARENT:
+            await self.close(code=4003)
             return
 
         self.parent_group_name = f"parent_{user.id}"
@@ -26,6 +30,7 @@ class ParentTrackingConsumer(AsyncJsonWebsocketConsumer):
             {
                 "type": "connected",
                 "message": "Parent real-time tracking connected.",
+                "group": self.parent_group_name,
             }
         )
 
@@ -45,10 +50,14 @@ class ParentTrackingConsumer(AsyncJsonWebsocketConsumer):
 
 class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
-        user = self.scope["user"]
+        user = self.scope.get("user")
 
-        if user.is_anonymous or user.role != User.ROLE_CHILD:
-            await self.close()
+        if not user or user.is_anonymous:
+            await self.close(code=4001)
+            return
+
+        if user.role != User.ROLE_CHILD:
+            await self.close(code=4003)
             return
 
         await self.accept()
@@ -68,6 +77,7 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
                 {
                     "type": "error",
                     "message": "Invalid action.",
+                    "allowed_action": "location.update",
                 }
             )
             return
@@ -84,7 +94,17 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
             )
             return
 
-        payload = await self.save_location(content)
+        try:
+            payload = await self.save_location(content)
+        except Exception as error:
+            await self.send_json(
+                {
+                    "type": "error",
+                    "message": "Location save failed.",
+                    "detail": str(error),
+                }
+            )
+            return
 
         await self.send_json(
             {

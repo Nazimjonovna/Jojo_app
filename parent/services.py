@@ -14,6 +14,51 @@ from .realtime import broadcast_child_location, broadcast_route_alert
 from .utils import nearest_route_point_distance
 
 
+def to_float(value):
+    if value is None:
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def to_int(value):
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def speed_to_kmh(speed):
+   
+    speed_float = to_float(speed)
+
+    if speed_float is None:
+        return None
+
+    return round(speed_float * 3.6, 2)
+
+
+def build_location_payload(location):
+    return {
+        "id": location.id,
+        "latitude": float(location.latitude),
+        "longitude": float(location.longitude),
+        "accuracy": location.accuracy,
+        "battery_level": location.battery_level,
+        "speed": location.speed,
+        "speed_kmh": speed_to_kmh(location.speed),
+        "heading": location.heading,
+        "source": location.source,
+        "created_at": location.created_at.isoformat(),
+    }
+
+
 def send_route_deviation_notification(assignment, location, distance_meters):
     parent = assignment.parent
     child = assignment.child
@@ -26,17 +71,22 @@ def send_route_deviation_notification(assignment, location, distance_meters):
     tokens = list(tokens)
 
     title = "Jojo"
-    body = f"{child.first_name} belgilangan marshrutdan chiqdi."
+    child_name = child.full_name or child.first_name or "Farzandingiz"
+    body = f"{child_name} belgilangan marshrutdan chiqdi."
 
     payload = {
         "type": "route_deviation",
         "child_id": child.id,
-        "child_name": child.first_name,
+        "child_name": child_name,
         "route_id": assignment.route.id,
         "route_name": assignment.route.name,
         "distance_meters": round(distance_meters, 2),
         "latitude": float(location.latitude),
         "longitude": float(location.longitude),
+        "speed": location.speed,
+        "speed_kmh": speed_to_kmh(location.speed),
+        "heading": location.heading,
+        "created_at": location.created_at.isoformat(),
     }
 
     if tokens:
@@ -78,7 +128,7 @@ def get_route_statuses_for_child(child, latitude, longitude, location):
         child=child,
         status=ChildRouteAssignment.STATUS_ACTIVE,
         route__is_active=True,
-    ).select_related("route", "parent")
+    ).select_related("route", "parent").prefetch_related("route__points")
 
     statuses = []
 
@@ -145,6 +195,15 @@ def process_child_location(
     heading=None,
     source=ChildLocation.SOURCE_REST,
 ):
+   
+
+    latitude = to_float(latitude)
+    longitude = to_float(longitude)
+    accuracy = to_float(accuracy)
+    battery_level = to_int(battery_level)
+    speed = to_float(speed)
+    heading = to_float(heading)
+
     location = ChildLocation.objects.create(
         child=child,
         latitude=latitude,
@@ -180,5 +239,18 @@ def process_child_location(
         location=location,
         route_statuses=route_statuses,
     )
+
+    if isinstance(payload, dict):
+        payload["location"] = build_location_payload(location)
+        payload["route_statuses"] = route_statuses
+
+        payload["child"] = {
+            "id": child.id,
+            "phone": child.phone,
+            "username": child.username,
+            "full_name": child.full_name,
+            "first_name": child.first_name,
+            "role": child.role,
+        }
 
     return location, payload

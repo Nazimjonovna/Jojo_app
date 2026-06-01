@@ -1,17 +1,13 @@
 from datetime import timedelta
-
 from django.contrib.auth import authenticate
 from django.utils import timezone
-
+from django.utils.dateparse import parse_date
 from drf_yasg.utils import swagger_auto_schema
-
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
 from rest_framework_simplejwt.tokens import RefreshToken
-
 from .models import (
     User,
     OTPCode,
@@ -33,6 +29,10 @@ from .models import (
     ChildTransaction,
     ShopPurchase,
     SOSAlert,
+    ChildInstalledApp,
+    ChildAppUsage,
+    ChildAppLimit,
+    ChildBlockedApp,
 )
 
 from .serializers import (
@@ -62,6 +62,15 @@ from .serializers import (
     ShopPurchaseCreateSerializer,
     SOSAlertSerializer,
     CreateSOSAlertSerializer,
+    ChildInstalledAppSerializer,
+    ChildAppSyncSerializer,
+    ChildAppUsageSyncSerializer,
+    ChildAppUsageSerializer,
+    SetChildAppLimitSerializer,
+    ChildAppLimitSerializer,
+    BlockChildAppSerializer,
+    ChildBlockedAppSerializer,
+    ChildTrackPointSerializer
 )
 
 from .services import process_child_location
@@ -77,11 +86,6 @@ def get_tokens_for_user(user):
 
 
 def send_sms_code(phone, code):
-    """
-    Bu yerga Eskiz, Play Mobile yoki boshqa SMS provider integratsiya qilasan.
-    Hozircha test uchun print qilyapti.
-    Productionda code response ichida qaytmasligi kerak.
-    """
     print(f"SMS CODE for {phone}: {code}")
     return True
 
@@ -2052,6 +2056,530 @@ class ParentSOSAlertResolveView(APIView):
                 "status": True,
                 "detail": "SOS alert resolved qilindi.",
                 "sos": SOSAlertSerializer(sos).data,
+            },
+            status=status.HTTP_200_OK
+        )
+        
+        
+def parent_has_child_access(parent, child_id):
+    return ParentChild.objects.filter(
+        parent=parent,
+        child_id=child_id
+    ).exists()
+    
+
+class ChildAppSyncView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ChildAppSyncSerializer, tags=["app-control"])
+    def post(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child app list sync qila oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ChildAppSyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        incoming_packages = []
+
+        for item in serializer.validated_data["apps"]:
+            package_name = item["package_name"]
+            incoming_packages.append(package_name)
+
+            ChildInstalledApp.objects.update_or_create(
+                child=request.user,
+                package_name=package_name,
+                defaults={
+                    "app_name": item["app_name"],
+                    "category": item.get("category"),
+                    "is_system_app": item.get("is_system_app", False),
+                    "is_active": True,
+                }
+            )
+
+        ChildInstalledApp.objects.filter(
+            child=request.user
+        ).exclude(
+            package_name__in=incoming_packages
+        ).update(
+            is_active=False
+        )
+
+        apps = ChildInstalledApp.objects.filter(
+            child=request.user,
+            is_active=True
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Installed apps synced.",
+                "apps": ChildInstalledAppSerializer(apps, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ChildAppUsageSyncView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ChildAppUsageSyncSerializer, tags=["app-control"])
+    def post(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child usage sync qila oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ChildAppUsageSyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        saved_items = []
+
+        for item in serializer.validated_data["usages"]:
+            app = ChildInstalledApp.objects.filter(
+                child=request.user,
+                package_name=item["package_name"]
+            ).first()
+
+            if not app:
+                app = ChildInstalledApp.objects.create(
+                    child=request.user,
+                    package_name=item["package_name"],
+                    app_name=item["package_name"],
+                    is_active=True,
+                )
+
+            usage, _ = ChildAppUsage.objects.update_or_create(
+                child=request.user,
+                app=app,
+                usage_date=item["usage_date"],
+                defaults={
+                    "total_usage_seconds": item["total_usage_seconds"],
+                    "open_count": item.get("open_count", 0),
+                    "first_opened_at": item.get("first_opened_at"),
+                    "last_opened_at": item.get("last_opened_at"),
+                }
+            )
+
+            saved_items.append(usage)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "App usage synced.",
+                "usages": ChildAppUsageSerializer(saved_items, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ChildAppPolicyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role != User.ROLE_CHILD:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat child policy olishi mumkin."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        today = timezone.localdate()
+
+        apps = ChildInstalledApp.objects.filter(
+            child=request.user,
+            is_active=True
+        )
+
+        policies = []
+
+        for app in apps:
+            try:
+                is_blocked = app.block.is_blocked
+            except ChildBlockedApp.DoesNotExist:
+                is_blocked = False
+
+            try:
+                limit = app.limit
+                daily_limit_seconds = limit.daily_limit_seconds
+                is_limit_enabled = limit.is_enabled
+            except ChildAppLimit.DoesNotExist:
+                daily_limit_seconds = None
+                is_limit_enabled = False
+
+            usage = ChildAppUsage.objects.filter(
+                child=request.user,
+                app=app,
+                usage_date=today
+            ).first()
+
+            policies.append(
+                {
+                    "app_id": app.id,
+                    "package_name": app.package_name,
+                    "app_name": app.app_name,
+                    "is_blocked": is_blocked,
+                    "daily_limit_seconds": daily_limit_seconds,
+                    "is_limit_enabled": is_limit_enabled,
+                    "today_usage_seconds": usage.total_usage_seconds if usage else 0,
+                }
+            )
+
+        return Response(
+            {
+                "status": True,
+                "policies": policies,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentChildAppListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent child app list ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not parent_has_child_access(request.user, child_id):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        tab = request.query_params.get("tab", "all")
+        usage_date = request.query_params.get("date")
+        parsed_date = parse_date(usage_date) if usage_date else timezone.localdate()
+
+        apps = ChildInstalledApp.objects.filter(
+            child_id=child_id,
+            is_active=True
+        )
+
+        if tab == "blocked":
+            apps = apps.filter(block__is_blocked=True)
+
+        if tab == "limits":
+            apps = apps.filter(limit__is_enabled=True)
+
+        apps = apps.order_by("app_name")
+
+        return Response(
+            {
+                "status": True,
+                "tab": tab,
+                "date": str(parsed_date),
+                "apps": ChildInstalledAppSerializer(
+                    apps,
+                    many=True,
+                    context={
+                        "request": request,
+                        "usage_date": parsed_date,
+                    }
+                ).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentSetChildAppLimitView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=SetChildAppLimitSerializer, tags=["app-control"])
+    def post(self, request, child_id, app_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent limit qo‘ya oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not parent_has_child_access(request.user, child_id):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        app = ChildInstalledApp.objects.filter(
+            id=app_id,
+            child_id=child_id
+        ).first()
+
+        if not app:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "App topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SetChildAppLimitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        limit, _ = ChildAppLimit.objects.update_or_create(
+            child_id=child_id,
+            app=app,
+            defaults={
+                "daily_limit_seconds": serializer.validated_data["daily_limit_seconds"],
+                "is_enabled": serializer.validated_data.get("is_enabled", True),
+                "created_by": request.user,
+            }
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "App limit saqlandi.",
+                "limit": ChildAppLimitSerializer(limit).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def delete(self, request, child_id, app_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent limitni o‘chira oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not parent_has_child_access(request.user, child_id):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        app = ChildInstalledApp.objects.filter(
+            id=app_id,
+            child_id=child_id
+        ).first()
+
+        if not app:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "App topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        ChildAppLimit.objects.filter(
+            child_id=child_id,
+            app=app
+        ).delete()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "App limit o‘chirildi.",
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentBlockChildAppView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=BlockChildAppSerializer, tags=["app-control"])
+    def post(self, request, child_id, app_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent app block qila oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not parent_has_child_access(request.user, child_id):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        app = ChildInstalledApp.objects.filter(
+            id=app_id,
+            child_id=child_id
+        ).first()
+
+        if not app:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "App topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = BlockChildAppSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        blocked_app, _ = ChildBlockedApp.objects.update_or_create(
+            child_id=child_id,
+            app=app,
+            defaults={
+                "is_blocked": serializer.validated_data.get("is_blocked", True),
+                "reason": serializer.validated_data.get("reason"),
+                "created_by": request.user,
+            }
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "App block holati yangilandi.",
+                "blocked_app": ChildBlockedAppSerializer(blocked_app).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ParentChildAppUsageStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent usage stats ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not parent_has_child_access(request.user, child_id):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        date_from = parse_date(request.query_params.get("date_from")) if request.query_params.get("date_from") else None
+        date_to = parse_date(request.query_params.get("date_to")) if request.query_params.get("date_to") else None
+
+        usages = ChildAppUsage.objects.filter(
+            child_id=child_id
+        ).select_related("app")
+
+        if date_from:
+            usages = usages.filter(usage_date__gte=date_from)
+
+        if date_to:
+            usages = usages.filter(usage_date__lte=date_to)
+
+        usages = usages.order_by("-usage_date", "-total_usage_seconds")
+
+        total_seconds = sum(item.total_usage_seconds for item in usages)
+
+        return Response(
+            {
+                "status": True,
+                "total_usage_seconds": total_seconds,
+                "usages": ChildAppUsageSerializer(usages, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+        
+        
+class ChildLocationHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["location"])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat parent location history ko‘ra oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        has_access = ParentChild.objects.filter(
+            parent=request.user,
+            child_id=child_id
+        ).exists()
+
+        if not has_access:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu child sizga tegishli emas."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        date = request.query_params.get("date")
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        limit = int(request.query_params.get("limit", 1000))
+
+        locations = ChildLocation.objects.filter(
+            child_id=child_id
+        )
+
+        if date:
+            parsed_date = parse_date(date)
+            if parsed_date:
+                locations = locations.filter(created_at__date=parsed_date)
+
+        if date_from:
+            parsed_from = parse_date(date_from)
+            if parsed_from:
+                locations = locations.filter(created_at__date__gte=parsed_from)
+
+        if date_to:
+            parsed_to = parse_date(date_to)
+            if parsed_to:
+                locations = locations.filter(created_at__date__lte=parsed_to)
+
+        # Flutter line chizishi uchun ASC tartib kerak
+        locations = locations.order_by("created_at")[:limit]
+
+        points = ChildTrackPointSerializer(locations, many=True).data
+
+        return Response(
+            {
+                "status": True,
+                "child_id": child_id,
+                "count": len(points),
+                "points": points,
             },
             status=status.HTTP_200_OK
         )
