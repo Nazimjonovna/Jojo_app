@@ -1,13 +1,14 @@
 from datetime import timedelta
-from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
+from .pagination import paginate_queryset
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from .permissions import IsParent, IsChild, IsParentOfChild
 from .models import (
     User,
     OTPCode,
@@ -20,7 +21,7 @@ from .models import (
     ChildRouteAssignment,
     RouteAlert,
     generate_numeric_code,
-    SavedLocation, 
+    SavedLocation,
     GameCategory,
     GameItem,
     ShopCategory,
@@ -33,8 +34,10 @@ from .models import (
     ChildAppUsage,
     ChildAppLimit,
     ChildBlockedApp,
+    AppVersion,
+    ChildDailyActivity,
+    SavedLocationVisit,
 )
-
 from .serializers import (
     SendOTPSerializer,
     VerifyOTPSerializer,
@@ -70,19 +73,18 @@ from .serializers import (
     ChildAppLimitSerializer,
     BlockChildAppSerializer,
     ChildBlockedAppSerializer,
-    ChildTrackPointSerializer
+    ChildTrackPointSerializer,
+    AppVersionCheckSerializer,
+    ChildDailyActivitySerializer,
+    ChildDailyActivitySyncSerializer,
+    SavedLocationVisitSerializer,
 )
-
 from .services import process_child_location
 
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
-
-    return {
-        "refresh": str(refresh),
-        "access": str(refresh.access_token),
-    }
+    return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
 def send_sms_code(phone, code):
@@ -92,1878 +94,633 @@ def send_sms_code(phone, code):
 
 def save_user_device(user, device_id, token, device_type="android"):
     if not device_id:
-        return {
-            "error": True,
-            "detail": "device_id majburiy."
-        }
-
+        return {"error": True, "detail": "device_id majburiy."}
     if not token:
-        return {
-            "error": True,
-            "detail": "Firebase token majburiy."
-        }
-
+        return {"error": True, "detail": "Firebase token majburiy."}
     if user.role == User.ROLE_CHILD:
-        active_device = DeviceToken.objects.filter(
-            user=user,
-            is_active=True,
-        ).exclude(
-            device_id=device_id,
-        ).first()
-
+        active_device = DeviceToken.objects.filter(user=user, is_active=True).exclude(device_id=device_id).first()
         if active_device:
-            return {
-                "error": True,
-                "detail": "Bu child akkaunt boshqa qurilmada aktiv. Avval birinchi device_id dan logout qiling.",
-                "active_device_id": active_device.device_id,
-            }
+            return {"error": True, "detail": "Bu child akkaunt boshqa qurilmada aktiv. Avval birinchi device_id dan logout qiling.", "active_device_id": active_device.device_id}
+    device, created = DeviceToken.objects.update_or_create(user=user, device_id=device_id, defaults={"token": token, "device_type": device_type, "is_active": True, "last_login_at": timezone.now()})
+    return {"error": False, "device": device, "created": created}
 
-    device, created = DeviceToken.objects.update_or_create(
-        user=user,
-        device_id=device_id,
-        defaults={
-            "token": token,
-            "device_type": device_type,
-            "is_active": True,
-            "last_login_at": timezone.now(),
-        },
-    )
 
-    return {
-        "error": False,
-        "device": device,
-        "created": created,
-    }
+def parse_version(version):
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except Exception:
+        return (0,)
+
+
+def is_version_less(current, target):
+    current_parts = parse_version(current)
+    target_parts = parse_version(target)
+    max_len = max(len(current_parts), len(target_parts))
+    current_parts = current_parts + (0,) * (max_len - len(current_parts))
+    target_parts = target_parts + (0,) * (max_len - len(target_parts))
+    return current_parts < target_parts
+
+
+def get_movement_status(speed):
+    if speed is None:
+        return {"status": "unknown", "label": "Noma’lum"}
+    try:
+        speed_kmh = float(speed) * 3.6
+    except Exception:
+        return {"status": "unknown", "label": "Noma’lum"}
+    if speed_kmh < 1:
+        return {"status": "idle", "label": "Joyida"}
+    if speed_kmh < 7:
+        return {"status": "walking", "label": "Yuryapti"}
+    return {"status": "vehicle", "label": "Mashinada"}
 
 
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
-
     @swagger_auto_schema(request_body=SendOTPSerializer, tags=["register"])
     def post(self, request):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         phone = serializer.validated_data["phone"]
-
-        last_otp = OTPCode.objects.filter(
-            phone=phone
-        ).order_by("-created_at").first()
-
-        if last_otp and hasattr(last_otp, "is_blocked") and last_otp.is_blocked():
+        last_otp = OTPCode.objects.filter(phone=phone).order_by("-created_at").first()
+        if last_otp and last_otp.is_blocked():
             time_left = last_otp.block_time_left_seconds()
-
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Juda ko‘p noto‘g‘ri urinish. Keyinroq qayta urinib ko‘ring.",
-                    "blocked": True,
-                    "time_left_seconds": time_left,
-                    "time_left_minutes": round(time_left / 60, 1),
-                },
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
+            return Response({"status": False, "detail": "Juda ko‘p noto‘g‘ri urinish. Keyinroq qayta urinib ko‘ring.", "blocked": True, "time_left_seconds": time_left, "time_left_minutes": round(time_left / 60, 1)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         if last_otp:
             seconds = (timezone.now() - last_otp.created_at).total_seconds()
-
             if seconds < 60:
                 time_left = int(60 - seconds)
-
-                return Response(
-                    {
-                        "status": False,
-                        "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.",
-                        "time_left": time_left,
-                    },
-                    status=status.HTTP_429_TOO_MANY_REQUESTS
-                )
-
+                return Response({"status": False, "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.", "time_left": time_left}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         code = generate_numeric_code(6)
-
-        OTPCode.objects.create(
-            phone=phone,
-            code=code,
-            expires_at=timezone.now() + timedelta(minutes=5)
-        )
-
+        OTPCode.objects.create(phone=phone, code=code, expires_at=timezone.now() + timedelta(minutes=5))
         send_sms_code(phone, code)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "SMS kod yuborildi.",
-                "code": code,
-                "lifetime": "5 minutes",
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({"status": True, "detail": "SMS kod yuborildi.", "code": code, "lifetime": "5 minutes"}, status=status.HTTP_200_OK)
 
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
-
     @swagger_auto_schema(request_body=VerifyOTPSerializer, tags=["register"])
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         phone = serializer.validated_data["phone"]
         code = serializer.validated_data["code"]
-
-        otp = OTPCode.objects.filter(
-            phone=phone,
-            is_used=False
-        ).order_by("-created_at").first()
-
+        otp = OTPCode.objects.filter(phone=phone, is_used=False).order_by("-created_at").first()
         if not otp:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Aktiv SMS kod topilmadi. Yangi kod oling."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if hasattr(otp, "is_blocked") and otp.is_blocked():
+            return Response({"status": False, "detail": "Aktiv SMS kod topilmadi. Yangi kod oling."}, status=status.HTTP_400_BAD_REQUEST)
+        if otp.is_blocked():
             time_left = otp.block_time_left_seconds()
-
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Juda ko‘p noto‘g‘ri urinish. 30 minutdan keyin qayta urinib ko‘ring.",
-                    "blocked": True,
-                    "time_left_seconds": time_left,
-                    "time_left_minutes": round(time_left / 60, 1),
-                },
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
+            return Response({"status": False, "detail": "Juda ko‘p noto‘g‘ri urinish. 30 minutdan keyin qayta urinib ko‘ring.", "blocked": True, "time_left_seconds": time_left, "time_left_minutes": round(time_left / 60, 1)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         if otp.is_expired():
-            return Response(
-                {
-                    "status": False,
-                    "detail": "SMS kod muddati tugagan."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"status": False, "detail": "SMS kod muddati tugagan."}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now()
-
-        if hasattr(otp, "first_attempt_at"):
-            if otp.first_attempt_at and now - otp.first_attempt_at > timedelta(hours=1):
-                otp.attempt_count = 0
-                otp.first_attempt_at = None
-                otp.blocked_until = None
-                otp.save(
-                    update_fields=[
-                        "attempt_count",
-                        "first_attempt_at",
-                        "blocked_until",
-                    ]
-                )
-
+        if otp.first_attempt_at and now - otp.first_attempt_at > timedelta(hours=1):
+            otp.attempt_count = 0
+            otp.first_attempt_at = None
+            otp.blocked_until = None
+            otp.save(update_fields=["attempt_count", "first_attempt_at", "blocked_until"])
         if otp.code != code:
-            if hasattr(otp, "attempt_count"):
-                if not otp.first_attempt_at:
-                    otp.first_attempt_at = now
-
-                otp.attempt_count += 1
-                attempts_left = max(5 - otp.attempt_count, 0)
-
-                if otp.attempt_count >= 5:
-                    otp.blocked_until = now + timedelta(minutes=30)
-                    otp.save(
-                        update_fields=[
-                            "attempt_count",
-                            "first_attempt_at",
-                            "blocked_until",
-                        ]
-                    )
-
-                    return Response(
-                        {
-                            "status": False,
-                            "detail": "5 marta noto‘g‘ri kod kiritildi. 30 minutga bloklandi.",
-                            "blocked": True,
-                            "time_left_seconds": 30 * 60,
-                            "time_left_minutes": 30,
-                        },
-                        status=status.HTTP_429_TOO_MANY_REQUESTS
-                    )
-
-                otp.save(update_fields=["attempt_count", "first_attempt_at"])
-
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "SMS kod noto‘g‘ri.",
-                        "attempts_left": attempts_left,
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            return Response(
-                {
-                    "status": False,
-                    "detail": "SMS kod noto‘g‘ri."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            if not otp.first_attempt_at:
+                otp.first_attempt_at = now
+            otp.attempt_count += 1
+            attempts_left = max(3 - otp.attempt_count, 0)
+            if otp.attempt_count >= 3:
+                otp.blocked_until = now + timedelta(minutes=30)
+                otp.save(update_fields=["attempt_count", "first_attempt_at", "blocked_until"])
+                return Response({"status": False, "detail": "3 marta noto‘g‘ri kod kiritildi. 30 minutga bloklandi.", "blocked": True, "time_left_seconds": 1800, "time_left_minutes": 30}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            otp.save(update_fields=["attempt_count", "first_attempt_at"])
+            return Response({"status": False, "detail": "SMS kod noto‘g‘ri.", "attempts_left": attempts_left}, status=status.HTTP_400_BAD_REQUEST)
         otp.is_used = True
         otp.save(update_fields=["is_used"])
-
-        user = User.objects.filter(
-            phone=phone,
-            role=User.ROLE_PARENT
-        ).first()
-
-        if user:
-            tokens = get_tokens_for_user(user)
-
-            return Response(
-                {
-                    "status": True,
-                    "is_registered": True,
-                    "detail": "SMS kod tasdiqlandi. User avval ro‘yxatdan o‘tgan.",
-                    "user": UserSerializer(user).data,
-                    "tokens": tokens,
-                },
-                status=status.HTTP_200_OK
-            )
-
-        return Response(
-            {
-                "status": True,
-                "is_registered": False,
-                "detail": "SMS kod tasdiqlandi. Endi register qiling."
-            },
-            status=status.HTTP_201_CREATED
-        )
+        is_registered = User.objects.filter(phone=phone, role=User.ROLE_PARENT).exists()
+        return Response({"status": True, "is_registered": is_registered, "detail": "SMS kod tasdiqlandi. Token olish uchun parent/register endpointini chaqiring."}, status=status.HTTP_200_OK)
 
 
 class ParentRegisterView(APIView):
     permission_classes = [AllowAny]
-
     @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=["register"])
     def post(self, request):
         serializer = ParentRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         phone = serializer.validated_data["phone"]
         device_id = serializer.validated_data["device_id"]
         token = serializer.validated_data["token"]
         device_type = serializer.validated_data.get("device_type", "android")
-
-        verified_otp = OTPCode.objects.filter(
-            phone=phone,
-            is_used=True
-        ).order_by("-created_at").first()
-
+        verified_otp = OTPCode.objects.filter(phone=phone, is_used=True).order_by("-created_at").first()
         if not verified_otp:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Avval SMS kodni tasdiqlang."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        existing_user = User.objects.filter(
-            phone=phone,
-            role=User.ROLE_PARENT
-        ).first()
-
+            return Response({"status": False, "detail": "Avval SMS kodni tasdiqlang."}, status=status.HTTP_400_BAD_REQUEST)
+        existing_user = User.objects.filter(phone=phone, role=User.ROLE_PARENT).first()
         if existing_user:
-            device_result = save_user_device(
-                user=existing_user,
-                device_id=device_id,
-                token=token,
-                device_type=device_type,
-            )
-
+            device_result = save_user_device(existing_user, device_id, token, device_type)
             if device_result.get("error"):
-                return Response(
-                    {
-                        "status": False,
-                        "detail": device_result["detail"],
-                        "active_device_id": device_result.get("active_device_id"),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            tokens = get_tokens_for_user(existing_user)
-
-            return Response(
-                {
-                    "status": True,
-                    "is_registered": True,
-                    "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.",
-                    "user": UserSerializer(existing_user).data,
-                    "device": DeviceTokenSerializer(device_result["device"]).data,
-                    "tokens": tokens,
-                },
-                status=status.HTTP_200_OK
-            )
-
+                return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": True, "is_registered": True, "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.", "user": UserSerializer(existing_user).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(existing_user)}, status=status.HTTP_200_OK)
         user = serializer.save()
-
-        device_result = save_user_device(
-            user=user,
-            device_id=device_id,
-            token=token,
-            device_type=device_type,
-        )
-
+        device_result = save_user_device(user, device_id, token, device_type)
         if device_result.get("error"):
-            return Response(
-                {
-                    "status": False,
-                    "detail": device_result["detail"],
-                    "active_device_id": device_result.get("active_device_id"),
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        tokens = get_tokens_for_user(user)
-
-        return Response(
-            {
-                "status": True,
-                "is_registered": False,
-                "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.",
-                "user": UserSerializer(user).data,
-                "device": DeviceTokenSerializer(device_result["device"]).data,
-                "tokens": tokens,
-            },
-            status=status.HTTP_201_CREATED
-        )
+            user.delete()
+            return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"status": True, "is_registered": False, "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.", "user": UserSerializer(user).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(user)}, status=status.HTTP_201_CREATED)
 
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
-
     @swagger_auto_schema(tags=["info"])
     def get(self, request):
-        return Response(
-            {
-                "status": True,
-                "user": UserSerializer(request.user).data
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({"status": True, "user": UserSerializer(request.user).data}, status=status.HTTP_200_OK)
 
 
 class UpdateLanguageView(APIView):
     permission_classes = [IsAuthenticated]
-
     @swagger_auto_schema(request_body=UpdateLanguageSerializer, tags=["settings"])
     def patch(self, request):
         serializer = UpdateLanguageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         request.user.language = serializer.validated_data["language"]
         request.user.save(update_fields=["language"])
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Til muvaffaqiyatli o‘zgartirildi.",
-                "user": UserSerializer(request.user).data
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({"status": True, "detail": "Til muvaffaqiyatli o‘zgartirildi.", "user": UserSerializer(request.user).data}, status=status.HTTP_200_OK)
 
 
 class CreatePairingCodeView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     @swagger_auto_schema(request_body=CreateChildPairingSerializer, tags=["child"])
     def post(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent bola qo‘sha oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         child_id = request.data.get("child_id")
-
         if child_id:
-            has_access = ParentChild.objects.filter(
-                parent=request.user,
-                child_id=child_id,
-            ).exists()
-
-            if not has_access:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Bu child sizga tegishli emas."
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            child = User.objects.filter(
-                id=child_id,
-                role=User.ROLE_CHILD,
-            ).first()
-
+            if not ParentChild.objects.filter(parent=request.user, child_id=child_id).exists():
+                return Response({"status": False, "detail": "Bu child sizga tegishli emas."}, status=status.HTTP_403_FORBIDDEN)
+            child = User.objects.filter(id=child_id, role=User.ROLE_CHILD).first()
             if not child:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Child topilmadi."
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
+                return Response({"status": False, "detail": "Child topilmadi."}, status=status.HTTP_404_NOT_FOUND)
             if child.child_status == User.CHILD_STATUS_ACTIVE:
-                return Response(
-                    {
-                        "status": False,
-                        "detail": "Bu child allaqachon active. Pairing code kerak emas."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            existing_pairing = PairingCode.objects.filter(
-                parent=request.user,
-                child=child,
-                is_used=False,
-            ).order_by("-created_at").first()
-
+                return Response({"status": False, "detail": "Bu child allaqachon active. Pairing code kerak emas."}, status=status.HTTP_400_BAD_REQUEST)
+            existing_pairing = PairingCode.objects.filter(parent=request.user, child=child, is_used=False).order_by("-created_at").first()
             if existing_pairing:
-                return Response(
-                    {
-                        "status": True,
-                        "already_exists": True,
-                        "detail": f"Bu pairing code {child.full_name or child.first_name} uchun avval olingan.",
-                        "child": ChildSerializer(child).data,
-                        "pairing": PairingCodeSerializer(existing_pairing).data,
-                        "qr_payload": {
-                            "type": "jojo_child_pairing",
-                            "code": existing_pairing.code,
-                            "child_id": child.id,
-                        },
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
+                return Response({"status": True, "already_exists": True, "detail": f"Bu pairing code {child.full_name or child.first_name} uchun avval olingan.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(existing_pairing).data, "qr_payload": {"type": "jojo_child_pairing", "code": existing_pairing.code, "child_id": child.id}}, status=status.HTTP_200_OK)
             code = generate_numeric_code(6)
-
             while PairingCode.objects.filter(code=code, is_used=False).exists():
                 code = generate_numeric_code(6)
-
-            pairing = PairingCode.objects.create(
-                parent=request.user,
-                child=child,
-                code=code,
-                expires_at=timezone.now() + timedelta(days=3),
-                child_name=child.full_name or child.first_name,
-                child_gender=child.gender,
-                child_age=child.age,
-                child_avatar=child.avatar,
-            )
-
-            return Response(
-                {
-                    "status": True,
-                    "already_exists": False,
-                    "detail": f"{child.full_name or child.first_name} uchun pairing code yaratildi.",
-                    "child": ChildSerializer(child).data,
-                    "pairing": PairingCodeSerializer(pairing).data,
-                    "qr_payload": {
-                        "type": "jojo_child_pairing",
-                        "code": pairing.code,
-                        "child_id": child.id,
-                    },
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
+            pairing = PairingCode.objects.create(parent=request.user, child=child, code=code, expires_at=timezone.now() + timedelta(days=3), child_name=child.full_name or child.first_name, child_gender=child.gender, child_age=child.age, child_avatar=child.avatar)
+            return Response({"status": True, "already_exists": False, "detail": f"{child.full_name or child.first_name} uchun pairing code yaratildi.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(pairing).data, "qr_payload": {"type": "jojo_child_pairing", "code": pairing.code, "child_id": child.id}}, status=status.HTTP_201_CREATED)
         serializer = CreateChildPairingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        child_username = f"child_{generate_numeric_code(10)}"
-        child_phone = f"+998CHILD{generate_numeric_code(8)}"
-
-        child = User.objects.create_user(
-            phone=child_phone,
-            username=child_username,
-            full_name=serializer.validated_data["child_name"],
-            first_name=serializer.validated_data["child_name"],
-            role=User.ROLE_CHILD,
-            gender=serializer.validated_data["child_gender"],
-            age=serializer.validated_data["child_age"],
-            language=request.user.language,
-            avatar=serializer.validated_data.get("child_avatar"),
-            child_status=User.CHILD_STATUS_NON_ACTIVE,
-            pending_delete_at=timezone.now() + timedelta(days=3),
-        )
-
-        ParentChild.objects.create(
-            parent=request.user,
-            child=child,
-        )
-
-        existing_pairing = PairingCode.objects.filter(
-            parent=request.user,
-            child=child,
-            is_used=False,
-        ).order_by("-created_at").first()
-
-        if existing_pairing:
-            return Response(
-                {
-                    "status": True,
-                    "already_exists": True,
-                    "detail": f"Bu pairing code {child.full_name or child.first_name} uchun avval olingan.",
-                    "child": ChildSerializer(child).data,
-                    "pairing": PairingCodeSerializer(existing_pairing).data,
-                    "qr_payload": {
-                        "type": "jojo_child_pairing",
-                        "code": existing_pairing.code,
-                        "child_id": child.id,
-                    },
-                },
-                status=status.HTTP_200_OK,
-            )
-
+        child = User.objects.create_user(phone=f"+998CHILD{generate_numeric_code(8)}", username=f"child_{generate_numeric_code(10)}", full_name=serializer.validated_data["child_name"], first_name=serializer.validated_data["child_name"], role=User.ROLE_CHILD, gender=serializer.validated_data["child_gender"], age=serializer.validated_data["child_age"], language=request.user.language, avatar=serializer.validated_data.get("child_avatar"), child_status=User.CHILD_STATUS_NON_ACTIVE, pending_delete_at=timezone.now() + timedelta(days=3))
+        ParentChild.objects.create(parent=request.user, child=child)
         code = generate_numeric_code(6)
-
         while PairingCode.objects.filter(code=code, is_used=False).exists():
             code = generate_numeric_code(6)
+        pairing = PairingCode.objects.create(parent=request.user, child=child, code=code, expires_at=timezone.now() + timedelta(days=3), child_name=child.full_name, child_gender=child.gender, child_age=child.age, child_avatar=child.avatar)
+        return Response({"status": True, "already_exists": False, "detail": "Bola non-active holatda yaratildi. Pairing code 3 kun ichida ishlatilishi kerak.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(pairing).data, "qr_payload": {"type": "jojo_child_pairing", "code": pairing.code, "child_id": child.id}}, status=status.HTTP_201_CREATED)
 
-        pairing = PairingCode.objects.create(
-            parent=request.user,
-            child=child,
-            code=code,
-            expires_at=timezone.now() + timedelta(days=3),
-            child_name=child.full_name,
-            child_gender=child.gender,
-            child_age=child.age,
-            child_avatar=child.avatar,
-        )
-
-        return Response(
-            {
-                "status": True,
-                "already_exists": False,
-                "detail": "Bola non-active holatda yaratildi. Pairing code 3 kun ichida ishlatilishi kerak.",
-                "child": ChildSerializer(child).data,
-                "pairing": PairingCodeSerializer(pairing).data,
-                "qr_payload": {
-                    "type": "jojo_child_pairing",
-                    "code": pairing.code,
-                    "child_id": child.id,
-                },
-            },
-            status=status.HTTP_201_CREATED,
-        )
 
 class ChildRegisterByCodeView(APIView):
     permission_classes = [AllowAny]
-
     @swagger_auto_schema(request_body=ChildRegisterByCodeSerializer, tags=["child"])
     def post(self, request):
         serializer = ChildRegisterByCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         code = serializer.validated_data["pairing_code"]
         device_id = serializer.validated_data["device_id"]
         token = serializer.validated_data["token"]
         device_type = serializer.validated_data.get("device_type", "android")
-
-        pairing = PairingCode.objects.filter(
-            code=code,
-            is_used=False,
-        ).select_related("child", "parent").first()
-
+        pairing = PairingCode.objects.filter(code=code, is_used=False).select_related("child", "parent").first()
         if not pairing:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Pairing code noto‘g‘ri yoki ishlatilgan."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"status": False, "detail": "Pairing code noto‘g‘ri yoki ishlatilgan."}, status=status.HTTP_400_BAD_REQUEST)
         if pairing.is_expired():
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Pairing code muddati tugagan. Parent qaytadan bola qo‘shishi kerak."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"status": False, "detail": "Pairing code muddati tugagan. Parent qaytadan bola qo‘shishi kerak."}, status=status.HTTP_400_BAD_REQUEST)
         child = pairing.child
-
         if not child:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu pairing code uchun child topilmadi."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"status": False, "detail": "Bu pairing code uchun child topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
         if child.child_status == User.CHILD_STATUS_ACTIVE:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child allaqachon active holatda."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"status": False, "detail": "Bu child allaqachon active holatda."}, status=status.HTTP_400_BAD_REQUEST)
         if child.is_child_pending_expired():
             child.delete()
-
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Pairing muddati tugagan. Bola DB’dan o‘chirildi. Parent qaytadan qo‘shishi kerak."
-                },
-                status=status.HTTP_410_GONE,
-            )
-
-        device_result = save_user_device(
-            user=child,
-            device_id=device_id,
-            token=token,
-            device_type=device_type,
-        )
-
+            return Response({"status": False, "detail": "Pairing muddati tugagan. Bola DB’dan o‘chirildi. Parent qaytadan qo‘shishi kerak."}, status=status.HTTP_410_GONE)
+        device_result = save_user_device(child, device_id, token, device_type)
         if device_result.get("error"):
-            return Response(
-                {
-                    "status": False,
-                    "detail": device_result["detail"],
-                    "active_device_id": device_result.get("active_device_id"),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
         child.child_status = User.CHILD_STATUS_ACTIVE
         child.pending_delete_at = None
         child.save(update_fields=["child_status", "pending_delete_at"])
-
         pairing.is_used = True
         pairing.save(update_fields=["is_used"])
-
-        tokens = get_tokens_for_user(child)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Child muvaffaqiyatli active qilindi.",
-                "child": ChildSerializer(child).data,
-                "device": DeviceTokenSerializer(device_result["device"]).data,
-                "tokens": tokens,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({"status": True, "detail": "Child muvaffaqiyatli active qilindi.", "child": ChildSerializer(child).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(child)}, status=status.HTTP_200_OK)
 
 
 class MyChildrenView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     @swagger_auto_schema(tags=["info"])
     def get(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent bolalar ro‘yxatini ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        expired_children = User.objects.filter(
-            parent_links__parent=request.user,
-            role=User.ROLE_CHILD,
-            child_status=User.CHILD_STATUS_NON_ACTIVE,
-            pending_delete_at__isnull=False,
-            pending_delete_at__lte=timezone.now(),
-        )
-
+        expired_children = User.objects.filter(parent_links__parent=request.user, role=User.ROLE_CHILD, child_status=User.CHILD_STATUS_NON_ACTIVE, pending_delete_at__isnull=False, pending_delete_at__lte=timezone.now())
         expired_count = expired_children.count()
         expired_children.delete()
-
-        links = ParentChild.objects.filter(
-            parent=request.user
-        ).select_related("child")
-
+        links = ParentChild.objects.filter(parent=request.user).select_related("child")
         children = [link.child for link in links]
+        active_children = [child for child in children if child.child_status == User.CHILD_STATUS_ACTIVE]
+        non_active_children = [child for child in children if child.child_status == User.CHILD_STATUS_NON_ACTIVE]
+        return Response({"status": True, "deleted_expired_children_count": expired_count, "active_children": ChildSerializer(active_children, many=True).data, "non_active_children": ChildSerializer(non_active_children, many=True).data}, status=status.HTTP_200_OK)
 
-        active_children = [
-            child for child in children
-            if child.child_status == User.CHILD_STATUS_ACTIVE
-        ]
-
-        non_active_children = [
-            child for child in children
-            if child.child_status == User.CHILD_STATUS_NON_ACTIVE
-        ]
-
-        return Response(
-            {
-                "status": True,
-                "deleted_expired_children_count": expired_count,
-                "active_children": ChildSerializer(active_children, many=True).data,
-                "non_active_children": ChildSerializer(non_active_children, many=True).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-        
 
 class ParentChildLogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParentOfChild]
     @swagger_auto_schema(tags=["child"])
     def post(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent child logout qila oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child_id=child_id,
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        child = User.objects.filter(
-            id=child_id,
-            role=User.ROLE_CHILD,
-        ).first()
-
+        child = User.objects.filter(id=child_id, role=User.ROLE_CHILD).first()
         if not child:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Child topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        DeviceToken.objects.filter(
-            user=child,
-            is_active=True,
-        ).update(
-            is_active=False,
-        )
-
+            return Response({"status": False, "detail": "Child topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        DeviceToken.objects.filter(user=child, is_active=True).update(is_active=False)
         child.child_status = User.CHILD_STATUS_NON_ACTIVE
         child.pending_delete_at = timezone.now() + timedelta(days=3)
         child.save(update_fields=["child_status", "pending_delete_at"])
-
-        existing_pairing = PairingCode.objects.filter(
-            parent=request.user,
-            child=child,
-            is_used=False,
-        ).order_by("-created_at").first()
-
+        existing_pairing = PairingCode.objects.filter(parent=request.user, child=child, is_used=False).order_by("-created_at").first()
         if not existing_pairing:
             code = generate_numeric_code(6)
-
             while PairingCode.objects.filter(code=code, is_used=False).exists():
                 code = generate_numeric_code(6)
-
-            existing_pairing = PairingCode.objects.create(
-                parent=request.user,
-                child=child,
-                code=code,
-                expires_at=timezone.now() + timedelta(days=3),
-                child_name=child.full_name or child.first_name,
-                child_gender=child.gender,
-                child_age=child.age,
-                child_avatar=child.avatar,
-            )
+            existing_pairing = PairingCode.objects.create(parent=request.user, child=child, code=code, expires_at=timezone.now() + timedelta(days=3), child_name=child.full_name or child.first_name, child_gender=child.gender, child_age=child.age, child_avatar=child.avatar)
         else:
             existing_pairing.expires_at = timezone.now() + timedelta(days=3)
             existing_pairing.save(update_fields=["expires_at"])
-
-        return Response(
-            {
-                "status": True,
-                "detail": f"{child.full_name or child.first_name} logout qilindi va non-active holatga o‘tkazildi.",
-                "child": ChildSerializer(child).data,
-                "pairing": PairingCodeSerializer(existing_pairing).data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({"status": True, "detail": f"{child.full_name or child.first_name} logout qilindi va non-active holatga o‘tkazildi.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(existing_pairing).data}, status=status.HTTP_200_OK)
 
 
 class ParentRouteListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     @swagger_auto_schema(tags=["location"])
     def get(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent route ro‘yxatini ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        routes = SafeRoute.objects.filter(
-            parent=request.user
-        ).prefetch_related("points").order_by("-created_at")
-
-        return Response(
-            {
-                "status": True,
-                "routes": SafeRouteSerializer(routes, many=True).data,
-            },
-            status=status.HTTP_200_OK
-        )
-
+        routes = SafeRoute.objects.filter(parent=request.user).prefetch_related("points").order_by("-created_at")
+        return Response({"status": True, "routes": SafeRouteSerializer(routes, many=True).data}, status=status.HTTP_200_OK)
     @swagger_auto_schema(request_body=SafeRouteSerializer, tags=["location"])
     def post(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent route yaratishi mumkin."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = SafeRouteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         route = serializer.save(parent=request.user)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Marshrut yaratildi.",
-                "route": SafeRouteSerializer(route).data,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        return Response({"status": True, "detail": "Marshrut yaratildi.", "route": SafeRouteSerializer(route).data}, status=status.HTTP_201_CREATED)
 
 
 class ParentRouteDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     def get_object(self, request, route_id):
         try:
-            return SafeRoute.objects.get(
-                id=route_id,
-                parent=request.user
-            )
+            return SafeRoute.objects.get(id=route_id, parent=request.user)
         except SafeRoute.DoesNotExist:
             return None
-
     @swagger_auto_schema(tags=["location"])
     def get(self, request, route_id):
         route = self.get_object(request, route_id)
-
         if not route:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Route topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            {
-                "status": True,
-                "route": SafeRouteSerializer(route).data,
-            },
-            status=status.HTTP_200_OK
-        )
-
+            return Response({"status": False, "detail": "Route topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "route": SafeRouteSerializer(route).data}, status=status.HTTP_200_OK)
     @swagger_auto_schema(request_body=SafeRouteSerializer, tags=["location"])
     def patch(self, request, route_id):
         route = self.get_object(request, route_id)
-
         if not route:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Route topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serializer = SafeRouteSerializer(
-            route,
-            data=request.data,
-            partial=True
-        )
+            return Response({"status": False, "detail": "Route topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SafeRouteSerializer(route, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         route = serializer.save()
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Route yangilandi.",
-                "route": SafeRouteSerializer(route).data,
-            },
-            status=status.HTTP_200_OK
-        )
-
+        return Response({"status": True, "detail": "Route yangilandi.", "route": SafeRouteSerializer(route).data}, status=status.HTTP_200_OK)
     @swagger_auto_schema(tags=["location"])
     def delete(self, request, route_id):
         route = self.get_object(request, route_id)
-
         if not route:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Route topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"status": False, "detail": "Route topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         route.delete()
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Route o‘chirildi.",
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({"status": True, "detail": "Route o‘chirildi."}, status=status.HTTP_200_OK)
 
 
 class AssignRouteToChildView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     @swagger_auto_schema(request_body=ChildRouteAssignmentSerializer, tags=["location"])
     def post(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent route biriktirishi mumkin."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = ChildRouteAssignmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         child = serializer.validated_data["child"]
         route = serializer.validated_data["route"]
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child=child
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
+        if not ParentChild.objects.filter(parent=request.user, child=child).exists():
+            return Response({"status": False, "detail": "Bu child sizga tegishli emas."}, status=status.HTTP_403_FORBIDDEN)
         if route.parent_id != request.user.id:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu route sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
+            return Response({"status": False, "detail": "Bu route sizga tegishli emas."}, status=status.HTTP_403_FORBIDDEN)
         assignment = serializer.save(parent=request.user)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Route childga biriktirildi.",
-                "assignment": ChildRouteAssignmentSerializer(assignment).data,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        return Response({"status": True, "detail": "Route childga biriktirildi.", "assignment": ChildRouteAssignmentSerializer(assignment).data}, status=status.HTTP_201_CREATED)
 
 
 class ParentChildAssignmentsView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParentOfChild]
     @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child_id=child_id
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        assignments = ChildRouteAssignment.objects.filter(
-            parent=request.user,
-            child_id=child_id
-        ).select_related("route").order_by("-created_at")
-
-        return Response(
-            {
-                "status": True,
-                "assignments": ChildRouteAssignmentSerializer(
-                    assignments,
-                    many=True
-                ).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        assignments = ChildRouteAssignment.objects.filter(parent=request.user, child_id=child_id).select_related("route").order_by("-created_at")
+        return Response({"status": True, "assignments": ChildRouteAssignmentSerializer(assignments, many=True).data}, status=status.HTTP_200_OK)
 
 
 class ChildActiveRoutesView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     @swagger_auto_schema(tags=["location"])
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child o‘z routelarini ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        assignments = ChildRouteAssignment.objects.filter(
-            child=request.user,
-            status=ChildRouteAssignment.STATUS_ACTIVE,
-            route__is_active=True,
-        ).select_related("route").prefetch_related("route__points")
-
-        return Response(
-            {
-                "status": True,
-                "assignments": ChildRouteAssignmentSerializer(
-                    assignments,
-                    many=True
-                ).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        assignments = ChildRouteAssignment.objects.filter(child=request.user, status=ChildRouteAssignment.STATUS_ACTIVE, route__is_active=True).select_related("route").prefetch_related("route__points")
+        return Response({"status": True, "assignments": ChildRouteAssignmentSerializer(assignments, many=True).data}, status=status.HTTP_200_OK)
 
 
 class SendChildLocationView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     @swagger_auto_schema(request_body=ChildLocationSerializer, tags=["location"])
     def post(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child location yuborishi mumkin."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = ChildLocationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        location, realtime_payload = process_child_location(
-            child=request.user,
-            latitude=serializer.validated_data["latitude"],
-            longitude=serializer.validated_data["longitude"],
-            accuracy=serializer.validated_data.get("accuracy"),
-            battery_level=serializer.validated_data.get("battery_level"),
-            speed=serializer.validated_data.get("speed"),
-            heading=serializer.validated_data.get("heading"),
-            source=ChildLocation.SOURCE_REST,
-        )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Location saqlandi va real-time yuborildi.",
-                "location": ChildLocationSerializer(location).data,
-                "realtime_payload": realtime_payload,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        location, realtime_payload = process_child_location(child=request.user, latitude=serializer.validated_data["latitude"], longitude=serializer.validated_data["longitude"], accuracy=serializer.validated_data.get("accuracy"), battery_level=serializer.validated_data.get("battery_level"), speed=serializer.validated_data.get("speed"), heading=serializer.validated_data.get("heading"), source=ChildLocation.SOURCE_REST)
+        return Response({"status": True, "detail": "Location saqlandi va real-time yuborildi.", "location": ChildLocationSerializer(location).data, "realtime_payload": realtime_payload}, status=status.HTTP_201_CREATED)
 
 
 class ChildLastLocationView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParentOfChild]
     @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent location ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child_id=child_id
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         try:
             location = ChildLastLocation.objects.get(child_id=child_id)
         except ChildLastLocation.DoesNotExist:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Location hali yuborilmagan."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            {
-                "status": True,
-                "location": ChildLastLocationSerializer(location).data
-            },
-            status=status.HTTP_200_OK
-        )
-
+            return Response({"status": False, "detail": "Location hali yuborilmagan."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "location": ChildLastLocationSerializer(location).data}, status=status.HTTP_200_OK)
 
 class ChildLocationHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParentOfChild]
 
     @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent location history ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child_id=child_id
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
+        date = request.query_params.get("date")
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
         locations = ChildLocation.objects.filter(
             child_id=child_id
-        ).order_by("-created_at")[:100]
-
-        return Response(
-            {
-                "status": True,
-                "locations": ChildLocationSerializer(locations, many=True).data
-            },
-            status=status.HTTP_200_OK
         )
-
+        if date:
+            parsed_date = parse_date(date)
+            if parsed_date:
+                locations = locations.filter(created_at__date=parsed_date)
+        if date_from:
+            parsed_from = parse_date(date_from)
+            if parsed_from:
+                locations = locations.filter(created_at__date__gte=parsed_from)
+        if date_to:
+            parsed_to = parse_date(date_to)
+            if parsed_to:
+                locations = locations.filter(created_at__date__lte=parsed_to)
+        locations = locations.order_by("created_at")
+        response = paginate_queryset(
+            request=request,
+            queryset=locations,
+            serializer_class=ChildTrackPointSerializer,
+            page_size=100,
+        )
+        response.data["child_id"] = child_id
+        return response
 
 class RouteAlertListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParent]
 
     @swagger_auto_schema(tags=["location"])
     def get(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent alertlarni ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         alerts = RouteAlert.objects.filter(
             assignment__parent=request.user
         ).select_related(
             "child",
             "assignment",
             "assignment__route",
-        ).order_by("-created_at")[:100]
-
-        return Response(
-            {
-                "status": True,
-                "alerts": RouteAlertSerializer(alerts, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        ).order_by("-created_at")
+        return paginate_queryset(
+            request=request,
+            queryset=alerts,
+            serializer_class=RouteAlertSerializer,
+            page_size=20,
         )
 
 
 class DeviceTokenView(APIView):
     permission_classes = [IsAuthenticated]
-
     @swagger_auto_schema(request_body=DeviceTokenSerializer, tags=["device"])
     def post(self, request):
         serializer = DeviceTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        device_id = serializer.validated_data["device_id"]
-        token = serializer.validated_data["token"]
-        device_type = serializer.validated_data["device_type"]
-
-        device_result = save_user_device(
-            user=request.user,
-            device_id=device_id,
-            token=token,
-            device_type=device_type,
-        )
-
+        device_result = save_user_device(user=request.user, device_id=serializer.validated_data["device_id"], token=serializer.validated_data["token"], device_type=serializer.validated_data["device_type"])
         if device_result.get("error"):
-            return Response(
-                {
-                    "status": False,
-                    "detail": device_result["detail"],
-                    "active_device_id": device_result.get("active_device_id"),
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Device token saqlandi.",
-                "device": DeviceTokenSerializer(device_result["device"]).data,
-            },
-            status=(
-                status.HTTP_201_CREATED
-                if device_result["created"]
-                else status.HTTP_200_OK
-            )
-        )
+            return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"status": True, "detail": "Device token saqlandi.", "device": DeviceTokenSerializer(device_result["device"]).data}, status=status.HTTP_201_CREATED if device_result["created"] else status.HTTP_200_OK)
 
 
 class DeviceLogoutView(APIView):
     permission_classes = [IsAuthenticated]
-
     @swagger_auto_schema(tags=["device"])
     def post(self, request):
         device_id = request.data.get("device_id")
-
         if not device_id:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "device_id majburiy."
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        updated_count = DeviceToken.objects.filter(
-            user=request.user,
-            device_id=device_id,
-            is_active=True
-        ).update(
-            is_active=False
-        )
-
+            return Response({"status": False, "detail": "device_id majburiy."}, status=status.HTTP_400_BAD_REQUEST)
+        updated_count = DeviceToken.objects.filter(user=request.user, device_id=device_id, is_active=True).update(is_active=False)
         if updated_count == 0:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Aktiv device topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"status": False, "detail": "Aktiv device topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "detail": "Device logout qilindi."}, status=status.HTTP_200_OK)
 
-        return Response(
-            {
-                "status": True,
-                "detail": "Device logout qilindi."
-            },
-            status=status.HTTP_200_OK
-        )
-        
-        
+
 class SavedLocationListCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     @swagger_auto_schema(tags=["saved-location"])
     def get(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent saved location ro‘yxatini ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         locations = SavedLocation.objects.filter(
             parent=request.user
         ).order_by("-created_at")
-
-        return Response(
-            {
-                "status": True,
-                "saved_locations": SavedLocationSerializer(
-                    locations,
-                    many=True
-                ).data
-            },
-            status=status.HTTP_200_OK
+        return paginate_queryset(
+            request=request,
+            queryset=locations,
+            serializer_class=SavedLocationSerializer,
+            page_size=20,
         )
-
     @swagger_auto_schema(request_body=SavedLocationSerializer, tags=["saved-location"])
     def post(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent saved location qo‘sha oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = SavedLocationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         saved_location = serializer.save(parent=request.user)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Saved location yaratildi.",
-                "saved_location": SavedLocationSerializer(saved_location).data
-            },
-            status=status.HTTP_201_CREATED
-        )
+        return Response({"status": True, "detail": "Saved location yaratildi.", "saved_location": SavedLocationSerializer(saved_location).data}, status=status.HTTP_201_CREATED)
 
 
 class SavedLocationDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     def get_object(self, request, location_id):
         try:
-            return SavedLocation.objects.get(
-                id=location_id,
-                parent=request.user
-            )
+            return SavedLocation.objects.get(id=location_id, parent=request.user)
         except SavedLocation.DoesNotExist:
             return None
-
     @swagger_auto_schema(tags=["saved-location"])
     def get(self, request, location_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         saved_location = self.get_object(request, location_id)
-
         if not saved_location:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Saved location topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            {
-                "status": True,
-                "saved_location": SavedLocationSerializer(saved_location).data
-            },
-            status=status.HTTP_200_OK
-        )
-
+            return Response({"status": False, "detail": "Saved location topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        child_id = request.query_params.get("child_id")
+        return Response({"status": True, "saved_location": SavedLocationSerializer(saved_location, context={"child_id": child_id}).data}, status=status.HTTP_200_OK)
     @swagger_auto_schema(request_body=SavedLocationSerializer, tags=["saved-location"])
     def patch(self, request, location_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent o‘zgartira oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         saved_location = self.get_object(request, location_id)
-
         if not saved_location:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Saved location topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serializer = SavedLocationSerializer(
-            saved_location,
-            data=request.data,
-            partial=True
-        )
+            return Response({"status": False, "detail": "Saved location topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SavedLocationSerializer(saved_location, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-
         saved_location = serializer.save()
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Saved location yangilandi.",
-                "saved_location": SavedLocationSerializer(saved_location).data
-            },
-            status=status.HTTP_200_OK
-        )
-
+        return Response({"status": True, "detail": "Saved location yangilandi.", "saved_location": SavedLocationSerializer(saved_location).data}, status=status.HTTP_200_OK)
     @swagger_auto_schema(tags=["saved-location"])
     def delete(self, request, location_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent o‘chira oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         saved_location = self.get_object(request, location_id)
-
         if not saved_location:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Saved location topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"status": False, "detail": "Saved location topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         saved_location.delete()
+        return Response({"status": True, "detail": "Saved location o‘chirildi."}, status=status.HTTP_200_OK)
 
-        return Response(
-            {
-                "status": True,
-                "detail": "Saved location o‘chirildi."
-            },
-            status=status.HTTP_200_OK
-        )
-        
-        
+
 class KidsGameCategoryListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsChild]
 
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child games category ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         categories = GameCategory.objects.filter(
             is_active=True
         ).order_by("order", "id")
-
-        return Response(
-            {
-                "status": True,
-                "categories": GameCategorySerializer(categories, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        return paginate_queryset(
+            request=request,
+            queryset=categories,
+            serializer_class=GameCategorySerializer,
+            page_size=20,
         )
 
 
 class KidsGameListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsChild]
 
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child games ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         category_id = request.query_params.get("category_id")
         featured = request.query_params.get("featured")
-
+        child_age = request.user.age or 18
         games = GameItem.objects.filter(
             is_active=True,
-            age_min__lte=request.user.age or 18,
-            age_max__gte=request.user.age or 1,
+            age_min__lte=child_age,
+            age_max__gte=child_age,
         ).select_related("category")
-
         if category_id:
             games = games.filter(category_id=category_id)
-
         if featured == "true":
             games = games.filter(is_featured=True)
-
         games = games.order_by("order", "-created_at")
-
-        return Response(
-            {
-                "status": True,
-                "games": GameItemSerializer(games, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        return paginate_queryset(
+            request=request,
+            queryset=games,
+            serializer_class=GameItemSerializer,
+            page_size=20,
         )
 
 
 class KidsGameDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def get(self, request, game_id):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child game ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        try:
-            game = GameItem.objects.select_related("category").get(
-                id=game_id,
-                is_active=True
-            )
-        except GameItem.DoesNotExist:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Game topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            {
-                "status": True,
-                "game": GameItemSerializer(game).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        game = GameItem.objects.select_related("category").filter(id=game_id, is_active=True).first()
+        if not game:
+            return Response({"status": False, "detail": "Game topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "game": GameItemSerializer(game).data}, status=status.HTTP_200_OK)
 
 
 class KidsShopCategoryListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsChild]
 
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child shop category ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         categories = ShopCategory.objects.filter(
             is_active=True
         ).order_by("order", "id")
-
-        return Response(
-            {
-                "status": True,
-                "categories": ShopCategorySerializer(categories, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        return paginate_queryset(
+            request=request,
+            queryset=categories,
+            serializer_class=ShopCategorySerializer,
+            page_size=20,
         )
 
 
 class KidsShopItemListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsChild]
 
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child shop item ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         category_id = request.query_params.get("category_id")
         featured = request.query_params.get("featured")
-
+        child_age = request.user.age or 18
         items = ShopItem.objects.filter(
             is_active=True,
-            age_min__lte=request.user.age or 18,
-            age_max__gte=request.user.age or 1,
+            age_min__lte=child_age,
+            age_max__gte=child_age,
         ).select_related("category")
-
         if category_id:
             items = items.filter(category_id=category_id)
-
         if featured == "true":
             items = items.filter(is_featured=True)
-
         items = items.order_by("order", "-created_at")
-
-        return Response(
-            {
-                "status": True,
-                "items": ShopItemSerializer(items, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        return paginate_queryset(
+            request=request,
+            queryset=items,
+            serializer_class=ShopItemSerializer,
+            page_size=20,
         )
 
 
 class KidsShopItemDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def get(self, request, item_id):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child shop item ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        try:
-            item = ShopItem.objects.select_related("category").get(
-                id=item_id,
-                is_active=True
-            )
-        except ShopItem.DoesNotExist:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Shop item topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        return Response(
-            {
-                "status": True,
-                "item": ShopItemSerializer(item).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        item = ShopItem.objects.select_related("category").filter(id=item_id, is_active=True).first()
+        if not item:
+            return Response({"status": False, "detail": "Shop item topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "item": ShopItemSerializer(item).data}, status=status.HTTP_200_OK)
 
 
 class KidsWalletView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child wallet ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        wallet, _ = ChildWallet.objects.get_or_create(
-            child=request.user
-        )
-
-        return Response(
-            {
-                "status": True,
-                "wallet": ChildWalletSerializer(wallet).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        wallet, _ = ChildWallet.objects.get_or_create(child=request.user)
+        return Response({"status": True, "wallet": ChildWalletSerializer(wallet).data}, status=status.HTTP_200_OK)
 
 
 class KidsTransactionListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsChild]
 
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child transaction ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         transactions = ChildTransaction.objects.filter(
             child=request.user
-        ).order_by("-created_at")[:100]
-
-        return Response(
-            {
-                "status": True,
-                "transactions": ChildTransactionSerializer(
-                    transactions,
-                    many=True
-                ).data,
-            },
-            status=status.HTTP_200_OK
+        ).order_by("-created_at")
+        return paginate_queryset(
+            request=request,
+            queryset=transactions,
+            serializer_class=ChildTransactionSerializer,
+            page_size=20,
         )
 
 
 class KidsShopPurchaseView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def post(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child purchase qila oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = ShopPurchaseCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        item_id = serializer.validated_data["item_id"]
-
-        try:
-            item = ShopItem.objects.get(
-                id=item_id,
-                is_active=True
-            )
-        except ShopItem.DoesNotExist:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Shop item topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        wallet, _ = ChildWallet.objects.get_or_create(
-            child=request.user
-        )
-
+        item = ShopItem.objects.filter(id=serializer.validated_data["item_id"], is_active=True).first()
+        if not item:
+            return Response({"status": False, "detail": "Shop item topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        wallet, _ = ChildWallet.objects.get_or_create(child=request.user)
         if wallet.balance < item.price_points:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Balans yetarli emas.",
-                    "balance": wallet.balance,
-                    "price_points": item.price_points,
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"status": False, "detail": "Balans yetarli emas.", "balance": wallet.balance, "price_points": item.price_points}, status=status.HTTP_400_BAD_REQUEST)
         wallet.balance -= item.price_points
         wallet.save(update_fields=["balance"])
-
-        purchase = ShopPurchase.objects.create(
-            child=request.user,
-            item=item,
-            price_points=item.price_points,
-            status=ShopPurchase.STATUS_PENDING,
-        )
-
-        ChildTransaction.objects.create(
-            child=request.user,
-            amount=-item.price_points,
-            transaction_type=ChildTransaction.TYPE_SPEND,
-            source="shop_purchase",
-            description=f"Purchased {item.title}",
-        )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Shop item sotib olindi. Parent/admin tasdiqlashi mumkin.",
-                "wallet": ChildWalletSerializer(wallet).data,
-                "purchase": ShopPurchaseSerializer(purchase).data,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        purchase = ShopPurchase.objects.create(child=request.user, item=item, price_points=item.price_points, status=ShopPurchase.STATUS_PENDING)
+        ChildTransaction.objects.create(child=request.user, amount=-item.price_points, transaction_type=ChildTransaction.TYPE_SPEND, source="shop_purchase", description=f"Purchased {item.title}")
+        return Response({"status": True, "detail": "Shop item sotib olindi. Parent/admin tasdiqlashi mumkin.", "wallet": ChildWalletSerializer(wallet).data, "purchase": ShopPurchaseSerializer(purchase).data}, status=status.HTTP_201_CREATED)
 
 
 class KidsSOSCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def post(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child SOS yubora oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = CreateSOSAlertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        parent_link = ParentChild.objects.filter(
-            child=request.user
-        ).select_related("parent").first()
-
+        parent_link = ParentChild.objects.filter(child=request.user).select_related("parent").first()
         if not parent_link:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child uchun parent topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"status": False, "detail": "Bu child uchun parent topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         parent = parent_link.parent
-
         latitude = serializer.validated_data.get("latitude")
         longitude = serializer.validated_data.get("longitude")
-
         if latitude is None or longitude is None:
             try:
                 last_location = request.user.last_location
@@ -1971,245 +728,82 @@ class KidsSOSCreateView(APIView):
                 longitude = last_location.longitude
             except ChildLastLocation.DoesNotExist:
                 pass
-
-        sos = SOSAlert.objects.create(
-            child=request.user,
-            parent=parent,
-            latitude=latitude,
-            longitude=longitude,
-            address=serializer.validated_data.get("address"),
-            note=serializer.validated_data.get("note"),
-        )
-
-        # Bu joyga keyin Firebase push notification ulanadi.
-        # parent.device_tokens.filter(is_active=True) orqali FCM tokenlarga yuboriladi.
-
-        return Response(
-            {
-                "status": True,
-                "detail": "SOS yuborildi.",
-                "sos": SOSAlertSerializer(sos).data,
-                "parent_phone": parent.phone,
-            },
-            status=status.HTTP_201_CREATED
-        )
+        sos = SOSAlert.objects.create(child=request.user, parent=parent, latitude=latitude, longitude=longitude, address=serializer.validated_data.get("address"), note=serializer.validated_data.get("note"))
+        return Response({"status": True, "detail": "SOS yuborildi.", "sos": SOSAlertSerializer(sos).data, "parent_phone": parent.phone}, status=status.HTTP_201_CREATED)
 
 
 class ParentSOSAlertListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParent]
 
     def get(self, request):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent SOS alertlarni ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         alerts = SOSAlert.objects.filter(
             parent=request.user
-        ).select_related("child", "parent").order_by("-created_at")[:100]
-
-        return Response(
-            {
-                "status": True,
-                "alerts": SOSAlertSerializer(alerts, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        ).select_related(
+            "child",
+            "parent",
+        ).order_by("-created_at")
+        return paginate_queryset(
+            request=request,
+            queryset=alerts,
+            serializer_class=SOSAlertSerializer,
+            page_size=20,
         )
 
 
 class ParentSOSAlertResolveView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParent]
     def post(self, request, sos_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent SOS alertni yopishi mumkin."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        try:
-            sos = SOSAlert.objects.get(
-                id=sos_id,
-                parent=request.user
-            )
-        except SOSAlert.DoesNotExist:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "SOS alert topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+        sos = SOSAlert.objects.filter(id=sos_id, parent=request.user).first()
+        if not sos:
+            return Response({"status": False, "detail": "SOS alert topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         sos.status = SOSAlert.STATUS_RESOLVED
         sos.save(update_fields=["status", "updated_at"])
+        return Response({"status": True, "detail": "SOS alert resolved qilindi.", "sos": SOSAlertSerializer(sos).data}, status=status.HTTP_200_OK)
 
-        return Response(
-            {
-                "status": True,
-                "detail": "SOS alert resolved qilindi.",
-                "sos": SOSAlertSerializer(sos).data,
-            },
-            status=status.HTTP_200_OK
-        )
-        
-        
-def parent_has_child_access(parent, child_id):
-    return ParentChild.objects.filter(
-        parent=parent,
-        child_id=child_id
-    ).exists()
-    
 
 class ChildAppSyncView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     @swagger_auto_schema(request_body=ChildAppSyncSerializer, tags=["app-control"])
     def post(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child app list sync qila oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = ChildAppSyncSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         incoming_packages = []
-
         for item in serializer.validated_data["apps"]:
             package_name = item["package_name"]
             incoming_packages.append(package_name)
-
-            ChildInstalledApp.objects.update_or_create(
-                child=request.user,
-                package_name=package_name,
-                defaults={
-                    "app_name": item["app_name"],
-                    "category": item.get("category"),
-                    "is_system_app": item.get("is_system_app", False),
-                    "is_active": True,
-                }
-            )
-
-        ChildInstalledApp.objects.filter(
-            child=request.user
-        ).exclude(
-            package_name__in=incoming_packages
-        ).update(
-            is_active=False
-        )
-
-        apps = ChildInstalledApp.objects.filter(
-            child=request.user,
-            is_active=True
-        )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "Installed apps synced.",
-                "apps": ChildInstalledAppSerializer(apps, many=True).data,
-            },
-            status=status.HTTP_200_OK
-        )
+            ChildInstalledApp.objects.update_or_create(child=request.user, package_name=package_name, defaults={"app_name": item["app_name"], "category": item.get("category"), "is_system_app": item.get("is_system_app", False), "is_active": True})
+        ChildInstalledApp.objects.filter(child=request.user).exclude(package_name__in=incoming_packages).update(is_active=False)
+        apps = ChildInstalledApp.objects.filter(child=request.user, is_active=True).order_by("app_name")
+        return Response({"status": True, "detail": "Installed apps synced.", "apps": ChildInstalledAppSerializer(apps, many=True).data}, status=status.HTTP_200_OK)
 
 
 class ChildAppUsageSyncView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     @swagger_auto_schema(request_body=ChildAppUsageSyncSerializer, tags=["app-control"])
     def post(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child usage sync qila oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         serializer = ChildAppUsageSyncSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         saved_items = []
-
         for item in serializer.validated_data["usages"]:
-            app = ChildInstalledApp.objects.filter(
-                child=request.user,
-                package_name=item["package_name"]
-            ).first()
-
+            app = ChildInstalledApp.objects.filter(child=request.user, package_name=item["package_name"]).first()
             if not app:
-                app = ChildInstalledApp.objects.create(
-                    child=request.user,
-                    package_name=item["package_name"],
-                    app_name=item["package_name"],
-                    is_active=True,
-                )
-
-            usage, _ = ChildAppUsage.objects.update_or_create(
-                child=request.user,
-                app=app,
-                usage_date=item["usage_date"],
-                defaults={
-                    "total_usage_seconds": item["total_usage_seconds"],
-                    "open_count": item.get("open_count", 0),
-                    "first_opened_at": item.get("first_opened_at"),
-                    "last_opened_at": item.get("last_opened_at"),
-                }
-            )
-
+                app = ChildInstalledApp.objects.create(child=request.user, package_name=item["package_name"], app_name=item["package_name"], is_active=True)
+            usage, _ = ChildAppUsage.objects.update_or_create(child=request.user, app=app, usage_date=item["usage_date"], defaults={"total_usage_seconds": item["total_usage_seconds"], "open_count": item.get("open_count", 0), "first_opened_at": item.get("first_opened_at"), "last_opened_at": item.get("last_opened_at")})
             saved_items.append(usage)
-
-        return Response(
-            {
-                "status": True,
-                "detail": "App usage synced.",
-                "usages": ChildAppUsageSerializer(saved_items, many=True).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response({"status": True, "detail": "App usage synced.", "usages": ChildAppUsageSerializer(saved_items, many=True).data}, status=status.HTTP_200_OK)
 
 
 class ChildAppPolicyView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsChild]
     def get(self, request):
-        if request.user.role != User.ROLE_CHILD:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat child policy olishi mumkin."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         today = timezone.localdate()
-
-        apps = ChildInstalledApp.objects.filter(
-            child=request.user,
-            is_active=True
-        )
-
+        apps = ChildInstalledApp.objects.filter(child=request.user, is_active=True).order_by("app_name")
         policies = []
-
         for app in apps:
             try:
                 is_blocked = app.block.is_blocked
             except ChildBlockedApp.DoesNotExist:
                 is_blocked = False
-
             try:
                 limit = app.limit
                 daily_limit_seconds = limit.daily_limit_seconds
@@ -2217,369 +811,163 @@ class ChildAppPolicyView(APIView):
             except ChildAppLimit.DoesNotExist:
                 daily_limit_seconds = None
                 is_limit_enabled = False
-
-            usage = ChildAppUsage.objects.filter(
-                child=request.user,
-                app=app,
-                usage_date=today
-            ).first()
-
-            policies.append(
-                {
-                    "app_id": app.id,
-                    "package_name": app.package_name,
-                    "app_name": app.app_name,
-                    "is_blocked": is_blocked,
-                    "daily_limit_seconds": daily_limit_seconds,
-                    "is_limit_enabled": is_limit_enabled,
-                    "today_usage_seconds": usage.total_usage_seconds if usage else 0,
-                }
-            )
-
-        return Response(
-            {
-                "status": True,
-                "policies": policies,
-            },
-            status=status.HTTP_200_OK
-        )
+            usage = ChildAppUsage.objects.filter(child=request.user, app=app, usage_date=today).first()
+            policies.append({"app_id": app.id, "package_name": app.package_name, "app_name": app.app_name, "is_blocked": is_blocked, "daily_limit_seconds": daily_limit_seconds, "is_limit_enabled": is_limit_enabled, "today_usage_seconds": usage.total_usage_seconds if usage else 0})
+        return Response({"status": True, "policies": policies}, status=status.HTTP_200_OK)
 
 
 class ParentChildAppListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParentOfChild]
 
     def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent child app list ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if not parent_has_child_access(request.user, child_id):
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         tab = request.query_params.get("tab", "all")
         usage_date = request.query_params.get("date")
         parsed_date = parse_date(usage_date) if usage_date else timezone.localdate()
-
         apps = ChildInstalledApp.objects.filter(
             child_id=child_id,
             is_active=True
         )
-
         if tab == "blocked":
             apps = apps.filter(block__is_blocked=True)
-
         if tab == "limits":
             apps = apps.filter(limit__is_enabled=True)
-
         apps = apps.order_by("app_name")
-
-        return Response(
-            {
-                "status": True,
-                "tab": tab,
-                "date": str(parsed_date),
-                "apps": ChildInstalledAppSerializer(
-                    apps,
-                    many=True,
-                    context={
-                        "request": request,
-                        "usage_date": parsed_date,
-                    }
-                ).data,
+        response = paginate_queryset(
+            request=request,
+            queryset=apps,
+            serializer_class=ChildInstalledAppSerializer,
+            context={
+                "request": request,
+                "usage_date": parsed_date,
             },
-            status=status.HTTP_200_OK
+            page_size=30,
         )
+        response.data["tab"] = tab
+        response.data["date"] = str(parsed_date)
+        response.data["child_id"] = child_id
+        return response
 
 
 class ParentSetChildAppLimitView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParentOfChild]
     @swagger_auto_schema(request_body=SetChildAppLimitSerializer, tags=["app-control"])
     def post(self, request, child_id, app_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent limit qo‘ya oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if not parent_has_child_access(request.user, child_id):
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        app = ChildInstalledApp.objects.filter(
-            id=app_id,
-            child_id=child_id
-        ).first()
-
+        app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "App topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         serializer = SetChildAppLimitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        limit, _ = ChildAppLimit.objects.update_or_create(
-            child_id=child_id,
-            app=app,
-            defaults={
-                "daily_limit_seconds": serializer.validated_data["daily_limit_seconds"],
-                "is_enabled": serializer.validated_data.get("is_enabled", True),
-                "created_by": request.user,
-            }
-        )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "App limit saqlandi.",
-                "limit": ChildAppLimitSerializer(limit).data,
-            },
-            status=status.HTTP_200_OK
-        )
-
+        limit, _ = ChildAppLimit.objects.update_or_create(child_id=child_id, app=app, defaults={"daily_limit_seconds": serializer.validated_data["daily_limit_seconds"], "is_enabled": serializer.validated_data.get("is_enabled", True), "created_by": request.user})
+        return Response({"status": True, "detail": "App limit saqlandi.", "limit": ChildAppLimitSerializer(limit).data}, status=status.HTTP_200_OK)
     def delete(self, request, child_id, app_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent limitni o‘chira oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if not parent_has_child_access(request.user, child_id):
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        app = ChildInstalledApp.objects.filter(
-            id=app_id,
-            child_id=child_id
-        ).first()
-
+        app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "App topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        ChildAppLimit.objects.filter(
-            child_id=child_id,
-            app=app
-        ).delete()
-
-        return Response(
-            {
-                "status": True,
-                "detail": "App limit o‘chirildi.",
-            },
-            status=status.HTTP_200_OK
-        )
+            return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        ChildAppLimit.objects.filter(child_id=child_id, app=app).delete()
+        return Response({"status": True, "detail": "App limit o‘chirildi."}, status=status.HTTP_200_OK)
 
 
 class ParentBlockChildAppView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsParentOfChild]
     @swagger_auto_schema(request_body=BlockChildAppSerializer, tags=["app-control"])
     def post(self, request, child_id, app_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent app block qila oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if not parent_has_child_access(request.user, child_id):
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        app = ChildInstalledApp.objects.filter(
-            id=app_id,
-            child_id=child_id
-        ).first()
-
+        app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "App topilmadi."
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         serializer = BlockChildAppSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        blocked_app, _ = ChildBlockedApp.objects.update_or_create(
-            child_id=child_id,
-            app=app,
-            defaults={
-                "is_blocked": serializer.validated_data.get("is_blocked", True),
-                "reason": serializer.validated_data.get("reason"),
-                "created_by": request.user,
-            }
-        )
-
-        return Response(
-            {
-                "status": True,
-                "detail": "App block holati yangilandi.",
-                "blocked_app": ChildBlockedAppSerializer(blocked_app).data,
-            },
-            status=status.HTTP_200_OK
-        )
+        blocked_app, _ = ChildBlockedApp.objects.update_or_create(child_id=child_id, app=app, defaults={"is_blocked": serializer.validated_data.get("is_blocked", True), "reason": serializer.validated_data.get("reason"), "created_by": request.user})
+        return Response({"status": True, "detail": "App block holati yangilandi.", "blocked_app": ChildBlockedAppSerializer(blocked_app).data}, status=status.HTTP_200_OK)
 
 
 class ParentChildAppUsageStatsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsParentOfChild]
 
     def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent usage stats ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        if not parent_has_child_access(request.user, child_id):
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         date_from = parse_date(request.query_params.get("date_from")) if request.query_params.get("date_from") else None
         date_to = parse_date(request.query_params.get("date_to")) if request.query_params.get("date_to") else None
-
         usages = ChildAppUsage.objects.filter(
             child_id=child_id
         ).select_related("app")
-
         if date_from:
             usages = usages.filter(usage_date__gte=date_from)
-
         if date_to:
             usages = usages.filter(usage_date__lte=date_to)
-
         usages = usages.order_by("-usage_date", "-total_usage_seconds")
-
-        total_seconds = sum(item.total_usage_seconds for item in usages)
-
-        return Response(
-            {
-                "status": True,
-                "total_usage_seconds": total_seconds,
-                "usages": ChildAppUsageSerializer(usages, many=True).data,
-            },
-            status=status.HTTP_200_OK
+        total_seconds = sum(
+            usages.values_list("total_usage_seconds", flat=True)
         )
-        
-        
-class ChildLocationHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @swagger_auto_schema(tags=["location"])
-    def get(self, request, child_id):
-        if request.user.role != User.ROLE_PARENT:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Faqat parent location history ko‘ra oladi."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        has_access = ParentChild.objects.filter(
-            parent=request.user,
-            child_id=child_id
-        ).exists()
-
-        if not has_access:
-            return Response(
-                {
-                    "status": False,
-                    "detail": "Bu child sizga tegishli emas."
-                },
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        date = request.query_params.get("date")
-        date_from = request.query_params.get("date_from")
-        date_to = request.query_params.get("date_to")
-        limit = int(request.query_params.get("limit", 1000))
-
-        locations = ChildLocation.objects.filter(
-            child_id=child_id
+        response = paginate_queryset(
+            request=request,
+            queryset=usages,
+            serializer_class=ChildAppUsageSerializer,
+            page_size=20,
         )
+        response.data["total_usage_seconds"] = total_seconds
+        response.data["child_id"] = child_id
+        return response
 
-        if date:
-            parsed_date = parse_date(date)
-            if parsed_date:
-                locations = locations.filter(created_at__date=parsed_date)
 
-        if date_from:
-            parsed_from = parse_date(date_from)
-            if parsed_from:
-                locations = locations.filter(created_at__date__gte=parsed_from)
+class AppVersionCheckView(APIView):
+    permission_classes = [AllowAny]
+    @swagger_auto_schema(request_body=AppVersionCheckSerializer, tags=["version"])
+    def post(self, request):
+        serializer = AppVersionCheckSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        platform = serializer.validated_data["platform"]
+        current_version = serializer.validated_data["current_version"]
+        app_version = AppVersion.objects.filter(platform=platform, is_active=True).order_by("-created_at").first()
+        if not app_version:
+            return Response({"status": True, "update_required": False, "force_update": False, "detail": "Version config topilmadi."}, status=status.HTTP_200_OK)
+        update_required = is_version_less(current=current_version, target=app_version.latest_version)
+        force_update = is_version_less(current=current_version, target=app_version.min_supported_version) or app_version.force_update
+        return Response({"status": True, "platform": platform, "current_version": current_version, "latest_version": app_version.latest_version, "min_supported_version": app_version.min_supported_version, "update_required": update_required, "force_update": force_update, "update_url": app_version.update_url, "title": app_version.title, "message": app_version.message}, status=status.HTTP_200_OK)
 
-        if date_to:
-            parsed_to = parse_date(date_to)
-            if parsed_to:
-                locations = locations.filter(created_at__date__lte=parsed_to)
 
-        # Flutter line chizishi uchun ASC tartib kerak
-        locations = locations.order_by("created_at")[:limit]
+class ParentHomeSummaryView(APIView):
+    permission_classes = [IsParent]
+    def get(self, request):
+        today = timezone.localdate()
+        links = ParentChild.objects.filter(parent=request.user).select_related("child")
+        children_data = []
+        for link in links:
+            child = link.child
+            try:
+                last_location = child.last_location
+                movement = get_movement_status(last_location.speed)
+                location_data = ChildLastLocationSerializer(last_location).data
+            except ChildLastLocation.DoesNotExist:
+                movement = {"status": "unknown", "label": "Noma’lum"}
+                location_data = None
+            activity = ChildDailyActivity.objects.filter(child=child, activity_date=today).first()
+            children_data.append({"child": ChildSerializer(child).data, "movement": movement, "last_location": location_data, "today_activity": ChildDailyActivitySerializer(activity).data if activity else None})
+        return Response({"status": True, "date": str(today), "children": children_data}, status=status.HTTP_200_OK)
 
-        points = ChildTrackPointSerializer(locations, many=True).data
 
-        return Response(
-            {
-                "status": True,
-                "child_id": child_id,
-                "count": len(points),
-                "points": points,
-            },
-            status=status.HTTP_200_OK
-        )
+class ChildDailyActivitySyncView(APIView):
+    permission_classes = [IsChild]
+    @swagger_auto_schema(request_body=ChildDailyActivitySyncSerializer, tags=["activity"])
+    def post(self, request):
+        serializer = ChildDailyActivitySyncSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        activity, _ = ChildDailyActivity.objects.update_or_create(child=request.user, activity_date=serializer.validated_data["activity_date"], defaults={"distance_meters": serializer.validated_data.get("distance_meters", 0), "steps_count": serializer.validated_data.get("steps_count", 0), "active_seconds": serializer.validated_data.get("active_seconds", 0)})
+        return Response({"status": True, "detail": "Daily activity saqlandi.", "activity": ChildDailyActivitySerializer(activity).data}, status=status.HTTP_200_OK)
+
+
+class ChildSavedLocationVisitSyncView(APIView):
+    permission_classes = [IsChild]
+    def post(self, request):
+        saved_location_id = request.data.get("saved_location_id")
+        if not saved_location_id:
+            return Response({"status": False, "detail": "saved_location_id majburiy."}, status=status.HTTP_400_BAD_REQUEST)
+        parent_link = ParentChild.objects.filter(child=request.user).select_related("parent").first()
+        if not parent_link:
+            return Response({"status": False, "detail": "Parent topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        saved_location = SavedLocation.objects.filter(id=saved_location_id, parent=parent_link.parent).first()
+        if not saved_location:
+            return Response({"status": False, "detail": "Saved location topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        visit, _ = SavedLocationVisit.objects.get_or_create(saved_location=saved_location, child=request.user)
+        visit.visit_count += 1
+        visit.last_visited_at = timezone.now()
+        visit.save(update_fields=["visit_count", "last_visited_at", "updated_at"])
+        return Response({"status": True, "detail": "Saved location visit saqlandi.", "visit": SavedLocationVisitSerializer(visit).data}, status=status.HTTP_200_OK)

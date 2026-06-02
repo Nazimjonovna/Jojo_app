@@ -25,6 +25,9 @@ from .models import (
     ChildAppUsage,
     ChildAppLimit,
     ChildBlockedApp,
+    AppVersion,
+    ChildDailyActivity,
+    SavedLocationVisit,
 )
 
 
@@ -573,6 +576,7 @@ class CreateChildPairingSerializer(serializers.Serializer):
     
     
 class SavedLocationSerializer(serializers.ModelSerializer):
+    visit_info = serializers.SerializerMethodField()
 
     class Meta:
         model = SavedLocation
@@ -585,6 +589,7 @@ class SavedLocationSerializer(serializers.ModelSerializer):
             "radius_meters",
             "address",
             "is_active",
+            "visit_info",
             "created_at",
             "updated_at",
         ]
@@ -593,6 +598,28 @@ class SavedLocationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_visit_info(self, obj):
+        child_id = self.context.get("child_id")
+
+        if not child_id:
+            return None
+
+        visit = SavedLocationVisit.objects.filter(
+            saved_location=obj,
+            child_id=child_id
+        ).first()
+
+        if not visit:
+            return {
+                "visit_count": 0,
+                "last_visited_at": None,
+            }
+
+        return {
+            "visit_count": visit.visit_count,
+            "last_visited_at": visit.last_visited_at,
+        }
 
     def validate_latitude(self, value):
         if value < -90 or value > 90:
@@ -960,3 +987,243 @@ class ChildTrackPointSerializer(serializers.ModelSerializer):
 
         # Agar Flutter speed'ni m/s yuborsa:
         return round(obj.speed * 3.6, 2)
+    
+    
+class AppVersionCheckSerializer(serializers.Serializer):
+    platform = serializers.ChoiceField(
+        choices=["android", "ios"]
+    )
+    current_version = serializers.CharField(max_length=30)
+
+
+class AppVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AppVersion
+        fields = [
+            "id",
+            "platform",
+            "latest_version",
+            "min_supported_version",
+            "force_update",
+            "update_url",
+            "title",
+            "message",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ChildDailyActivitySerializer(serializers.ModelSerializer):
+    distance_km = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChildDailyActivity
+        fields = [
+            "id",
+            "activity_date",
+            "distance_meters",
+            "distance_km",
+            "steps_count",
+            "active_seconds",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_distance_km(self, obj):
+        return obj.distance_km()
+
+
+class ChildDailyActivitySyncSerializer(serializers.Serializer):
+    activity_date = serializers.DateField()
+    distance_meters = serializers.IntegerField(min_value=0, required=False, default=0)
+    steps_count = serializers.IntegerField(min_value=0, required=False, default=0)
+    active_seconds = serializers.IntegerField(min_value=0, required=False, default=0)
+
+
+class SavedLocationVisitSerializer(serializers.ModelSerializer):
+    saved_location = SavedLocationSerializer(read_only=True)
+
+    class Meta:
+        model = SavedLocationVisit
+        fields = [
+            "id",
+            "saved_location",
+            "visit_count",
+            "last_visited_at",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ChildTrackPointSerializer(serializers.ModelSerializer):
+    speed_kmh = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChildLocation
+        fields = [
+            "id",
+            "latitude",
+            "longitude",
+            "accuracy",
+            "battery_level",
+            "speed",
+            "speed_kmh",
+            "heading",
+            "source",
+            "created_at",
+        ]
+
+    def get_speed_kmh(self, obj):
+        if obj.speed is None:
+            return None
+
+        return round(obj.speed * 3.6, 2)
+
+
+class ChildInstalledAppSerializer(serializers.ModelSerializer):
+    is_blocked = serializers.SerializerMethodField()
+    limit = serializers.SerializerMethodField()
+    today_usage_seconds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChildInstalledApp
+        fields = [
+            "id",
+            "app_name",
+            "package_name",
+            "category",
+            "is_system_app",
+            "is_active",
+            "is_blocked",
+            "limit",
+            "today_usage_seconds",
+            "last_synced_at",
+            "created_at",
+        ]
+
+    def get_is_blocked(self, obj):
+        try:
+            return obj.block.is_blocked
+        except ChildBlockedApp.DoesNotExist:
+            return False
+
+    def get_limit(self, obj):
+        try:
+            limit = obj.limit
+            return {
+                "id": limit.id,
+                "daily_limit_seconds": limit.daily_limit_seconds,
+                "daily_limit_minutes": limit.daily_limit_minutes(),
+                "is_enabled": limit.is_enabled,
+            }
+        except ChildAppLimit.DoesNotExist:
+            return None
+
+    def get_today_usage_seconds(self, obj):
+        usage_date = self.context.get("usage_date") or timezone.localdate()
+
+        usage = ChildAppUsage.objects.filter(
+            app=obj,
+            usage_date=usage_date
+        ).first()
+
+        if not usage:
+            return 0
+
+        return usage.total_usage_seconds
+
+
+class ChildAppSyncItemSerializer(serializers.Serializer):
+    app_name = serializers.CharField(max_length=150)
+    package_name = serializers.CharField(max_length=255)
+    category = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+    is_system_app = serializers.BooleanField(default=False)
+
+
+class ChildAppSyncSerializer(serializers.Serializer):
+    apps = ChildAppSyncItemSerializer(many=True)
+
+
+class ChildAppUsageItemSerializer(serializers.Serializer):
+    package_name = serializers.CharField(max_length=255)
+    usage_date = serializers.DateField()
+    total_usage_seconds = serializers.IntegerField(min_value=0)
+    open_count = serializers.IntegerField(min_value=0, required=False, default=0)
+    first_opened_at = serializers.DateTimeField(required=False, allow_null=True)
+    last_opened_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class ChildAppUsageSyncSerializer(serializers.Serializer):
+    usages = ChildAppUsageItemSerializer(many=True)
+
+
+class ChildAppUsageSerializer(serializers.ModelSerializer):
+    app = ChildInstalledAppSerializer(read_only=True)
+
+    class Meta:
+        model = ChildAppUsage
+        fields = [
+            "id",
+            "app",
+            "usage_date",
+            "total_usage_seconds",
+            "open_count",
+            "first_opened_at",
+            "last_opened_at",
+            "updated_at",
+            "created_at",
+        ]
+
+
+class SetChildAppLimitSerializer(serializers.Serializer):
+    daily_limit_seconds = serializers.IntegerField(
+        min_value=60,
+        max_value=86400
+    )
+    is_enabled = serializers.BooleanField(default=True)
+
+
+class ChildAppLimitSerializer(serializers.ModelSerializer):
+    app = ChildInstalledAppSerializer(read_only=True)
+
+    class Meta:
+        model = ChildAppLimit
+        fields = [
+            "id",
+            "app",
+            "daily_limit_seconds",
+            "is_enabled",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class BlockChildAppSerializer(serializers.Serializer):
+    is_blocked = serializers.BooleanField(default=True)
+    reason = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class ChildBlockedAppSerializer(serializers.ModelSerializer):
+    app = ChildInstalledAppSerializer(read_only=True)
+
+    class Meta:
+        model = ChildBlockedApp
+        fields = [
+            "id",
+            "app",
+            "is_blocked",
+            "reason",
+            "created_at",
+            "updated_at",
+        ]

@@ -72,67 +72,56 @@ class User(AbstractUser):
         ("ru", "Русский"),
         ("en", "English"),
     )
-
     username = models.CharField(
         max_length=150,
         null=True,
         blank=True,
     )
-
     phone = models.CharField(
         max_length=20,
         unique=True,
         null=True,
         blank=True,
     )
-
     full_name = models.CharField(
         max_length=255,
         null=True,
         blank=True,
     )
-
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
         default=ROLE_PARENT,
     )
-
     gender = models.CharField(
         max_length=20,
         choices=GENDER_CHOICES,
         null=True,
         blank=True,
     )
-
     language = models.CharField(
         max_length=20,
         choices=LANGUAGE_CHOICES,
         default="uz_latn",
     )
-
     avatar = models.ImageField(
         upload_to="avatars/",
         null=True,
         blank=True,
     )
-
     age = models.PositiveIntegerField(
         null=True,
         blank=True,
     )
-
     child_status = models.CharField(
         max_length=20,
         choices=CHILD_STATUS_CHOICES,
         default=CHILD_STATUS_ACTIVE,
     )
-
     pending_delete_at = models.DateTimeField(
         null=True,
         blank=True,
     )
-
     groups = models.ManyToManyField(
         Group,
         verbose_name="groups",
@@ -140,7 +129,6 @@ class User(AbstractUser):
         related_name="jojo_user_groups",
         related_query_name="jojo_user",
     )
-
     user_permissions = models.ManyToManyField(
         Permission,
         verbose_name="user permissions",
@@ -148,6 +136,20 @@ class User(AbstractUser):
         related_name="jojo_user_permissions",
         related_query_name="jojo_user_permission",
     )
+    is_premium = models.BooleanField(default=False)
+    premium_expires_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    def has_active_premium(self):
+        if not self.is_premium:
+            return False
+
+        if not self.premium_expires_at:
+            return True
+
+        return timezone.now() < self.premium_expires_at
 
     USERNAME_FIELD = "phone"
     REQUIRED_FIELDS = []
@@ -989,3 +991,106 @@ class ChildBlockedApp(models.Model):
 
     def __str__(self):
         return f"{self.child_id} - {self.app.package_name} - blocked={self.is_blocked}"
+    
+    
+class AppVersion(models.Model):
+    PLATFORM_ANDROID = "android"
+    PLATFORM_IOS = "ios"
+
+    PLATFORM_CHOICES = (
+        (PLATFORM_ANDROID, "Android"),
+        (PLATFORM_IOS, "iOS"),
+    )
+
+    platform = models.CharField(
+        max_length=20,
+        choices=PLATFORM_CHOICES
+    )
+
+    latest_version = models.CharField(max_length=30)
+    min_supported_version = models.CharField(max_length=30)
+
+    force_update = models.BooleanField(default=False)
+
+    update_url = models.URLField(
+        null=True,
+        blank=True
+    )
+
+    title = models.CharField(
+        max_length=150,
+        default="Update available"
+    )
+
+    message = models.TextField(
+        null=True,
+        blank=True
+    )
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.platform} - {self.latest_version}"
+
+
+class ChildDailyActivity(models.Model):
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="daily_activities"
+    )
+
+    activity_date = models.DateField()
+
+    distance_meters = models.PositiveIntegerField(default=0)
+    steps_count = models.PositiveIntegerField(default=0)
+    active_seconds = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("child", "activity_date")
+        ordering = ["-activity_date"]
+
+    def distance_km(self):
+        return round(self.distance_meters / 1000, 2)
+
+    def __str__(self):
+        return f"{self.child_id} - {self.activity_date}"
+
+
+class SavedLocationVisit(models.Model):
+    saved_location = models.ForeignKey(
+        SavedLocation,
+        on_delete=models.CASCADE,
+        related_name="visits"
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="saved_location_visits"
+    )
+
+    visit_count = models.PositiveIntegerField(default=0)
+
+    last_visited_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("saved_location", "child")
+
+    def __str__(self):
+        return f"{self.child_id} - {self.saved_location_id} - {self.visit_count}"
