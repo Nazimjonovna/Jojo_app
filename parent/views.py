@@ -159,26 +159,57 @@ class SendOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+
     @swagger_auto_schema(request_body=VerifyOTPSerializer, tags=["register"])
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         phone = serializer.validated_data["phone"]
         code = serializer.validated_data["code"]
-        otp = OTPCode.objects.filter(phone=phone, is_used=False).order_by("-created_at").first()
+        otp = OTPCode.objects.filter(
+            phone=phone,
+            is_used=False
+        ).order_by("-created_at").first()
         if not otp:
-            return Response({"status": False, "detail": "Aktiv SMS kod topilmadi. Yangi kod oling."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Aktiv SMS kod topilmadi. Yangi kod oling."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if otp.is_blocked():
             time_left = otp.block_time_left_seconds()
-            return Response({"status": False, "detail": "Juda ko‘p noto‘g‘ri urinish. 30 minutdan keyin qayta urinib ko‘ring.", "blocked": True, "time_left_seconds": time_left, "time_left_minutes": round(time_left / 60, 1)}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Juda ko‘p noto‘g‘ri urinish. 30 minutdan keyin qayta urinib ko‘ring.",
+                    "blocked": True,
+                    "time_left_seconds": time_left,
+                    "time_left_minutes": round(time_left / 60, 1),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
         if otp.is_expired():
-            return Response({"status": False, "detail": "SMS kod muddati tugagan."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SMS kod muddati tugagan."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         now = timezone.now()
         if otp.first_attempt_at and now - otp.first_attempt_at > timedelta(hours=1):
             otp.attempt_count = 0
             otp.first_attempt_at = None
             otp.blocked_until = None
-            otp.save(update_fields=["attempt_count", "first_attempt_at", "blocked_until"])
+            otp.save(
+                update_fields=[
+                    "attempt_count",
+                    "first_attempt_at",
+                    "blocked_until",
+                ]
+            )
         if otp.code != code:
             if not otp.first_attempt_at:
                 otp.first_attempt_at = now
@@ -186,14 +217,58 @@ class VerifyOTPView(APIView):
             attempts_left = max(3 - otp.attempt_count, 0)
             if otp.attempt_count >= 3:
                 otp.blocked_until = now + timedelta(minutes=30)
-                otp.save(update_fields=["attempt_count", "first_attempt_at", "blocked_until"])
-                return Response({"status": False, "detail": "3 marta noto‘g‘ri kod kiritildi. 30 minutga bloklandi.", "blocked": True, "time_left_seconds": 1800, "time_left_minutes": 30}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+                otp.save(
+                    update_fields=[
+                        "attempt_count",
+                        "first_attempt_at",
+                        "blocked_until",
+                    ]
+                )
+                return Response(
+                    {
+                        "status": False,
+                        "detail": "3 marta noto‘g‘ri kod kiritildi. 30 minutga bloklandi.",
+                        "blocked": True,
+                        "time_left_seconds": 1800,
+                        "time_left_minutes": 30,
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
             otp.save(update_fields=["attempt_count", "first_attempt_at"])
-            return Response({"status": False, "detail": "SMS kod noto‘g‘ri.", "attempts_left": attempts_left}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "status": False,
+                    "detail": "SMS kod noto‘g‘ri.",
+                    "attempts_left": attempts_left,
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         otp.is_used = True
         otp.save(update_fields=["is_used"])
-        is_registered = User.objects.filter(phone=phone, role=User.ROLE_PARENT).exists()
-        return Response({"status": True, "is_registered": is_registered, "detail": "SMS kod tasdiqlandi. Token olish uchun parent/register endpointini chaqiring."}, status=status.HTTP_200_OK)
+        user = User.objects.filter(
+            phone=phone,
+            role=User.ROLE_PARENT
+        ).first()
+        if user:
+            tokens = get_tokens_for_user(user)
+            return Response(
+                {
+                    "status": True,
+                    "is_registered": True,
+                    "detail": "SMS kod tasdiqlandi. User avval ro‘yxatdan o‘tgan. Token qaytarildi.",
+                    "user": UserSerializer(user).data,
+                    "tokens": tokens,
+                },
+                status=status.HTTP_200_OK
+            )
+        return Response(
+            {
+                "status": True,
+                "is_registered": False,
+                "detail": "SMS kod tasdiqlandi. User hali ro‘yxatdan o‘tmagan. Parent/register endpointini chaqiring.",
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 
 class ParentRegisterView(APIView):

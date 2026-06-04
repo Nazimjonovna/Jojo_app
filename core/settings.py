@@ -50,7 +50,8 @@ SIMPLE_JWT = {
 }
 
 SWAGGER_SETTINGS = {
-
+    "USE_SESSION_AUTH": False,
+    "DEFAULT_API_URL": "https://api.jojoapp.uz",
     'SECURITY_DEFINITIONS': {
         'Bearer': {
             'type': 'apiKey',
@@ -171,14 +172,14 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-
     "http://5.189.151.237",
     "http://5.189.151.237:8000",
-
     "http://jojoapp.uz",
     "https://jojoapp.uz",
     "http://www.jojoapp.uz",
     "https://www.jojoapp.uz",
+    "http://api.jojoapp.uz",
+    "https://api.jojoapp.uz",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
