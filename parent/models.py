@@ -1,6 +1,6 @@
 import random
 import string
-
+from datetime import timedelta
 from django.contrib.auth.models import AbstractUser, Group, Permission, BaseUserManager
 from django.db import models
 from django.utils import timezone
@@ -1215,3 +1215,318 @@ class ChildSavedLocationEvent(models.Model):
 
     def __str__(self):
         return f"{self.child_id} - {self.event_type}"
+    
+    
+class SubscriptionPlan(models.Model):
+    PERIOD_DAYS = "days"
+    PERIOD_MONTHS = "months"
+    PERIOD_YEARS = "years"
+
+    PERIOD_CHOICES = (
+        (PERIOD_DAYS, "Days"),
+        (PERIOD_MONTHS, "Months"),
+        (PERIOD_YEARS, "Years"),
+    )
+
+    name = models.CharField(max_length=150)
+    description = models.TextField(null=True, blank=True)
+
+    price = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=10, default="UZS")
+
+    duration_value = models.PositiveIntegerField(default=1)
+    duration_type = models.CharField(
+        max_length=20,
+        choices=PERIOD_CHOICES,
+        default=PERIOD_MONTHS,
+    )
+
+    is_trial = models.BooleanField(default=False)
+    trial_days = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "price"]
+
+    def __str__(self):
+        if self.is_trial:
+            return f"{self.name} - Trial {self.trial_days} days"
+        return f"{self.name} - {self.price} {self.currency}"
+
+    def calculate_expires_at(self, start_date=None):
+        start_date = start_date or timezone.now()
+
+        if self.is_trial:
+            return start_date + timedelta(days=self.trial_days)
+
+        if self.duration_type == self.PERIOD_DAYS:
+            return start_date + timedelta(days=self.duration_value)
+
+        if self.duration_type == self.PERIOD_MONTHS:
+            return start_date + timedelta(days=30 * self.duration_value)
+
+        if self.duration_type == self.PERIOD_YEARS:
+            return start_date + timedelta(days=365 * self.duration_value)
+
+        return start_date
+
+
+class UserSubscription(models.Model):
+    STATUS_TRIAL = "trial"
+    STATUS_ACTIVE = "active"
+    STATUS_EXPIRED = "expired"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = (
+        (STATUS_TRIAL, "Trial"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_CANCELLED, "Cancelled"),
+    )
+
+    SOURCE_TRIAL = "trial"
+    SOURCE_ADMIN = "admin"
+    SOURCE_PAYMENT = "payment"
+
+    SOURCE_CHOICES = (
+        (SOURCE_TRIAL, "Trial"),
+        (SOURCE_ADMIN, "Admin"),
+        (SOURCE_PAYMENT, "Payment"),
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+    )
+
+    plan = models.ForeignKey(
+        SubscriptionPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="user_subscriptions",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_TRIAL,
+    )
+
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_TRIAL,
+    )
+
+    started_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_subscriptions",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-expires_at"]
+
+    def is_active_now(self):
+        return (
+            self.status in [self.STATUS_TRIAL, self.STATUS_ACTIVE]
+            and self.expires_at
+            and timezone.now() < self.expires_at
+        )
+
+    def days_left(self):
+        if not self.expires_at:
+            return 0
+
+        seconds = (self.expires_at - timezone.now()).total_seconds()
+        return max(round(seconds / 86400, 1), 0)
+
+    def __str__(self):
+        return f"{self.user_id} - {self.status} - {self.expires_at}"
+
+
+class SubscriptionPayment(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_PAID = "paid"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PAID, "Paid"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="subscription_payments",
+    )
+
+    plan = models.ForeignKey(
+        SubscriptionPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
+    )
+
+    subscription = models.ForeignKey(
+        UserSubscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
+    )
+
+    amount = models.PositiveIntegerField(default=0)
+    currency = models.CharField(max_length=10, default="UZS")
+
+    provider = models.CharField(max_length=50, null=True, blank=True)
+    provider_transaction_id = models.CharField(max_length=255, null=True, blank=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+
+    raw_payload = models.JSONField(default=dict, blank=True)
+
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.amount} {self.currency} - {self.status}"
+    
+    
+class CallCenterTicket(models.Model):
+    STATUS_NEW = "new"
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_WAITING = "waiting"
+    STATUS_RESOLVED = "resolved"
+    STATUS_CLOSED = "closed"
+    STATUS_BLOCKED = "blocked"
+
+    STATUS_CHOICES = (
+        (STATUS_NEW, "Yangi"),
+        (STATUS_IN_PROGRESS, "Jarayonda"),
+        (STATUS_WAITING, "Kutilmoqda"),
+        (STATUS_RESOLVED, "Hal qilingan"),
+        (STATUS_CLOSED, "Yopilgan"),
+        (STATUS_BLOCKED, "Bloklangan"),
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="call_center_tickets",
+    )
+
+    operator = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operator_tickets",
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default=STATUS_NEW,
+    )
+
+    title = models.CharField(
+        max_length=255,
+        default="Foydalanuvchi murojaati"
+    )
+
+    description = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    priority = models.CharField(
+        max_length=20,
+        default="normal",
+    )
+
+    last_contact_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.parent_id} - {self.status}"
+
+
+class CallCenterComment(models.Model):
+    ticket = models.ForeignKey(
+        CallCenterTicket,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+
+    operator = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="call_center_comments",
+    )
+
+    comment = models.TextField()
+
+    old_status = models.CharField(
+        max_length=30,
+        null=True,
+        blank=True,
+    )
+
+    new_status = models.CharField(
+        max_length=30,
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.ticket_id} - {self.operator_id}"

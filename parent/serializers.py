@@ -28,6 +28,7 @@ from .models import (
     ChildDailyActivity,
     SavedLocationVisit,
     ChildSavedLocationEvent,
+    SubscriptionPlan, UserSubscription, SubscriptionPayment,
 )
 
 
@@ -1278,3 +1279,82 @@ class ChildSavedLocationEventSerializer(serializers.ModelSerializer):
             "longitude",
             "created_at",
         ]
+        
+        
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPlan
+        fields = [
+            "id",
+            "name",
+            "description",
+            "price",
+            "currency",
+            "duration_value",
+            "duration_type",
+            "is_trial",
+            "trial_days",
+            "is_active",
+            "is_featured",
+            "order",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class UserSubscriptionSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+    is_active_now = serializers.SerializerMethodField()
+    days_left = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserSubscription
+        fields = [
+            "id",
+            "plan",
+            "status",
+            "source",
+            "started_at",
+            "expires_at",
+            "cancelled_at",
+            "is_active_now",
+            "days_left",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_is_active_now(self, obj):
+        return obj.is_active_now()
+
+    def get_days_left(self, obj):
+        return obj.days_left()
+
+
+class SubscriptionPaymentSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+    subscription = UserSubscriptionSerializer(read_only=True)
+
+    class Meta:
+        model = SubscriptionPayment
+        fields = [
+            "id",
+            "plan",
+            "subscription",
+            "amount",
+            "currency",
+            "provider",
+            "provider_transaction_id",
+            "status",
+            "paid_at",
+            "created_at",
+        ]
+
+
+class ActivateSubscriptionSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
+
+
+class AdminGiveSubscriptionSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField(required=False)
+    phone = serializers.CharField(required=False)
+    days = serializers.IntegerField(min_value=1, max_value=365)

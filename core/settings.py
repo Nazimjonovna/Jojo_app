@@ -240,96 +240,50 @@ FIREBASE_CREDENTIALS = os.getenv(
 
 
 JAZZMIN_SETTINGS = {
-    "site_title": "Jojo Admin",
-    "site_header": "Jojo Admin",
-    "site_brand": "Jojo",
-    "welcome_sign": "Jojo Admin Panel",
+    "site_title": "Call Center Admin",
+    "site_header": "CALL CENTER",
+    "site_brand": "CALL CENTER",
+    "welcome_sign": "Call Center Admin Panel",
     "copyright": "Jojo App",
 
     "show_sidebar": True,
     "navigation_expanded": True,
 
-    "topmenu_links": [
-        {"name": "Dashboard", "url": "admin:index", "permissions": ["auth.view_group"]},
-        {"name": "API Docs", "url": "/swagger/", "new_window": True},
+    "order_with_respect_to": [
+        "parent.User",
+        "parent.ParentChild",
+        "parent.SOSAlert",
+        "parent.DeviceToken",
+        "parent.SavedLocation",
+        "parent.RouteAlert",
+        "parent.UserSubscription",
+        "parent.SubscriptionPayment",
     ],
 
     "icons": {
         "parent.User": "fas fa-users",
-        "parent.OTPCode": "fas fa-key",
-        "parent.PairingCode": "fas fa-qrcode",
         "parent.ParentChild": "fas fa-child",
-
-        "parent.ChildLocation": "fas fa-map-marker-alt",
-        "parent.ChildLastLocation": "fas fa-location-arrow",
-        "parent.SavedLocation": "fas fa-map-pin",
-
-        "parent.SafeRoute": "fas fa-route",
-        "parent.SafeRoutePoint": "fas fa-map-signs",
-        "parent.ChildRouteAssignment": "fas fa-road",
-        "parent.RouteAlert": "fas fa-exclamation-triangle",
-
-        "parent.DeviceToken": "fas fa-mobile-alt",
-
-        "parent.GameCategory": "fas fa-gamepad",
-        "parent.GameItem": "fas fa-puzzle-piece",
-
-        "parent.ShopCategory": "fas fa-store",
-        "parent.ShopItem": "fas fa-shopping-bag",
-        "parent.ShopPurchase": "fas fa-receipt",
-
-        "parent.ChildWallet": "fas fa-wallet",
-        "parent.ChildTransaction": "fas fa-coins",
-
         "parent.SOSAlert": "fas fa-bell",
+        "parent.DeviceToken": "fas fa-mobile-alt",
+        "parent.SavedLocation": "fas fa-map-pin",
+        "parent.RouteAlert": "fas fa-exclamation-triangle",
+        "parent.UserSubscription": "fas fa-crown",
+        "parent.SubscriptionPayment": "fas fa-credit-card",
         "auth.Group": "fas fa-user-shield",
     },
-
-    "order_with_respect_to": [
-        "parent.User",
-        "parent.ParentChild",
-        "parent.PairingCode",
-
-        "parent.GameCategory",
-        "parent.GameItem",
-
-        "parent.ShopCategory",
-        "parent.ShopItem",
-        "parent.ShopPurchase",
-
-        "parent.ChildWallet",
-        "parent.ChildTransaction",
-
-        "parent.ChildLocation",
-        "parent.ChildLastLocation",
-        "parent.SavedLocation",
-
-        "parent.SafeRoute",
-        "parent.ChildRouteAssignment",
-        "parent.RouteAlert",
-
-        "parent.SOSAlert",
-        "parent.DeviceToken",
+    "topmenu_links": [
+        {"name": "Call Center", "url": "/admin/call-center/", "new_window": False},
+        {"name": "Swagger", "url": "/swagger/", "new_window": True},
     ],
-
-    "hide_apps": [],
-    "hide_models": [],
+    "show_sidebar": True,
+    "navigation_expanded": True,
 }
 
-
 JAZZMIN_UI_TWEAKS = {
-    "theme": "flatly",
+    "theme": "darkly",
     "dark_mode_theme": "darkly",
-    "navbar": "navbar-white navbar-light",
+    "navbar": "navbar-dark navbar-primary",
     "sidebar": "sidebar-dark-primary",
     "brand_colour": "navbar-primary",
     "accent": "accent-primary",
-    "button_classes": {
-        "primary": "btn-primary",
-        "secondary": "btn-secondary",
-        "info": "btn-info",
-        "warning": "btn-warning",
-        "danger": "btn-danger",
-        "success": "btn-success",
-    },
 }

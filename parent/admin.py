@@ -1,6 +1,12 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
+from django.contrib import admin, messages
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import redirect, render
+from django.urls import path
+from django.utils import timezone
+from django.db.models import Count, Q
 
 from .models import (
     User,
@@ -29,11 +35,17 @@ from .models import (
     ChildAppUsage,
     ChildSavedLocationState,
     ChildSavedLocationEvent,
+    SubscriptionPayment,
+    SubscriptionPlan,
+    UserSubscription,  
+    CallCenterTicket,
+    CallCenterComment,  
 )
 
 
 CONTENT_ADMIN_GROUP = "content_admin"
 SUPPORT_ADMIN_GROUP = "support_admin"
+CALL_CENTER_GROUP = "call_center"
 
 
 CONTENT_ADMIN_MODELS = {
@@ -101,6 +113,14 @@ def allowed_models_for_user(user):
     return allowed
 
 
+def user_in_group(user, group_name):
+    return user.groups.filter(name=group_name).exists()
+
+
+def user_in_group(user, group_name):
+    return group_name in user_group_names(user)
+
+
 class RoleBasedAdminMixin:
     def model_name(self):
         return self.model.__name__
@@ -156,100 +176,6 @@ class RoleBasedAdminMixin:
 class SafeRoutePointInline(admin.TabularInline):
     model = SafeRoutePoint
     extra = 1
-
-
-@admin.register(User)
-class CustomUserAdmin(UserAdmin):
-    list_display = (
-        "id",
-        "phone",
-        "username",
-        "full_name",
-        "role",
-        "gender",
-        "age",
-        "language",
-        "child_status",
-        "is_active",
-        "is_staff",
-        "is_superuser",
-    )
-
-    list_filter = (
-        "role",
-        "gender",
-        "language",
-        "child_status",
-        "is_active",
-        "is_staff",
-        "is_superuser",
-    )
-
-    search_fields = (
-        "phone",
-        "username",
-        "full_name",
-        "first_name",
-        "last_name",
-    )
-
-    ordering = ("-id",)
-
-    fieldsets = UserAdmin.fieldsets + (
-        (
-            "Jojo fields",
-            {
-                "fields": (
-                    "phone",
-                    "full_name",
-                    "role",
-                    "gender",
-                    "language",
-                    "age",
-                    "child_status",
-                    "pending_delete_at",
-                    "avatar",
-                )
-            },
-        ),
-    )
-
-    add_fieldsets = (
-        (
-            None,
-            {
-                "classes": ("wide",),
-                "fields": (
-                    "phone",
-                    "username",
-                    "full_name",
-                    "role",
-                    "gender",
-                    "language",
-                    "is_staff",
-                    "is_superuser",
-                    "groups",
-                    "password1",
-                    "password2",
-                ),
-            },
-        ),
-    )
-
-    def has_module_permission(self, request):
-        return request.user.is_superuser
-
-    def has_view_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_add_permission(self, request):
-        return request.user.is_superuser
-
-    def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
 
 
 @admin.register(OTPCode)
@@ -878,3 +804,548 @@ class ChildSavedLocationEventAdmin(admin.ModelAdmin):
         "longitude",
         "created_at",
     )
+    
+    
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "price",
+        "currency",
+        "duration_value",
+        "duration_type",
+        "is_trial",
+        "trial_days",
+        "is_active",
+        "is_featured",
+        "order",
+    )
+    list_filter = (
+        "is_trial",
+        "is_active",
+        "is_featured",
+        "duration_type",
+    )
+    search_fields = (
+        "name",
+        "description",
+    )
+
+
+@admin.register(UserSubscription)
+class UserSubscriptionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "plan",
+        "status",
+        "source",
+        "started_at",
+        "expires_at",
+        "created_by",
+        "created_at",
+    )
+    list_filter = (
+        "status",
+        "source",
+        "created_at",
+    )
+    search_fields = (
+        "user__phone",
+        "user__full_name",
+        "plan__name",
+    )
+
+
+@admin.register(SubscriptionPayment)
+class SubscriptionPaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "plan",
+        "amount",
+        "currency",
+        "provider",
+        "status",
+        "paid_at",
+        "created_at",
+    )
+    list_filter = (
+        "status",
+        "provider",
+        "currency",
+        "created_at",
+    )
+    search_fields = (
+        "user__phone",
+        "user__full_name",
+        "plan__name",
+        "provider_transaction_id",
+    )
+    
+    
+@admin.register(User)
+class CustomUserAdmin(UserAdmin):
+    list_display = (
+        "id",
+        "phone",
+        "username",
+        "full_name",
+        "role",
+        "gender",
+        "age",
+        "language",
+        "is_premium",
+        "premium_expires_at",
+        "is_active",
+        "is_staff",
+        "is_superuser",
+    )
+
+    list_filter = (
+        "role",
+        "gender",
+        "language",
+        "is_premium",
+        "is_active",
+        "is_staff",
+        "is_superuser",
+    )
+
+    search_fields = (
+        "phone",
+        "username",
+        "full_name",
+        "first_name",
+        "last_name",
+    )
+
+    ordering = ("-id",)
+
+    fieldsets = UserAdmin.fieldsets + (
+        (
+            "Jojo fields",
+            {
+                "fields": (
+                    "phone",
+                    "full_name",
+                    "role",
+                    "gender",
+                    "language",
+                    "age",
+                    "child_status",
+                    "pending_delete_at",
+                    "avatar",
+                    "is_premium",
+                    "premium_expires_at",
+                )
+            },
+        ),
+    )
+
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "phone",
+                    "username",
+                    "full_name",
+                    "role",
+                    "gender",
+                    "language",
+                    "is_staff",
+                    "is_superuser",
+                    "groups",
+                    "password1",
+                    "password2",
+                ),
+            },
+        ),
+    )
+
+    actions = [
+        "block_users",
+        "unblock_users",
+    ]
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+
+        if request.user.is_superuser:
+            return queryset
+
+        if user_in_group(request.user, CALL_CENTER_GROUP):
+            return queryset.filter(role=User.ROLE_PARENT)
+
+        return queryset.none()
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+
+        if user_in_group(request.user, CALL_CENTER_GROUP):
+            if obj is None:
+                return True
+            return obj.role == User.ROLE_PARENT
+
+        return False
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+
+        if user_in_group(request.user, CALL_CENTER_GROUP):
+            if obj is None:
+                return True
+            return obj.role == User.ROLE_PARENT
+
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        if request.user.is_superuser:
+            return super().get_readonly_fields(request, obj)
+
+        if user_in_group(request.user, CALL_CENTER_GROUP):
+            return (
+                "password",
+                "last_login",
+                "date_joined",
+                "is_staff",
+                "is_superuser",
+                "groups",
+                "user_permissions",
+                "role",
+                "phone",
+                "username",
+            )
+
+        return super().get_readonly_fields(request, obj)
+
+    def block_users(self, request, queryset):
+        if not request.user.is_superuser and not user_in_group(request.user, CALL_CENTER_GROUP):
+            self.message_user(request, "Ruxsat yo‘q.", level="error")
+            return
+
+        queryset.filter(role=User.ROLE_PARENT).update(is_active=False)
+        self.message_user(request, "Tanlangan parent userlar bloklandi.")
+
+    block_users.short_description = "Tanlangan parent userlarni bloklash"
+
+    def unblock_users(self, request, queryset):
+        if not request.user.is_superuser and not user_in_group(request.user, CALL_CENTER_GROUP):
+            self.message_user(request, "Ruxsat yo‘q.", level="error")
+            return
+
+        queryset.filter(role=User.ROLE_PARENT).update(is_active=True)
+        self.message_user(request, "Tanlangan parent userlar blokdan chiqarildi.")
+
+    unblock_users.short_description = "Tanlangan parent userlarni blokdan chiqarish"
+    
+
+@admin.register(CallCenterTicket)
+class CallCenterTicketAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "parent",
+        "operator",
+        "status",
+        "priority",
+        "last_contact_at",
+        "created_at",
+        "updated_at",
+    )
+    list_filter = (
+        "status",
+        "priority",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = (
+        "parent__phone",
+        "parent__full_name",
+        "operator__phone",
+        "operator__full_name",
+        "title",
+        "description",
+    )
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+
+@admin.register(CallCenterComment)
+class CallCenterCommentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "ticket",
+        "operator",
+        "old_status",
+        "new_status",
+        "created_at",
+    )
+    list_filter = (
+        "old_status",
+        "new_status",
+        "created_at",
+    )
+    search_fields = (
+        "ticket__parent__phone",
+        "ticket__parent__full_name",
+        "operator__phone",
+        "operator__full_name",
+        "comment",
+    )
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or user_in_group(request.user, CALL_CENTER_GROUP)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+    
+
+def call_center_dashboard_view(request):
+    if not request.user.is_superuser and not user_in_group(request.user, CALL_CENTER_GROUP):
+        messages.error(request, "Call Center dashboard uchun ruxsat yo‘q.")
+        return redirect("/admin/")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        ticket_id = request.POST.get("ticket_id")
+        comment_text = request.POST.get("comment")
+        new_status = request.POST.get("new_status")
+
+        ticket = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent").first()
+
+        if ticket:
+            old_status = ticket.status
+
+            if action == "change_status" and new_status:
+                ticket.status = new_status
+
+                if new_status in [
+                    CallCenterTicket.STATUS_CLOSED,
+                    CallCenterTicket.STATUS_RESOLVED,
+                ]:
+                    ticket.closed_at = timezone.now()
+
+                ticket.operator = request.user
+                ticket.last_contact_at = timezone.now()
+                ticket.save(
+                    update_fields=[
+                        "status",
+                        "operator",
+                        "last_contact_at",
+                        "closed_at",
+                        "updated_at",
+                    ]
+                )
+
+                CallCenterComment.objects.create(
+                    ticket=ticket,
+                    operator=request.user,
+                    comment=comment_text or f"Status {old_status} dan {new_status} ga o‘zgartirildi.",
+                    old_status=old_status,
+                    new_status=new_status,
+                )
+
+                messages.success(request, "Status o‘zgartirildi.")
+
+            if action == "block_user":
+                ticket.parent.is_active = False
+                ticket.parent.save(update_fields=["is_active"])
+
+                ticket.status = CallCenterTicket.STATUS_BLOCKED
+                ticket.operator = request.user
+                ticket.last_contact_at = timezone.now()
+                ticket.save(update_fields=["status", "operator", "last_contact_at", "updated_at"])
+
+                CallCenterComment.objects.create(
+                    ticket=ticket,
+                    operator=request.user,
+                    comment=comment_text or "Foydalanuvchi bloklandi.",
+                    old_status=old_status,
+                    new_status=CallCenterTicket.STATUS_BLOCKED,
+                )
+
+                messages.success(request, "Foydalanuvchi bloklandi.")
+
+            if action == "unblock_user":
+                ticket.parent.is_active = True
+                ticket.parent.save(update_fields=["is_active"])
+
+                CallCenterComment.objects.create(
+                    ticket=ticket,
+                    operator=request.user,
+                    comment=comment_text or "Foydalanuvchi blokdan chiqarildi.",
+                    old_status=old_status,
+                    new_status=old_status,
+                )
+
+                messages.success(request, "Foydalanuvchi blokdan chiqarildi.")
+
+        return redirect("/admin/call-center/")
+
+    search = request.GET.get("q", "")
+    selected_ticket_id = request.GET.get("ticket_id")
+    status_filter = request.GET.get("status")
+
+    parent_users = User.objects.filter(
+        role=User.ROLE_PARENT
+    ).order_by("-date_joined")
+
+    if search:
+        parent_users = parent_users.filter(
+            Q(phone__icontains=search)
+            | Q(full_name__icontains=search)
+            | Q(username__icontains=search)
+        )
+
+    for parent in parent_users[:200]:
+        CallCenterTicket.objects.get_or_create(
+            parent=parent,
+            defaults={
+                "title": "Foydalanuvchi nazorati",
+                "status": CallCenterTicket.STATUS_NEW,
+            }
+        )
+
+    tickets = CallCenterTicket.objects.filter(
+        parent__role=User.ROLE_PARENT
+    ).select_related(
+        "parent",
+        "operator",
+    ).prefetch_related(
+        "parent__children_links",
+        "comments",
+    )
+
+    if search:
+        tickets = tickets.filter(
+            Q(parent__phone__icontains=search)
+            | Q(parent__full_name__icontains=search)
+            | Q(parent__username__icontains=search)
+        )
+
+    if status_filter:
+        tickets = tickets.filter(status=status_filter)
+
+    tickets = tickets.order_by("-updated_at")
+
+    selected_ticket = None
+
+    if selected_ticket_id:
+        selected_ticket = tickets.filter(id=selected_ticket_id).first()
+
+    if not selected_ticket:
+        selected_ticket = tickets.first()
+
+    stats = {
+        "total_parents": User.objects.filter(role=User.ROLE_PARENT).count(),
+        "children_connected": User.objects.filter(role=User.ROLE_CHILD, child_status=User.CHILD_STATUS_ACTIVE).count(),
+        "premium_users": User.objects.filter(role=User.ROLE_PARENT, is_premium=True).count(),
+        "blocked_users": User.objects.filter(role=User.ROLE_PARENT, is_active=False).count(),
+        "new_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_NEW).count(),
+        "in_progress_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_IN_PROGRESS).count(),
+        "waiting_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_WAITING).count(),
+        "resolved_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_RESOLVED).count(),
+        "closed_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_CLOSED).count(),
+    }
+
+    columns = [
+        {
+            "key": CallCenterTicket.STATUS_NEW,
+            "label": "Yangi",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_NEW)[:50],
+        },
+        {
+            "key": CallCenterTicket.STATUS_IN_PROGRESS,
+            "label": "Jarayonda",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_IN_PROGRESS)[:50],
+        },
+        {
+            "key": CallCenterTicket.STATUS_WAITING,
+            "label": "Kutilmoqda",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_WAITING)[:50],
+        },
+        {
+            "key": CallCenterTicket.STATUS_RESOLVED,
+            "label": "Hal qilingan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_RESOLVED)[:50],
+        },
+        {
+            "key": CallCenterTicket.STATUS_CLOSED,
+            "label": "Yopilgan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_CLOSED)[:50],
+        },
+        {
+            "key": CallCenterTicket.STATUS_BLOCKED,
+            "label": "Bloklangan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_BLOCKED)[:50],
+        },
+    ]
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Call Center",
+        "stats": stats,
+        "columns": columns,
+        "selected_ticket": selected_ticket,
+        "statuses": CallCenterTicket.STATUS_CHOICES,
+        "search": search,
+        "status_filter": status_filter,
+    }
+
+    return render(request, "admin/call_center_dashboard.html", context)
+
+
+original_get_urls = admin.site.get_urls
+
+
+def get_call_center_urls():
+    urls = original_get_urls()
+
+    custom_urls = [
+        path(
+            "call-center/",
+            admin.site.admin_view(call_center_dashboard_view),
+            name="call-center-dashboard",
+        ),
+    ]
+
+    return custom_urls + urls
+
+
+admin.site.get_urls = get_call_center_urls

@@ -1,0 +1,170 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<style>
+.cc-wrapper{display:flex;gap:18px;background:#0b1220;color:#e5e7eb;min-height:calc(100vh - 140px);padding:18px;border-radius:14px}
+.cc-main{flex:1;overflow:hidden}
+.cc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.cc-title h1{font-size:22px;margin:0;color:#fff}
+.cc-title p{margin:4px 0 0;color:#94a3b8}
+.cc-actions{display:flex;gap:8px}
+.cc-input{background:#111827;border:1px solid #1f2937;color:#fff;border-radius:8px;padding:8px 12px}
+.cc-btn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 12px;text-decoration:none;cursor:pointer}
+.cc-btn-red{background:#dc2626}
+.cc-btn-yellow{background:#b45309}
+.cc-btn-gray{background:#374151}
+.cc-stats{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.cc-stat{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px}
+.cc-stat span{display:block;color:#94a3b8;font-size:12px}
+.cc-stat strong{display:block;color:#fff;font-size:22px;margin-top:6px}
+.cc-board{display:grid;grid-template-columns:repeat(6,minmax(190px,1fr));gap:10px;overflow-x:auto;padding-bottom:10px}
+.cc-column{background:#0f172a;border:1px solid #1f2937;border-radius:12px;padding:10px;min-height:520px}
+.cc-column-title{display:flex;justify-content:space-between;align-items:center;color:#cbd5e1;font-weight:600;margin-bottom:10px}
+.cc-card{display:block;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:12px;margin-bottom:10px;text-decoration:none;color:#e5e7eb}
+.cc-card.active{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}
+.cc-card-top{display:flex;gap:10px;align-items:center}
+.cc-avatar{width:36px;height:36px;border-radius:50%;background:#334155;display:flex;align-items:center;justify-content:center;font-weight:700}
+.cc-name{font-weight:700;color:#fff}
+.cc-phone{font-size:12px;color:#94a3b8}
+.cc-badges{margin-top:10px;font-size:12px;line-height:1.8}
+.cc-green{color:#22c55e}
+.cc-red{color:#ef4444}
+.cc-muted{color:#94a3b8}
+.cc-side{width:380px;background:#111827;border:1px solid #1f2937;border-radius:14px;padding:16px}
+.cc-side-head{display:flex;gap:12px;align-items:center;border-bottom:1px solid #1f2937;padding-bottom:14px;margin-bottom:14px}
+.cc-side-avatar{width:64px;height:64px;border-radius:50%;background:#334155;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800}
+.cc-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.cc-detail{background:#0f172a;border:1px solid #1f2937;border-radius:10px;padding:10px}
+.cc-detail span{display:block;color:#94a3b8;font-size:12px}
+.cc-detail strong{display:block;color:#fff;margin-top:4px;font-size:13px}
+.cc-comment{background:#0f172a;border:1px solid #1f2937;border-radius:10px;padding:10px;margin-bottom:8px}
+.cc-comment small{color:#94a3b8}
+.cc-form textarea{width:100%;min-height:70px;background:#0f172a;border:1px solid #1f2937;border-radius:8px;color:#fff;padding:10px;margin-bottom:8px}
+.cc-form select{width:100%;background:#0f172a;border:1px solid #1f2937;border-radius:8px;color:#fff;padding:9px;margin-bottom:8px}
+.cc-form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:1200px){.cc-wrapper{flex-direction:column}.cc-side{width:auto}.cc-stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<div class="cc-wrapper">
+  <div class="cc-main">
+    <div class="cc-header">
+      <div class="cc-title">
+        <h1>Foydalanuvchilar</h1>
+        <p>Barcha parent foydalanuvchilar haqida ma’lumot va boshqaruv</p>
+      </div>
+      <form method="get" class="cc-actions">
+        <input class="cc-input" type="text" name="q" value="{{ search }}" placeholder="Qidirish...">
+        <select class="cc-input" name="status">
+          <option value="">Barcha statuslar</option>
+          {% for value,label in statuses %}
+          <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="cc-btn" type="submit">Filtrlash</button>
+      </form>
+    </div>
+
+    <div class="cc-stats">
+      <div class="cc-stat"><span>Jami foydalanuvchilar</span><strong>{{ stats.total_parents }}</strong></div>
+      <div class="cc-stat"><span>Bolani ulagan</span><strong>{{ stats.children_connected }}</strong></div>
+      <div class="cc-stat"><span>Premium foydalanuvchilar</span><strong>{{ stats.premium_users }}</strong></div>
+      <div class="cc-stat"><span>Bloklangan</span><strong>{{ stats.blocked_users }}</strong></div>
+      <div class="cc-stat"><span>Yangi murojaatlar</span><strong>{{ stats.new_tickets }}</strong></div>
+    </div>
+
+    <div class="cc-board">
+      {% for column in columns %}
+      <div class="cc-column">
+        <div class="cc-column-title">
+          <span>{{ column.label }}</span>
+          <span>{{ column.tickets|length }}</span>
+        </div>
+
+        {% for ticket in column.tickets %}
+        <a href="?ticket_id={{ ticket.id }}{% if search %}&q={{ search }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="cc-card {% if selected_ticket and selected_ticket.id == ticket.id %}active{% endif %}">
+          <div class="cc-card-top">
+            <div class="cc-avatar">{{ ticket.parent.full_name|default:ticket.parent.phone|slice:":1" }}</div>
+            <div>
+              <div class="cc-name">{{ ticket.parent.full_name|default:"Nomsiz parent" }}</div>
+              <div class="cc-phone">{{ ticket.parent.phone }}</div>
+            </div>
+          </div>
+          <div class="cc-badges">
+            <div class="{% if ticket.parent.is_active %}cc-green{% else %}cc-red{% endif %}">
+              {% if ticket.parent.is_active %}Aktiv{% else %}Bloklangan{% endif %}
+            </div>
+            <div class="{% if ticket.parent.is_premium %}cc-green{% else %}cc-muted{% endif %}">
+              Premium: {% if ticket.parent.is_premium %}Faol{% else %}Sotib olinmagan{% endif %}
+            </div>
+            <div class="cc-muted">Ro‘yxatdan o‘tgan: {{ ticket.parent.date_joined|date:"d.m.Y" }}</div>
+            <div class="cc-muted">Operator: {{ ticket.operator.full_name|default:ticket.operator.phone|default:"-" }}</div>
+          </div>
+        </a>
+        {% empty %}
+        <div class="cc-muted">Ma’lumot yo‘q</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="cc-side">
+    {% if selected_ticket %}
+    <div class="cc-side-head">
+      <div class="cc-side-avatar">{{ selected_ticket.parent.full_name|default:selected_ticket.parent.phone|slice:":1" }}</div>
+      <div>
+        <h2 style="margin:0;color:#fff;font-size:18px;">{{ selected_ticket.parent.full_name|default:"Nomsiz parent" }}</h2>
+        <div class="cc-phone">{{ selected_ticket.parent.phone }}</div>
+        <div class="{% if selected_ticket.parent.is_active %}cc-green{% else %}cc-red{% endif %}">
+          {% if selected_ticket.parent.is_active %}Jarayonda{% else %}Bloklangan{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="cc-detail-grid">
+      <div class="cc-detail"><span>Telefon</span><strong>{{ selected_ticket.parent.phone }}</strong></div>
+      <div class="cc-detail"><span>Premium</span><strong>{% if selected_ticket.parent.is_premium %}Ha{% else %}Yo‘q{% endif %}</strong></div>
+      <div class="cc-detail"><span>Premium tugashi</span><strong>{{ selected_ticket.parent.premium_expires_at|default:"-" }}</strong></div>
+      <div class="cc-detail"><span>Ro‘yxatdan o‘tgan</span><strong>{{ selected_ticket.parent.date_joined|date:"d.m.Y H:i" }}</strong></div>
+      <div class="cc-detail"><span>Bolalar</span><strong>{{ selected_ticket.parent.children_links.count }}</strong></div>
+      <div class="cc-detail"><span>Oxirgi aloqa</span><strong>{{ selected_ticket.last_contact_at|default:"-" }}</strong></div>
+    </div>
+
+    <form method="post" class="cc-form">
+      {% csrf_token %}
+      <input type="hidden" name="ticket_id" value="{{ selected_ticket.id }}">
+      <textarea name="comment" placeholder="Operator izohi..."></textarea>
+      <select name="new_status">
+        {% for value,label in statuses %}
+        <option value="{{ value }}" {% if selected_ticket.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="cc-btn" name="action" value="change_status" type="submit">Statusni o‘zgartirish</button>
+    </form>
+
+    <h3 style="color:#fff;margin-top:18px;">Izohlar tarixi</h3>
+    {% for comment in selected_ticket.comments.all|slice:":8" %}
+    <div class="cc-comment">
+      <div>{{ comment.comment }}</div>
+      <small>{{ comment.operator.full_name|default:comment.operator.phone|default:"-" }} — {{ comment.created_at|date:"d.m.Y H:i" }}</small>
+    </div>
+    {% empty %}
+    <div class="cc-muted">Izohlar yo‘q</div>
+    {% endfor %}
+
+    <form method="post" class="cc-form" style="margin-top:14px;">
+      {% csrf_token %}
+      <input type="hidden" name="ticket_id" value="{{ selected_ticket.id }}">
+      <textarea name="comment" placeholder="Bloklash yoki blokdan chiqarish izohi..."></textarea>
+      <div class="cc-form-row">
+        <button class="cc-btn cc-btn-red" name="action" value="block_user" type="submit">Bloklash</button>
+        <button class="cc-btn cc-btn-gray" name="action" value="unblock_user" type="submit">Blokdan chiqarish</button>
+      </div>
+    </form>
+    {% else %}
+    <div class="cc-muted">Foydalanuvchi tanlanmagan</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

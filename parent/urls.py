@@ -18,6 +18,8 @@ from .views import (
     ParentChildAppUsageStatsView,
     AppVersionCheckView, ParentHomeSummaryView, ChildDailyActivitySyncView,
     ChildSavedLocationVisitSyncView,ParentSavedLocationEventListView,ParentChildAppAnalyticsView,
+    SubscriptionPlanListView, MySubscriptionView, ActivateSubscriptionView, CancelSubscriptionView,
+    AdminGiveSubscriptionView, 
 )
 
 
@@ -70,4 +72,9 @@ urlpatterns = [
     path("parent/children/<int:child_id>/apps/<int:app_id>/block/", ParentBlockChildAppView.as_view(), name="parent-child-app-block"),
     path("parent/saved-location-events/",ParentSavedLocationEventListView.as_view(),name="parent-saved-location-events"),
     path("parent/children/<int:child_id>/apps/analytics/", ParentChildAppAnalyticsView.as_view(), name="parent-child-app-analytics"),
+    path("subscription/plans/", SubscriptionPlanListView.as_view(), name="subscription-plans"),
+    path("subscription/me/", MySubscriptionView.as_view(), name="my-subscription"),
+    path("subscription/activate/", ActivateSubscriptionView.as_view(), name="subscription-activate"),
+    path("subscription/cancel/", CancelSubscriptionView.as_view(), name="subscription-cancel"),
+    path("admin/subscription/give/", AdminGiveSubscriptionView.as_view(), name="admin-give-subscription"),
 ]

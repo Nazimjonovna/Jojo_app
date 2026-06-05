@@ -38,6 +38,7 @@ SUPPORT_ADMIN_GROUP = 'support_admin'
 
 content_group, _ = Group.objects.get_or_create(name=CONTENT_ADMIN_GROUP)
 support_group, _ = Group.objects.get_or_create(name=SUPPORT_ADMIN_GROUP)
+call_center_group, _ = Group.objects.get_or_create(name='call_center')
 
 
 def create_or_update_user(phone, username, email, password, is_superuser=False, groups=None):
@@ -111,6 +112,15 @@ create_or_update_user(
     password=os.environ.get('DJANGO_SUPPORT_ADMIN_PASSWORD') or 'jojoapp2026',
     is_superuser=False,
     groups=[support_group],
+)
+
+create_or_update_user(
+    phone=os.environ.get('DJANGO_CALL_CENTER_PHONE') or '+998921236547',
+    username=os.environ.get('DJANGO_CALL_CENTER_USERNAME') or 'CallCenterAdmin',
+    email=os.environ.get('DJANGO_CALL_CENTER_EMAIL') or 'callcenter@example.com',
+    password=os.environ.get('DJANGO_CALL_CENTER_PASSWORD') or 'jojoapp2026',
+    is_superuser=False,
+    groups=[call_center_group],
 )
 
 print('Admin users check finished.')

@@ -39,6 +39,9 @@ from .models import (
     ChildDailyActivity,
     SavedLocationVisit,
     ChildSavedLocationEvent,
+    SubscriptionPlan, 
+    UserSubscription, 
+    SubscriptionPayment,
 )
 from .serializers import (
     SendOTPSerializer,
@@ -81,8 +84,19 @@ from .serializers import (
     ChildDailyActivitySyncSerializer,
     SavedLocationVisitSerializer,
     ChildSavedLocationEventSerializer,
+    SubscriptionPlanSerializer,
+    UserSubscriptionSerializer,
+    SubscriptionPaymentSerializer,
+    ActivateSubscriptionSerializer,
+    AdminGiveSubscriptionSerializer,
 )
-from .services import process_child_location
+from .services import (process_child_location, )
+from .subscription import (
+    give_free_trial_if_new_user,
+    sync_user_premium_status,
+    activate_paid_subscription,
+    get_paid_plans,
+)
 
 
 def get_tokens_for_user(user):
@@ -294,6 +308,7 @@ class ParentRegisterView(APIView):
                 return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
             return Response({"status": True, "is_registered": True, "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.", "user": UserSerializer(existing_user).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(existing_user)}, status=status.HTTP_200_OK)
         user = serializer.save()
+        give_free_trial_if_new_user(user, days=14)
         device_result = save_user_device(user, device_id, token, device_type)
         if device_result.get("error"):
             user.delete()
@@ -1214,6 +1229,213 @@ class ParentChildAppAnalyticsView(APIView):
                 },
                 "daily_stats": daily_stats,
                 "apps_stats": apps_stats,
+            },
+            status=status.HTTP_200_OK
+        )
+        
+        
+class SubscriptionPlanListView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(tags=["subscription"])
+    def get(self, request):
+        plans = get_paid_plans()
+
+        return Response(
+            {
+                "status": True,
+                "plans": SubscriptionPlanSerializer(plans, many=True).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class MySubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["subscription"])
+    def get(self, request):
+        active_subscription = sync_user_premium_status(request.user)
+        paid_plans = get_paid_plans()
+
+        should_choose_paid_plan = not request.user.has_active_premium()
+
+        return Response(
+            {
+                "status": True,
+                "is_premium": request.user.has_active_premium(),
+                "premium_expires_at": request.user.premium_expires_at,
+                "active_subscription": UserSubscriptionSerializer(active_subscription).data if active_subscription else None,
+                "should_choose_paid_plan": should_choose_paid_plan,
+                "message": "Free trial tugagan. Pullik tarifni tanlang." if should_choose_paid_plan else None,
+                "tariffs": SubscriptionPlanSerializer(paid_plans, many=True).data if should_choose_paid_plan else [],
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class ActivateSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=ActivateSubscriptionSerializer, tags=["subscription"])
+    def post(self, request):
+        serializer = ActivateSubscriptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan = SubscriptionPlan.objects.filter(
+            id=serializer.validated_data["plan_id"],
+            is_active=True,
+            is_trial=False,
+        ).first()
+
+        if not plan:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Pullik tarif topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        subscription = activate_paid_subscription(
+            user=request.user,
+            plan=plan,
+            source=UserSubscription.SOURCE_PAYMENT,
+        )
+
+        payment = SubscriptionPayment.objects.create(
+            user=request.user,
+            plan=plan,
+            subscription=subscription,
+            amount=plan.price,
+            currency=plan.currency,
+            provider="manual_test",
+            status=SubscriptionPayment.STATUS_PAID,
+            paid_at=timezone.now(),
+            raw_payload={
+                "source": "manual_test_activate_endpoint"
+            },
+        )
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Subscription aktiv qilindi.",
+                "subscription": UserSubscriptionSerializer(subscription).data,
+                "payment": SubscriptionPaymentSerializer(payment).data,
+                "user": UserSerializer(request.user).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AdminGiveSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(request_body=AdminGiveSubscriptionSerializer, tags=["subscription"])
+    def post(self, request):
+        if not request.user.is_superuser:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Faqat superuser subscription bera oladi."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = AdminGiveSubscriptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_id = serializer.validated_data.get("user_id")
+        phone = serializer.validated_data.get("phone")
+        days = serializer.validated_data["days"]
+
+        target_user = None
+
+        if user_id:
+            target_user = User.objects.filter(id=user_id).first()
+
+        if not target_user and phone:
+            target_user = User.objects.filter(phone=phone).first()
+
+        if not target_user:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "User topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        now = timezone.now()
+        active_subscription = sync_user_premium_status(target_user)
+        start_date = active_subscription.expires_at if active_subscription else now
+        expires_at = start_date + timedelta(days=days)
+
+        subscription = UserSubscription.objects.create(
+            user=target_user,
+            plan=None,
+            status=UserSubscription.STATUS_ACTIVE,
+            source=UserSubscription.SOURCE_ADMIN,
+            started_at=start_date,
+            expires_at=expires_at,
+            created_by=request.user,
+        )
+
+        target_user.is_premium = True
+        target_user.premium_expires_at = expires_at
+        target_user.save(update_fields=["is_premium", "premium_expires_at"])
+
+        return Response(
+            {
+                "status": True,
+                "detail": f"{days} kunlik premium berildi.",
+                "subscription": UserSubscriptionSerializer(subscription).data,
+                "user": UserSerializer(target_user).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+class CancelSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["subscription"])
+    def post(self, request):
+        subscription = UserSubscription.objects.filter(
+            user=request.user,
+            status__in=[
+                UserSubscription.STATUS_TRIAL,
+                UserSubscription.STATUS_ACTIVE,
+            ],
+            expires_at__gt=timezone.now(),
+        ).order_by("-expires_at").first()
+
+        if not subscription:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Aktiv subscription topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        subscription.status = UserSubscription.STATUS_CANCELLED
+        subscription.cancelled_at = timezone.now()
+        subscription.save(update_fields=["status", "cancelled_at", "updated_at"])
+
+        active_subscription = sync_user_premium_status(request.user)
+        paid_plans = get_paid_plans()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Subscription bekor qilindi.",
+                "is_premium": request.user.has_active_premium(),
+                "active_subscription": UserSubscriptionSerializer(active_subscription).data if active_subscription else None,
+                "should_choose_paid_plan": not request.user.has_active_premium(),
+                "tariffs": SubscriptionPlanSerializer(paid_plans, many=True).data if not request.user.has_active_premium() else [],
+                "user": UserSerializer(request.user).data,
             },
             status=status.HTTP_200_OK
         )
