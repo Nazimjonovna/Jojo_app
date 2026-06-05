@@ -7,7 +7,13 @@ from django.shortcuts import redirect, render
 from django.urls import path
 from django.utils import timezone
 from django.db.models import Count, Q
-
+from django.contrib import admin, messages
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.urls import path
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+from django.db.models import Q
 from .models import (
     User,
     OTPCode,
@@ -119,6 +125,9 @@ def user_in_group(user, group_name):
 
 def user_in_group(user, group_name):
     return group_name in user_group_names(user)
+
+def is_call_center_user(user):
+    return user.is_superuser or user_in_group(user, CALL_CENTER_GROUP)
 
 
 class RoleBasedAdminMixin:
@@ -1349,3 +1358,410 @@ def get_call_center_urls():
 
 
 admin.site.get_urls = get_call_center_urls
+
+
+def ensure_parent_tickets():
+    parents = User.objects.filter(
+        role=User.ROLE_PARENT
+    ).only(
+        "id",
+        "phone",
+        "full_name",
+        "username",
+        "role",
+    )
+
+    existing_parent_ids = set(
+        CallCenterTicket.objects.filter(
+            parent__role=User.ROLE_PARENT
+        ).values_list("parent_id", flat=True)
+    )
+
+    new_tickets = []
+
+    for parent in parents:
+        if parent.id not in existing_parent_ids:
+            new_tickets.append(
+                CallCenterTicket(
+                    parent=parent,
+                    title="Foydalanuvchi nazorati",
+                    status=CallCenterTicket.STATUS_NEW,
+                )
+            )
+
+    if new_tickets:
+        CallCenterTicket.objects.bulk_create(new_tickets)
+
+
+def call_center_dashboard_view(request):
+    if not is_call_center_user(request.user):
+        messages.error(request, "Call Center dashboard uchun ruxsat yo‘q.")
+        return redirect("/admin/")
+
+    ensure_parent_tickets()
+
+    search = request.GET.get("q", "").strip()
+    selected_ticket_id = request.GET.get("ticket_id")
+    status_filter = request.GET.get("status")
+
+    tickets = CallCenterTicket.objects.filter(
+        parent__role=User.ROLE_PARENT
+    ).select_related(
+        "parent",
+        "operator",
+    ).prefetch_related(
+        "comments",
+        "parent__children_links",
+    )
+
+    if search:
+        tickets = tickets.filter(
+            Q(parent__phone__icontains=search)
+            | Q(parent__full_name__icontains=search)
+            | Q(parent__username__icontains=search)
+        )
+
+    if status_filter:
+        tickets = tickets.filter(status=status_filter)
+
+    tickets = tickets.order_by("-updated_at")
+
+    selected_ticket = None
+
+    if selected_ticket_id:
+        selected_ticket = tickets.filter(id=selected_ticket_id).first()
+
+    if not selected_ticket:
+        selected_ticket = tickets.first()
+
+    stats = {
+        "total_parents": User.objects.filter(role=User.ROLE_PARENT).count(),
+        "children_connected": User.objects.filter(
+            role=User.ROLE_CHILD,
+            child_status=User.CHILD_STATUS_ACTIVE,
+        ).count(),
+        "premium_users": User.objects.filter(
+            role=User.ROLE_PARENT,
+            is_premium=True,
+        ).count(),
+        "blocked_users": User.objects.filter(
+            role=User.ROLE_PARENT,
+            is_active=False,
+        ).count(),
+        "new_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_NEW).count(),
+        "in_progress_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_IN_PROGRESS).count(),
+        "waiting_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_WAITING).count(),
+        "resolved_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_RESOLVED).count(),
+        "closed_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_CLOSED).count(),
+        "blocked_tickets": CallCenterTicket.objects.filter(status=CallCenterTicket.STATUS_BLOCKED).count(),
+    }
+
+    columns = [
+        {
+            "key": CallCenterTicket.STATUS_NEW,
+            "label": "Yangi",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_NEW)[:100],
+        },
+        {
+            "key": CallCenterTicket.STATUS_IN_PROGRESS,
+            "label": "Jarayonda",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_IN_PROGRESS)[:100],
+        },
+        {
+            "key": CallCenterTicket.STATUS_WAITING,
+            "label": "Kutilmoqda",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_WAITING)[:100],
+        },
+        {
+            "key": CallCenterTicket.STATUS_RESOLVED,
+            "label": "Hal qilingan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_RESOLVED)[:100],
+        },
+        {
+            "key": CallCenterTicket.STATUS_CLOSED,
+            "label": "Yopilgan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_CLOSED)[:100],
+        },
+        {
+            "key": CallCenterTicket.STATUS_BLOCKED,
+            "label": "Bloklangan",
+            "tickets": tickets.filter(status=CallCenterTicket.STATUS_BLOCKED)[:100],
+        },
+    ]
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Call Center",
+        "stats": stats,
+        "columns": columns,
+        "selected_ticket": selected_ticket,
+        "statuses": CallCenterTicket.STATUS_CHOICES,
+        "search": search,
+        "status_filter": status_filter,
+    }
+
+    return render(request, "admin/call_center_dashboard.html", context)
+
+
+@require_POST
+def call_center_update_status_view(request):
+    if not is_call_center_user(request.user):
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ruxsat yo‘q.",
+            },
+            status=403,
+        )
+
+    ticket_id = request.POST.get("ticket_id")
+    new_status = request.POST.get("new_status")
+    comment = request.POST.get("comment", "").strip()
+
+    ticket = CallCenterTicket.objects.filter(
+        id=ticket_id
+    ).select_related(
+        "parent"
+    ).first()
+
+    if not ticket:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ticket topilmadi.",
+            },
+            status=404,
+        )
+
+    allowed_statuses = [
+        item[0]
+        for item in CallCenterTicket.STATUS_CHOICES
+    ]
+
+    if new_status not in allowed_statuses:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Status noto‘g‘ri.",
+            },
+            status=400,
+        )
+
+    old_status = ticket.status
+
+    ticket.status = new_status
+    ticket.operator = request.user
+    ticket.last_contact_at = timezone.now()
+
+    if new_status in [
+        CallCenterTicket.STATUS_RESOLVED,
+        CallCenterTicket.STATUS_CLOSED,
+    ]:
+        ticket.closed_at = timezone.now()
+
+    if new_status == CallCenterTicket.STATUS_BLOCKED:
+        ticket.parent.is_active = False
+        ticket.parent.save(update_fields=["is_active"])
+
+    ticket.save(
+        update_fields=[
+            "status",
+            "operator",
+            "last_contact_at",
+            "closed_at",
+            "updated_at",
+        ]
+    )
+
+    CallCenterComment.objects.create(
+        ticket=ticket,
+        operator=request.user,
+        comment=comment or f"Status {old_status} dan {new_status} ga o‘zgartirildi.",
+        old_status=old_status,
+        new_status=new_status,
+    )
+
+    return JsonResponse(
+        {
+            "status": True,
+            "detail": "Status o‘zgartirildi.",
+            "ticket_id": ticket.id,
+            "old_status": old_status,
+            "new_status": new_status,
+        }
+    )
+
+
+@require_POST
+def call_center_add_comment_view(request):
+    if not is_call_center_user(request.user):
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ruxsat yo‘q.",
+            },
+            status=403,
+        )
+
+    ticket_id = request.POST.get("ticket_id")
+    comment = request.POST.get("comment", "").strip()
+
+    if not comment:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Izoh bo‘sh bo‘lmasligi kerak.",
+            },
+            status=400,
+        )
+
+    ticket = CallCenterTicket.objects.filter(id=ticket_id).first()
+
+    if not ticket:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ticket topilmadi.",
+            },
+            status=404,
+        )
+
+    ticket.operator = request.user
+    ticket.last_contact_at = timezone.now()
+    ticket.save(update_fields=["operator", "last_contact_at", "updated_at"])
+
+    created_comment = CallCenterComment.objects.create(
+        ticket=ticket,
+        operator=request.user,
+        comment=comment,
+        old_status=ticket.status,
+        new_status=ticket.status,
+    )
+
+    return JsonResponse(
+        {
+            "status": True,
+            "detail": "Izoh qo‘shildi.",
+            "comment": {
+                "id": created_comment.id,
+                "comment": created_comment.comment,
+                "operator": request.user.full_name or request.user.phone,
+                "created_at": created_comment.created_at.strftime("%d.%m.%Y %H:%M"),
+            },
+        }
+    )
+
+
+@require_POST
+def call_center_toggle_block_view(request):
+    if not is_call_center_user(request.user):
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ruxsat yo‘q.",
+            },
+            status=403,
+        )
+
+    ticket_id = request.POST.get("ticket_id")
+    action = request.POST.get("action")
+    comment = request.POST.get("comment", "").strip()
+
+    ticket = CallCenterTicket.objects.filter(
+        id=ticket_id
+    ).select_related(
+        "parent"
+    ).first()
+
+    if not ticket:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Ticket topilmadi.",
+            },
+            status=404,
+        )
+
+    old_status = ticket.status
+
+    if action == "block":
+        ticket.parent.is_active = False
+        ticket.parent.save(update_fields=["is_active"])
+        ticket.status = CallCenterTicket.STATUS_BLOCKED
+        new_status = CallCenterTicket.STATUS_BLOCKED
+        text = comment or "Foydalanuvchi bloklandi."
+
+    elif action == "unblock":
+        ticket.parent.is_active = True
+        ticket.parent.save(update_fields=["is_active"])
+        ticket.status = CallCenterTicket.STATUS_IN_PROGRESS
+        new_status = CallCenterTicket.STATUS_IN_PROGRESS
+        text = comment or "Foydalanuvchi blokdan chiqarildi."
+
+    else:
+        return JsonResponse(
+            {
+                "status": False,
+                "detail": "Action noto‘g‘ri.",
+            },
+            status=400,
+        )
+
+    ticket.operator = request.user
+    ticket.last_contact_at = timezone.now()
+    ticket.save(update_fields=["status", "operator", "last_contact_at", "updated_at"])
+
+    CallCenterComment.objects.create(
+        ticket=ticket,
+        operator=request.user,
+        comment=text,
+        old_status=old_status,
+        new_status=new_status,
+    )
+
+    return JsonResponse(
+        {
+            "status": True,
+            "detail": text,
+            "ticket_id": ticket.id,
+            "new_status": new_status,
+            "is_active": ticket.parent.is_active,
+        }
+    )
+
+
+_original_admin_get_urls = admin.site.get_urls
+
+
+def get_call_center_urls():
+    urls = _original_admin_get_urls()
+
+    custom_urls = [
+        path(
+            "call-center/",
+            admin.site.admin_view(call_center_dashboard_view),
+            name="call-center-dashboard",
+        ),
+        path(
+            "call-center/update-status/",
+            admin.site.admin_view(call_center_update_status_view),
+            name="call-center-update-status",
+        ),
+        path(
+            "call-center/add-comment/",
+            admin.site.admin_view(call_center_add_comment_view),
+            name="call-center-add-comment",
+        ),
+        path(
+            "call-center/toggle-block/",
+            admin.site.admin_view(call_center_toggle_block_view),
+            name="call-center-toggle-block",
+        ),
+    ]
+
+    return custom_urls + urls
+
+
+if not getattr(admin.site, "_call_center_urls_patched", False):
+    admin.site.get_urls = get_call_center_urls
+    admin.site._call_center_urls_patched = True
