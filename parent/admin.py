@@ -27,6 +27,8 @@ from .models import (
     ChildAppLimit,
     ChildBlockedApp,
     ChildAppUsage,
+    ChildSavedLocationState,
+    ChildSavedLocationEvent,
 )
 
 
@@ -578,7 +580,9 @@ class ShopItemAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "id",
         "title",
         "category",
+        "old_price_points",
         "price_points",
+        "discount_percent_display",
         "stock",
         "age_min",
         "age_max",
@@ -597,6 +601,11 @@ class ShopItemAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "description",
     )
     ordering = ("order", "-created_at")
+
+    def discount_percent_display(self, obj):
+        return f"{obj.discount_percent()}%"
+
+    discount_percent_display.short_description = "Discount"
 
 
 @admin.register(ChildWallet)
@@ -807,5 +816,65 @@ class ChildAppUsageAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "last_opened_at",
         "open_count",
         "updated_at",
+        "created_at",
+    )
+    
+
+@admin.register(ChildSavedLocationState)
+class ChildSavedLocationStateAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "current_location",
+        "previous_location",
+        "last_event_type",
+        "last_event_at",
+        "updated_at",
+    )
+    search_fields = (
+        "child__phone",
+        "child__full_name",
+        "current_location__name",
+        "previous_location__name",
+    )
+    readonly_fields = (
+        "child",
+        "current_location",
+        "previous_location",
+        "last_event_type",
+        "last_event_at",
+        "updated_at",
+    )
+
+
+@admin.register(ChildSavedLocationEvent)
+class ChildSavedLocationEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "parent",
+        "saved_location",
+        "event_type",
+        "created_at",
+    )
+    list_filter = (
+        "event_type",
+        "created_at",
+    )
+    search_fields = (
+        "child__phone",
+        "child__full_name",
+        "parent__phone",
+        "saved_location__name",
+    )
+    readonly_fields = (
+        "child",
+        "parent",
+        "saved_location",
+        "event_type",
+        "title",
+        "body",
+        "latitude",
+        "longitude",
         "created_at",
     )

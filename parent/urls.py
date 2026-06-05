@@ -17,7 +17,7 @@ from .views import (
     ParentChildAppListView, ParentSetChildAppLimitView, ParentBlockChildAppView,
     ParentChildAppUsageStatsView,
     AppVersionCheckView, ParentHomeSummaryView, ChildDailyActivitySyncView,
-    ChildSavedLocationVisitSyncView,
+    ChildSavedLocationVisitSyncView,ParentSavedLocationEventListView,ParentChildAppAnalyticsView,
 )
 
 
@@ -68,4 +68,6 @@ urlpatterns = [
     path("parent/children/<int:child_id>/apps/usage/", ParentChildAppUsageStatsView.as_view(), name="parent-child-app-usage"),
     path("parent/children/<int:child_id>/apps/<int:app_id>/limit/", ParentSetChildAppLimitView.as_view(), name="parent-child-app-limit"),
     path("parent/children/<int:child_id>/apps/<int:app_id>/block/", ParentBlockChildAppView.as_view(), name="parent-child-app-block"),
+    path("parent/saved-location-events/",ParentSavedLocationEventListView.as_view(),name="parent-saved-location-events"),
+    path("parent/children/<int:child_id>/apps/analytics/", ParentChildAppAnalyticsView.as_view(), name="parent-child-app-analytics"),
 ]

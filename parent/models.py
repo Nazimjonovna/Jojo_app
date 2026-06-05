@@ -679,6 +679,11 @@ class ShopItem(models.Model):
 
     price_points = models.PositiveIntegerField(default=0)
 
+    old_price_points = models.PositiveIntegerField(
+        null=True,
+        blank=True
+    )
+
     stock = models.PositiveIntegerField(
         null=True,
         blank=True
@@ -697,6 +702,20 @@ class ShopItem(models.Model):
 
     class Meta:
         ordering = ["order", "-created_at"]
+
+    def has_discount(self):
+        return (
+            self.old_price_points is not None
+            and self.old_price_points > self.price_points
+            and self.price_points >= 0
+        )
+
+    def discount_percent(self):
+        if not self.has_discount():
+            return 0
+        return round(
+            ((self.old_price_points - self.price_points) / self.old_price_points) * 100
+        )
 
     def __str__(self):
         return self.title
@@ -1094,3 +1113,105 @@ class SavedLocationVisit(models.Model):
 
     def __str__(self):
         return f"{self.child_id} - {self.saved_location_id} - {self.visit_count}"
+    
+    
+class ChildSavedLocationState(models.Model):
+    child = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="saved_location_state"
+    )
+
+    current_location = models.ForeignKey(
+        SavedLocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="current_children"
+    )
+
+    previous_location = models.ForeignKey(
+        SavedLocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="previous_children"
+    )
+
+    last_event_type = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True
+    )
+
+    last_event_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.child_id} current={self.current_location_id}"
+
+
+class ChildSavedLocationEvent(models.Model):
+    EVENT_ENTER = "enter"
+    EVENT_EXIT = "exit"
+    EVENT_MOVING_HOME_TO_SCHOOL = "moving_home_to_school"
+    EVENT_MOVING_SCHOOL_TO_HOME = "moving_school_to_home"
+
+    EVENT_CHOICES = (
+        (EVENT_ENTER, "Enter"),
+        (EVENT_EXIT, "Exit"),
+        (EVENT_MOVING_HOME_TO_SCHOOL, "Moving home to school"),
+        (EVENT_MOVING_SCHOOL_TO_HOME, "Moving school to home"),
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="saved_location_events"
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="child_saved_location_events"
+    )
+
+    saved_location = models.ForeignKey(
+        SavedLocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events"
+    )
+
+    event_type = models.CharField(
+        max_length=50,
+        choices=EVENT_CHOICES
+    )
+
+    title = models.CharField(max_length=150)
+    body = models.TextField()
+
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.child_id} - {self.event_type}"

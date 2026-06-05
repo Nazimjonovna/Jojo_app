@@ -1,5 +1,5 @@
 from datetime import timedelta
-
+import math
 from django.utils import timezone
 
 from .firebase import send_fcm_multicast
@@ -8,7 +8,11 @@ from .models import (
     ChildLastLocation,
     ChildRouteAssignment,
     RouteAlert,
+    ParentChild,
     DeviceToken,
+    SavedLocation,
+    ChildSavedLocationState,
+    ChildSavedLocationEvent,
 )
 from .realtime import broadcast_child_location, broadcast_route_alert
 from .utils import nearest_route_point_distance
@@ -233,6 +237,11 @@ def process_child_location(
         longitude=longitude,
         location=location,
     )
+    
+    saved_location_events = process_saved_location_events(
+    child=child,
+    location=location,
+    )
 
     payload = broadcast_child_location(
         child=child,
@@ -243,7 +252,17 @@ def process_child_location(
     if isinstance(payload, dict):
         payload["location"] = build_location_payload(location)
         payload["route_statuses"] = route_statuses
-
+        payload["saved_location_events"] = [
+            {
+                "id": event.id,
+                "event_type": event.event_type,
+                "title": event.title,
+                "body": event.body,
+                "saved_location_id": event.saved_location_id,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in saved_location_events
+        ]
         payload["child"] = {
             "id": child.id,
             "phone": child.phone,
@@ -254,3 +273,295 @@ def process_child_location(
         }
 
     return location, payload
+
+
+def calculate_distance_meters(lat1, lon1, lat2, lon2):
+    radius = 6371000
+
+    phi1 = math.radians(float(lat1))
+    phi2 = math.radians(float(lat2))
+
+    delta_phi = math.radians(float(lat2) - float(lat1))
+    delta_lambda = math.radians(float(lon2) - float(lon1))
+
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return radius * c
+
+
+def get_child_parent(child):
+    link = ParentChild.objects.filter(
+        child=child
+    ).select_related("parent").first()
+
+    if not link:
+        return None
+
+    return link.parent
+
+
+def find_current_saved_location(child, latitude, longitude):
+    parent = get_child_parent(child)
+
+    if not parent:
+        return None
+
+    saved_locations = SavedLocation.objects.filter(
+        parent=parent,
+        is_active=True,
+    )
+
+    matched_location = None
+    matched_distance = None
+
+    for saved_location in saved_locations:
+        distance = calculate_distance_meters(
+            lat1=latitude,
+            lon1=longitude,
+            lat2=saved_location.latitude,
+            lon2=saved_location.longitude,
+        )
+
+        if distance <= saved_location.radius_meters:
+            if matched_distance is None or distance < matched_distance:
+                matched_location = saved_location
+                matched_distance = distance
+
+    return matched_location
+
+
+def should_send_saved_location_event(state, event_type):
+    if not state.last_event_at:
+        return True
+
+    if state.last_event_type != event_type:
+        return True
+
+    # bir xil eventni 10 minut ichida qayta yubormaymiz
+    return timezone.now() - state.last_event_at > timedelta(minutes=10)
+
+
+def build_saved_location_message(child, event_type, saved_location=None, previous_location=None):
+    child_name = child.full_name or child.first_name or "Farzandingiz"
+
+    if event_type == ChildSavedLocationEvent.EVENT_ENTER:
+        return (
+            "Jojo",
+            f"{child_name} {saved_location.name} hududiga kirdi."
+        )
+
+    if event_type == ChildSavedLocationEvent.EVENT_EXIT:
+        return (
+            "Jojo",
+            f"{child_name} {previous_location.name} hududidan chiqdi."
+        )
+
+    if event_type == ChildSavedLocationEvent.EVENT_MOVING_HOME_TO_SCHOOL:
+        return (
+            "Jojo",
+            f"{child_name} uydan chiqib maktab tomonga ketayapti."
+        )
+
+    if event_type == ChildSavedLocationEvent.EVENT_MOVING_SCHOOL_TO_HOME:
+        return (
+            "Jojo",
+            f"{child_name} maktabdan chiqib uy tomonga ketayapti."
+        )
+
+    return (
+        "Jojo",
+        f"{child_name} joylashuvi o‘zgardi."
+    )
+
+
+def send_saved_location_notification(parent, child, event, location):
+    tokens = DeviceToken.objects.filter(
+        user=parent,
+        is_active=True
+    ).values_list("token", flat=True)
+
+    tokens = list(tokens)
+
+    payload = {
+        "type": "saved_location_event",
+        "event_id": event.id,
+        "event_type": event.event_type,
+        "child_id": child.id,
+        "child_name": child.full_name or child.first_name or "",
+        "saved_location_id": event.saved_location_id,
+        "latitude": float(location.latitude),
+        "longitude": float(location.longitude),
+        "created_at": event.created_at.isoformat(),
+    }
+
+    if tokens:
+        try:
+            send_fcm_multicast(
+                tokens=tokens,
+                title=event.title,
+                body=event.body,
+                data=payload,
+            )
+        except Exception:
+            pass
+        
+def process_saved_location_events(child, location):
+    parent = get_child_parent(child)
+
+    if not parent:
+        return []
+
+    current_location = find_current_saved_location(
+        child=child,
+        latitude=location.latitude,
+        longitude=location.longitude,
+    )
+
+    state, _ = ChildSavedLocationState.objects.get_or_create(
+        child=child
+    )
+
+    previous_location = state.current_location
+
+    if previous_location_id_equals(previous_location, current_location):
+        return []
+
+    created_events = []
+
+    # Oldingi saved locationdan chiqdi
+    if previous_location and not current_location:
+        event_type = ChildSavedLocationEvent.EVENT_EXIT
+
+        if should_send_saved_location_event(state, event_type):
+            title, body = build_saved_location_message(
+                child=child,
+                event_type=event_type,
+                previous_location=previous_location,
+            )
+
+            event = ChildSavedLocationEvent.objects.create(
+                child=child,
+                parent=parent,
+                saved_location=previous_location,
+                event_type=event_type,
+                title=title,
+                body=body,
+                latitude=location.latitude,
+                longitude=location.longitude,
+            )
+
+            send_saved_location_notification(parent, child, event, location)
+            created_events.append(event)
+
+    # Yangi saved locationga kirdi
+    if current_location and not previous_location:
+        event_type = ChildSavedLocationEvent.EVENT_ENTER
+
+        if should_send_saved_location_event(state, event_type):
+            title, body = build_saved_location_message(
+                child=child,
+                event_type=event_type,
+                saved_location=current_location,
+            )
+
+            event = ChildSavedLocationEvent.objects.create(
+                child=child,
+                parent=parent,
+                saved_location=current_location,
+                event_type=event_type,
+                title=title,
+                body=body,
+                latitude=location.latitude,
+                longitude=location.longitude,
+            )
+
+            send_saved_location_notification(parent, child, event, location)
+            created_events.append(event)
+
+    # Home -> School mantiqi
+    if previous_location and current_location:
+        if (
+            previous_location.location_type == SavedLocation.LOCATION_HOME
+            and current_location.location_type == SavedLocation.LOCATION_SCHOOL
+        ):
+            event_type = ChildSavedLocationEvent.EVENT_MOVING_HOME_TO_SCHOOL
+
+            if should_send_saved_location_event(state, event_type):
+                title, body = build_saved_location_message(
+                    child=child,
+                    event_type=event_type,
+                    saved_location=current_location,
+                    previous_location=previous_location,
+                )
+
+                event = ChildSavedLocationEvent.objects.create(
+                    child=child,
+                    parent=parent,
+                    saved_location=current_location,
+                    event_type=event_type,
+                    title=title,
+                    body=body,
+                    latitude=location.latitude,
+                    longitude=location.longitude,
+                )
+
+                send_saved_location_notification(parent, child, event, location)
+                created_events.append(event)
+
+        if (
+            previous_location.location_type == SavedLocation.LOCATION_SCHOOL
+            and current_location.location_type == SavedLocation.LOCATION_HOME
+        ):
+            event_type = ChildSavedLocationEvent.EVENT_MOVING_SCHOOL_TO_HOME
+
+            if should_send_saved_location_event(state, event_type):
+                title, body = build_saved_location_message(
+                    child=child,
+                    event_type=event_type,
+                    saved_location=current_location,
+                    previous_location=previous_location,
+                )
+
+                event = ChildSavedLocationEvent.objects.create(
+                    child=child,
+                    parent=parent,
+                    saved_location=current_location,
+                    event_type=event_type,
+                    title=title,
+                    body=body,
+                    latitude=location.latitude,
+                    longitude=location.longitude,
+                )
+
+                send_saved_location_notification(parent, child, event, location)
+                created_events.append(event)
+
+    state.previous_location = previous_location
+    state.current_location = current_location
+
+    if created_events:
+        state.last_event_type = created_events[-1].event_type
+        state.last_event_at = timezone.now()
+
+    state.save(
+        update_fields=[
+            "previous_location",
+            "current_location",
+            "last_event_type",
+            "last_event_at",
+            "updated_at",
+        ]
+    )
+
+    return created_events
+
+
+def previous_location_id_equals(previous_location, current_location):
+    previous_id = previous_location.id if previous_location else None
+    current_id = current_location.id if current_location else None
+    return previous_id == current_id

@@ -27,6 +27,7 @@ from .models import (
     AppVersion,
     ChildDailyActivity,
     SavedLocationVisit,
+    ChildSavedLocationEvent,
 )
 
 
@@ -701,6 +702,8 @@ class ShopCategorySerializer(serializers.ModelSerializer):
 
 class ShopItemSerializer(serializers.ModelSerializer):
     category = ShopCategorySerializer(read_only=True)
+    has_discount = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopItem
@@ -711,6 +714,9 @@ class ShopItemSerializer(serializers.ModelSerializer):
             "description",
             "image",
             "price_points",
+            "old_price_points",
+            "has_discount",
+            "discount_percent",
             "stock",
             "age_min",
             "age_max",
@@ -720,6 +726,33 @@ class ShopItemSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_has_discount(self, obj):
+        return obj.has_discount()
+
+    def get_discount_percent(self, obj):
+        return obj.discount_percent()
+
+    def validate(self, attrs):
+        price_points = attrs.get(
+            "price_points",
+            getattr(self.instance, "price_points", None)
+        )
+
+        old_price_points = attrs.get(
+            "old_price_points",
+            getattr(self.instance, "old_price_points", None)
+        )
+
+        if old_price_points is not None and price_points is not None:
+            if old_price_points <= price_points:
+                raise serializers.ValidationError(
+                    {
+                        "old_price_points": "Eski narx hozirgi narxdan katta bo‘lishi kerak. Aks holda discount chiqmaydi."
+                    }
+                )
+
+        return attrs
 
 
 class ChildWalletSerializer(serializers.ModelSerializer):
@@ -1225,4 +1258,23 @@ class ChildBlockedAppSerializer(serializers.ModelSerializer):
             "reason",
             "created_at",
             "updated_at",
+        ]
+        
+        
+class ChildSavedLocationEventSerializer(serializers.ModelSerializer):
+    saved_location = SavedLocationSerializer(read_only=True)
+    child = ChildSerializer(read_only=True)
+
+    class Meta:
+        model = ChildSavedLocationEvent
+        fields = [
+            "id",
+            "child",
+            "saved_location",
+            "event_type",
+            "title",
+            "body",
+            "latitude",
+            "longitude",
+            "created_at",
         ]

@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
+from django.db.models import Sum
 from .pagination import paginate_queryset
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -37,6 +38,7 @@ from .models import (
     AppVersion,
     ChildDailyActivity,
     SavedLocationVisit,
+    ChildSavedLocationEvent,
 )
 from .serializers import (
     SendOTPSerializer,
@@ -78,6 +80,7 @@ from .serializers import (
     ChildDailyActivitySerializer,
     ChildDailyActivitySyncSerializer,
     SavedLocationVisitSerializer,
+    ChildSavedLocationEventSerializer,
 )
 from .services import process_child_location
 
@@ -1046,3 +1049,171 @@ class ChildSavedLocationVisitSyncView(APIView):
         visit.last_visited_at = timezone.now()
         visit.save(update_fields=["visit_count", "last_visited_at", "updated_at"])
         return Response({"status": True, "detail": "Saved location visit saqlandi.", "visit": SavedLocationVisitSerializer(visit).data}, status=status.HTTP_200_OK)
+
+
+class ParentSavedLocationEventListView(APIView):
+    permission_classes = [IsParent]
+
+    def get(self, request):
+        child_id = request.query_params.get("child_id")
+        event_type = request.query_params.get("event_type")
+        date = request.query_params.get("date")
+
+        events = ChildSavedLocationEvent.objects.filter(
+            parent=request.user
+        ).select_related(
+            "child",
+            "saved_location",
+        ).order_by("-created_at")
+
+        if child_id:
+            events = events.filter(child_id=child_id)
+
+        if event_type:
+            events = events.filter(event_type=event_type)
+
+        if date:
+            parsed_date = parse_date(date)
+            if parsed_date:
+                events = events.filter(created_at__date=parsed_date)
+
+        return paginate_queryset(
+            request=request,
+            queryset=events,
+            serializer_class=ChildSavedLocationEventSerializer,
+            page_size=20,
+        )
+        
+        
+class ParentChildAppAnalyticsView(APIView):
+    permission_classes = [IsParentOfChild]
+
+    @swagger_auto_schema(tags=["app-control"])
+    def get(self, request, child_id):
+        period = request.query_params.get("period", "week")
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+
+        today = timezone.localdate()
+
+        if date_from:
+            parsed_from = parse_date(date_from)
+        else:
+            parsed_from = today - timedelta(days=6)
+
+        if date_to:
+            parsed_to = parse_date(date_to)
+        else:
+            parsed_to = today
+
+        if not parsed_from or not parsed_to:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "date_from yoki date_to noto‘g‘ri formatda. Format: YYYY-MM-DD"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_days = 90
+        if (parsed_to - parsed_from).days > max_days:
+            return Response(
+                {
+                    "status": False,
+                    "detail": f"Maksimal oraliq {max_days} kun bo‘lishi mumkin."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        usages = ChildAppUsage.objects.filter(
+            child_id=child_id,
+            usage_date__gte=parsed_from,
+            usage_date__lte=parsed_to,
+        ).select_related("app")
+
+        total_usage_seconds = usages.aggregate(
+            total=Sum("total_usage_seconds")
+        )["total"] or 0
+
+        daily_rows = usages.values(
+            "usage_date"
+        ).annotate(
+            total_usage_seconds=Sum("total_usage_seconds"),
+            total_open_count=Sum("open_count"),
+        ).order_by("usage_date")
+
+        daily_stats = []
+
+        current_date = parsed_from
+        daily_map = {
+            row["usage_date"]: row
+            for row in daily_rows
+        }
+
+        while current_date <= parsed_to:
+            row = daily_map.get(current_date)
+
+            total_seconds = row["total_usage_seconds"] if row else 0
+            open_count = row["total_open_count"] if row else 0
+
+            daily_stats.append(
+                {
+                    "date": str(current_date),
+                    "total_usage_seconds": total_seconds,
+                    "total_usage_minutes": round(total_seconds / 60, 1),
+                    "total_usage_hours": round(total_seconds / 3600, 2),
+                    "open_count": open_count,
+                }
+            )
+
+            current_date += timedelta(days=1)
+
+        app_rows = usages.values(
+            "app_id",
+            "app__app_name",
+            "app__package_name",
+            "app__category",
+        ).annotate(
+            total_usage_seconds=Sum("total_usage_seconds"),
+            total_open_count=Sum("open_count"),
+        ).order_by("-total_usage_seconds")
+
+        apps_stats = []
+
+        for row in app_rows:
+            app_total = row["total_usage_seconds"] or 0
+
+            apps_stats.append(
+                {
+                    "app_id": row["app_id"],
+                    "app_name": row["app__app_name"],
+                    "package_name": row["app__package_name"],
+                    "category": row["app__category"],
+                    "total_usage_seconds": app_total,
+                    "total_usage_minutes": round(app_total / 60, 1),
+                    "total_usage_hours": round(app_total / 3600, 2),
+                    "open_count": row["total_open_count"] or 0,
+                    "percent": round((app_total / total_usage_seconds) * 100, 1) if total_usage_seconds else 0,
+                }
+            )
+
+        most_used_app = apps_stats[0] if apps_stats else None
+
+        return Response(
+            {
+                "status": True,
+                "child_id": child_id,
+                "period": period,
+                "date_from": str(parsed_from),
+                "date_to": str(parsed_to),
+                "summary": {
+                    "total_usage_seconds": total_usage_seconds,
+                    "total_usage_minutes": round(total_usage_seconds / 60, 1),
+                    "total_usage_hours": round(total_usage_seconds / 3600, 2),
+                    "most_used_app": most_used_app,
+                },
+                "daily_stats": daily_stats,
+                "apps_stats": apps_stats,
+            },
+            status=status.HTTP_200_OK
+        )
