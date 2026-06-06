@@ -152,6 +152,32 @@ def get_movement_status(speed):
     return {"status": "vehicle", "label": "Mashinada"}
 
 
+def get_premium_payload(user):
+    active_subscription = sync_user_premium_status(user)
+
+    return {
+        "is_premium": user.has_active_premium(),
+        "premium_expires_at": user.premium_expires_at,
+        "expired_time": user.premium_expires_at,
+        "subscription": {
+            "id": active_subscription.id,
+            "status": active_subscription.status,
+            "source": active_subscription.source,
+            "started_at": active_subscription.started_at,
+            "expires_at": active_subscription.expires_at,
+            "days_left": active_subscription.days_left(),
+            "plan": {
+                "id": active_subscription.plan.id,
+                "name": active_subscription.plan.name,
+                "is_trial": active_subscription.plan.is_trial,
+                "trial_days": active_subscription.plan.trial_days,
+                "price": active_subscription.plan.price,
+                "currency": active_subscription.plan.currency,
+            } if active_subscription.plan else None,
+        } if active_subscription else None,
+    }
+
+
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
     @swagger_auto_schema(request_body=SendOTPSerializer, tags=["register"])
@@ -181,12 +207,15 @@ class VerifyOTPView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         phone = serializer.validated_data["phone"]
         code = serializer.validated_data["code"]
+
         otp = OTPCode.objects.filter(
             phone=phone,
             is_used=False
         ).order_by("-created_at").first()
+
         if not otp:
             return Response(
                 {
@@ -195,8 +224,10 @@ class VerifyOTPView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
         if otp.is_blocked():
             time_left = otp.block_time_left_seconds()
+
             return Response(
                 {
                     "status": False,
@@ -207,6 +238,7 @@ class VerifyOTPView(APIView):
                 },
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
+
         if otp.is_expired():
             return Response(
                 {
@@ -215,7 +247,9 @@ class VerifyOTPView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
         now = timezone.now()
+
         if otp.first_attempt_at and now - otp.first_attempt_at > timedelta(hours=1):
             otp.attempt_count = 0
             otp.first_attempt_at = None
@@ -227,11 +261,14 @@ class VerifyOTPView(APIView):
                     "blocked_until",
                 ]
             )
+
         if otp.code != code:
             if not otp.first_attempt_at:
                 otp.first_attempt_at = now
+
             otp.attempt_count += 1
             attempts_left = max(3 - otp.attempt_count, 0)
+
             if otp.attempt_count >= 3:
                 otp.blocked_until = now + timedelta(minutes=30)
                 otp.save(
@@ -241,6 +278,7 @@ class VerifyOTPView(APIView):
                         "blocked_until",
                     ]
                 )
+
                 return Response(
                     {
                         "status": False,
@@ -251,7 +289,9 @@ class VerifyOTPView(APIView):
                     },
                     status=status.HTTP_429_TOO_MANY_REQUESTS
                 )
+
             otp.save(update_fields=["attempt_count", "first_attempt_at"])
+
             return Response(
                 {
                     "status": False,
@@ -260,29 +300,43 @@ class VerifyOTPView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
         otp.is_used = True
         otp.save(update_fields=["is_used"])
+
         user = User.objects.filter(
             phone=phone,
             role=User.ROLE_PARENT
         ).first()
+
         if user:
             tokens = get_tokens_for_user(user)
+            premium = get_premium_payload(user)
+
             return Response(
                 {
                     "status": True,
                     "is_registered": True,
                     "detail": "SMS kod tasdiqlandi. User avval ro‘yxatdan o‘tgan. Token qaytarildi.",
                     "user": UserSerializer(user).data,
+                    "premium": premium,
+                    "is_premium": premium["is_premium"],
+                    "premium_expires_at": premium["premium_expires_at"],
+                    "expired_time": premium["expired_time"],
                     "tokens": tokens,
                 },
                 status=status.HTTP_200_OK
             )
+
         return Response(
             {
                 "status": True,
                 "is_registered": False,
                 "detail": "SMS kod tasdiqlandi. User hali ro‘yxatdan o‘tmagan. Parent/register endpointini chaqiring.",
+                "is_premium": False,
+                "premium_expires_at": None,
+                "expired_time": None,
+                "premium": None,
             },
             status=status.HTTP_201_CREATED
         )
@@ -290,38 +344,133 @@ class VerifyOTPView(APIView):
 
 class ParentRegisterView(APIView):
     permission_classes = [AllowAny]
+
     @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=["register"])
     def post(self, request):
         serializer = ParentRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         phone = serializer.validated_data["phone"]
         device_id = serializer.validated_data["device_id"]
         token = serializer.validated_data["token"]
         device_type = serializer.validated_data.get("device_type", "android")
-        verified_otp = OTPCode.objects.filter(phone=phone, is_used=True).order_by("-created_at").first()
+
+        verified_otp = OTPCode.objects.filter(
+            phone=phone,
+            is_used=True
+        ).order_by("-created_at").first()
+
         if not verified_otp:
-            return Response({"status": False, "detail": "Avval SMS kodni tasdiqlang."}, status=status.HTTP_400_BAD_REQUEST)
-        existing_user = User.objects.filter(phone=phone, role=User.ROLE_PARENT).first()
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Avval SMS kodni tasdiqlang."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        existing_user = User.objects.filter(
+            phone=phone,
+            role=User.ROLE_PARENT
+        ).first()
+
         if existing_user:
-            device_result = save_user_device(existing_user, device_id, token, device_type)
+            device_result = save_user_device(
+                existing_user,
+                device_id,
+                token,
+                device_type
+            )
+
             if device_result.get("error"):
-                return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
-            return Response({"status": True, "is_registered": True, "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.", "user": UserSerializer(existing_user).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(existing_user)}, status=status.HTTP_200_OK)
+                return Response(
+                    {
+                        "status": False,
+                        "detail": device_result["detail"],
+                        "active_device_id": device_result.get("active_device_id"),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            premium = get_premium_payload(existing_user)
+
+            return Response(
+                {
+                    "status": True,
+                    "is_registered": True,
+                    "detail": "User avval ro‘yxatdan o‘tgan. Token qaytarildi.",
+                    "user": UserSerializer(existing_user).data,
+                    "device": DeviceTokenSerializer(device_result["device"]).data,
+                    "premium": premium,
+                    "is_premium": premium["is_premium"],
+                    "premium_expires_at": premium["premium_expires_at"],
+                    "expired_time": premium["expired_time"],
+                    "tokens": get_tokens_for_user(existing_user),
+                },
+                status=status.HTTP_200_OK
+            )
+
         user = serializer.save()
-        give_free_trial_if_new_user(user, days=14)
-        device_result = save_user_device(user, device_id, token, device_type)
+
+        give_free_trial_if_new_user(user)
+
+        device_result = save_user_device(
+            user,
+            device_id,
+            token,
+            device_type
+        )
+
         if device_result.get("error"):
             user.delete()
-            return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"status": True, "is_registered": False, "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.", "user": UserSerializer(user).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(user)}, status=status.HTTP_201_CREATED)
 
+            return Response(
+                {
+                    "status": False,
+                    "detail": device_result["detail"],
+                    "active_device_id": device_result.get("active_device_id"),
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        premium = get_premium_payload(user)
+
+        return Response(
+            {
+                "status": True,
+                "is_registered": False,
+                "detail": "Parent muvaffaqiyatli ro‘yxatdan o‘tdi.",
+                "user": UserSerializer(user).data,
+                "device": DeviceTokenSerializer(device_result["device"]).data,
+                "premium": premium,
+                "is_premium": premium["is_premium"],
+                "premium_expires_at": premium["premium_expires_at"],
+                "expired_time": premium["expired_time"],
+                "tokens": get_tokens_for_user(user),
+            },
+            status=status.HTTP_201_CREATED
+        )
+        
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
+
     @swagger_auto_schema(tags=["info"])
     def get(self, request):
-        return Response({"status": True, "user": UserSerializer(request.user).data}, status=status.HTTP_200_OK)
+        premium = get_premium_payload(request.user)
 
+        return Response(
+            {
+                "status": True,
+                "user": UserSerializer(request.user).data,
+                "premium": premium,
+                "is_premium": premium["is_premium"],
+                "premium_expires_at": premium["premium_expires_at"],
+                "expired_time": premium["expired_time"],
+            },
+            status=status.HTTP_200_OK
+        )
+        
 
 class UpdateLanguageView(APIView):
     permission_classes = [IsAuthenticated]
