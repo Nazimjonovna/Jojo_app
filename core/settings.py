@@ -13,6 +13,12 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me")
 DEBUG = os.getenv("DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
+# nginx orqasida ishlaganda DRF pagination uchun to'g'ri host va scheme
+# olishi shart, aks holda `next` URL ichki Docker manziliga tushib qoladi
+# va parent dasturi keyingi sahifani yuklamaydi.
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 # Application definition
 
