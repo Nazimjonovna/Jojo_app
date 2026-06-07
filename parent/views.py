@@ -2541,3 +2541,58 @@ class ParentNotificationMarkAllReadView(APIView):
             {"status": True, "updated": updated},
             status=status.HTTP_200_OK,
         )
+
+
+class ChildJourneyView(APIView):
+    """Bola kun davomidagi yo'l xulosasi — Findmykids uslubidagi timeline."""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {"status": False, "detail": "Faqat ota-onalar uchun."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        child = User.objects.filter(id=child_id).first()
+        if not child:
+            return Response(
+                {"status": False, "detail": "Bola topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        date_str = request.query_params.get("date")
+        if date_str:
+            target = parse_date(date_str)
+            if not target:
+                return Response(
+                    {"status": False, "detail": "date YYYY-MM-DD bo‘lsin."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            target = timezone.localdate()
+
+        from .services import compute_child_journey
+        journey = compute_child_journey(child=child, target_date=target)
+
+        # Bugungi step count'ni qo'shamiz — ChildDailyActivity'dan
+        activity = ChildDailyActivity.objects.filter(
+            child=child, activity_date=target,
+        ).first()
+        journey["summary"]["steps_count"] = (
+            activity.steps_count if activity else 0
+        )
+
+        return Response(
+            {"status": True, **journey},
+            status=status.HTTP_200_OK,
+        )

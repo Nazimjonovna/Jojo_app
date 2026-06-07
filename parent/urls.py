@@ -34,6 +34,7 @@ from .views import (
     ParentNotificationUnreadCountView,
     ParentNotificationMarkReadView,
     ParentNotificationMarkAllReadView,
+    ChildJourneyView,
 )
 
 
@@ -114,4 +115,5 @@ urlpatterns = [
     path("parent/notifications/unread-count/", ParentNotificationUnreadCountView.as_view(), name="parent-notifications-unread-count"),
     path("parent/notifications/mark-all-read/", ParentNotificationMarkAllReadView.as_view(), name="parent-notifications-mark-all-read"),
     path("parent/notifications/<int:notification_id>/mark-read/", ParentNotificationMarkReadView.as_view(), name="parent-notification-mark-read"),
+    path("parent/children/<int:child_id>/journey/", ChildJourneyView.as_view(), name="child-journey"),
 ]

@@ -1168,3 +1168,252 @@ def _accumulate_daily_activity(child, location):
         distance_meters=_F("distance_meters") + int(distance),
         active_seconds=_F("active_seconds") + int(min(gap_seconds, 60)),
     )
+
+
+# ============================================================================
+# Journey timeline — kun davomidagi yo'l xulosasi
+# ChildLocation nuqtalarini "to'xtagan joylar" (places) va "harakat
+# parchalari" (segments) ga ajratadi. Findmykids dizayniga o'xshash.
+# ============================================================================
+
+
+_JOURNEY_PLACE_MIN_DWELL_SECONDS = 5 * 60        # 5 daqiqadan ortiq turish "joy"
+_JOURNEY_PLACE_RADIUS_METERS = 60                # nuqta shu radiusda — bir joy
+_JOURNEY_SEGMENT_MIN_DISTANCE_METERS = 30        # bundan kichik harakat — shovqin
+_JOURNEY_MAX_GAP_SECONDS = 600                   # 10 daqiqadan katta uzilish — ajratish
+
+
+def _classify_segment_activity(speeds_kmh, activity_types):
+    """
+    Segment davomidagi tezliklar va activity'lar o'rtacha qiymatidan
+    eng aniq tasvirni tanlaydi.
+    """
+    if not speeds_kmh:
+        return "walking"
+    avg = sum(speeds_kmh) / len(speeds_kmh)
+    peak = max(speeds_kmh)
+
+    # in_vehicle activityni eng katta priortet bilan
+    if "in_vehicle" in activity_types or "invehicle" in activity_types or peak >= 20:
+        return "in_vehicle"
+    if "running" in activity_types or peak >= 8:
+        return "running"
+    if avg >= 2:
+        return "walking"
+    return "walking"
+
+
+def _classify_place(child, lat, lon):
+    """Saved location'lardan birida bo'lsa shu joyni qaytaradi, aks holda None."""
+    parent = get_child_parent(child)
+    if not parent:
+        return None
+    saved_locations = SavedLocation.objects.filter(
+        parent=parent, is_active=True
+    )
+    for sl in saved_locations:
+        distance = calculate_distance_meters(
+            lat1=lat, lon1=lon,
+            lat2=float(sl.latitude), lon2=float(sl.longitude),
+        )
+        if distance <= max(sl.radius_meters, 50):
+            return sl
+    return None
+
+
+def compute_child_journey(child, target_date):
+    """Berilgan kun uchun bola yo'l xulosasini hisoblaydi.
+
+    Qaytaradi:
+      {
+        "date": "YYYY-MM-DD",
+        "summary": { ... },
+        "items": [ {place/segment}, ... ]
+      }
+    """
+    locations = list(
+        ChildLocation.objects.filter(
+            child=child,
+            created_at__date=target_date,
+        ).order_by("created_at").values(
+            "id", "latitude", "longitude",
+            "speed", "activity_type",
+            "battery_level", "captured_at", "created_at",
+        )
+    )
+
+    items = []
+    summary = {
+        "date": target_date.isoformat(),
+        "total_distance_meters": 0,
+        "max_speed_kmh": 0,
+        "places_count": 0,
+        "segments_count": 0,
+        "first_seen_at": None,
+        "last_seen_at": None,
+    }
+
+    if not locations:
+        return {"date": target_date.isoformat(), "summary": summary, "items": []}
+
+    summary["first_seen_at"] = (
+        locations[0]["captured_at"] or locations[0]["created_at"]
+    ).isoformat()
+    summary["last_seen_at"] = (
+        locations[-1]["captured_at"] or locations[-1]["created_at"]
+    ).isoformat()
+
+    # 1-bosqich: nuqtalarni "turish" yoki "harakat" deb yorliqlash
+    n = len(locations)
+    i = 0
+    while i < n:
+        # Place'ni topishga harakat — bir nuqtaning radiusida turuvchi nuqtalar
+        anchor = locations[i]
+        anchor_lat = float(anchor["latitude"])
+        anchor_lon = float(anchor["longitude"])
+        j = i + 1
+        while j < n:
+            next_loc = locations[j]
+            d = calculate_distance_meters(
+                lat1=anchor_lat, lon1=anchor_lon,
+                lat2=float(next_loc["latitude"]),
+                lon2=float(next_loc["longitude"]),
+            )
+            if d > _JOURNEY_PLACE_RADIUS_METERS:
+                break
+            j += 1
+
+        anchor_time = anchor["captured_at"] or anchor["created_at"]
+        end_idx = j - 1
+        end_time = (
+            locations[end_idx]["captured_at"]
+            or locations[end_idx]["created_at"]
+        )
+        dwell_seconds = (end_time - anchor_time).total_seconds()
+
+        if dwell_seconds >= _JOURNEY_PLACE_MIN_DWELL_SECONDS:
+            # Bu place
+            saved = _classify_place(child, anchor_lat, anchor_lon)
+            place_item = {
+                "type": "place",
+                "saved_location_id": saved.id if saved else None,
+                "saved_location_type": saved.location_type if saved else None,
+                "name": saved.name if saved else "Joy",
+                "latitude": anchor_lat,
+                "longitude": anchor_lon,
+                "arrived_at": anchor_time.isoformat(),
+                "departed_at": end_time.isoformat(),
+                "duration_seconds": int(dwell_seconds),
+            }
+            items.append(place_item)
+            summary["places_count"] += 1
+            i = j
+            continue
+
+        # Aks holda harakat segmentini topamiz — keyingi place'gacha
+        # yoki kun oxirigacha
+        seg_start_idx = i
+        seg_points = []
+        total_distance = 0.0
+        speeds_kmh = []
+        activity_set = set()
+
+        prev = None
+        k = i
+        while k < n:
+            cur = locations[k]
+            cur_lat = float(cur["latitude"])
+            cur_lon = float(cur["longitude"])
+            cur_time = cur["captured_at"] or cur["created_at"]
+            seg_points.append({
+                "lat": cur_lat, "lng": cur_lon,
+                "ts": cur_time.isoformat(),
+                "speed_kmh": (cur["speed"] or 0) * 3.6 if cur["speed"] else 0,
+            })
+            if cur["speed"]:
+                kmh = cur["speed"] * 3.6
+                speeds_kmh.append(kmh)
+                if kmh > summary["max_speed_kmh"]:
+                    summary["max_speed_kmh"] = kmh
+            if cur["activity_type"]:
+                activity_set.add(cur["activity_type"])
+
+            if prev is not None:
+                gap = (
+                    cur_time -
+                    (prev["captured_at"] or prev["created_at"])
+                ).total_seconds()
+                if gap > _JOURNEY_MAX_GAP_SECONDS:
+                    # Uzilish — segmentni shu yerda tugatamiz
+                    break
+                d = calculate_distance_meters(
+                    lat1=float(prev["latitude"]),
+                    lon1=float(prev["longitude"]),
+                    lat2=cur_lat, lon2=cur_lon,
+                )
+                total_distance += d
+
+                # Agar 5+ minut bir joyda turdik — bu joydir
+                if d < 30:
+                    same_place_seconds = 0
+                    look_k = k + 1
+                    while look_k < n:
+                        next_p = locations[look_k]
+                        check_d = calculate_distance_meters(
+                            lat1=cur_lat, lon1=cur_lon,
+                            lat2=float(next_p["latitude"]),
+                            lon2=float(next_p["longitude"]),
+                        )
+                        if check_d > _JOURNEY_PLACE_RADIUS_METERS:
+                            break
+                        next_time = (
+                            next_p["captured_at"] or next_p["created_at"]
+                        )
+                        same_place_seconds = (next_time - cur_time).total_seconds()
+                        if same_place_seconds >= _JOURNEY_PLACE_MIN_DWELL_SECONDS:
+                            break
+                        look_k += 1
+                    if same_place_seconds >= _JOURNEY_PLACE_MIN_DWELL_SECONDS:
+                        # Yangi place boshlanmoqda — segmentni shu yerda tugatamiz
+                        break
+
+            prev = cur
+            k += 1
+
+        if total_distance >= _JOURNEY_SEGMENT_MIN_DISTANCE_METERS and len(seg_points) >= 2:
+            activity = _classify_segment_activity(speeds_kmh, activity_set)
+            start_p = seg_points[0]
+            end_p = seg_points[-1]
+            seg_duration = (
+                (locations[k - 1]["captured_at"] or locations[k - 1]["created_at"])
+                - (locations[seg_start_idx]["captured_at"] or locations[seg_start_idx]["created_at"])
+            ).total_seconds()
+            items.append({
+                "type": "segment",
+                "activity": activity,
+                "start_at": start_p["ts"],
+                "end_at": end_p["ts"],
+                "duration_seconds": int(max(seg_duration, 0)),
+                "distance_meters": int(total_distance),
+                "max_speed_kmh": round(max(speeds_kmh) if speeds_kmh else 0, 1),
+                "avg_speed_kmh": round(
+                    sum(speeds_kmh) / len(speeds_kmh) if speeds_kmh else 0, 1
+                ),
+                "start_lat": start_p["lat"],
+                "start_lng": start_p["lng"],
+                "end_lat": end_p["lat"],
+                "end_lng": end_p["lng"],
+                "polyline": seg_points,
+            })
+            summary["total_distance_meters"] += int(total_distance)
+            summary["segments_count"] += 1
+            i = k
+        else:
+            i = k if k > i else (i + 1)
+
+    summary["max_speed_kmh"] = round(summary["max_speed_kmh"], 1)
+    return {
+        "date": target_date.isoformat(),
+        "summary": summary,
+        "items": items,
+    }
