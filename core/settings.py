@@ -49,8 +49,13 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
-    "ROTATE_REFRESH_TOKENS": False,
+    # Tracking uchun refresh tokens har bir refresh'da yangilanadi va
+    # 90 kunga uzaytiriladi — kids dasturi yana 90 kun davomida hech
+    # qachon expire bo'lmasligi uchun. Foydalanuvchi har necha soatda
+    # access yangilab tursa, refresh ham yangilanib turadi va abadiy
+    # ishlaydi.
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=90),
+    "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }

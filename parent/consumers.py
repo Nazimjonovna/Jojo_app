@@ -217,6 +217,8 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
             "battery_level": content.get("battery_level"),
             "is_charging": bool(content.get("is_charging")),
             "network_type": content.get("network_type"),
+            # 'normal' | 'vibrate' | 'silent' — Android AudioManager'dan.
+            "ringer_mode": content.get("ringer_mode"),
             "captured_at": content.get("captured_at"),
         }
         await self._broadcast_presence(payload)
