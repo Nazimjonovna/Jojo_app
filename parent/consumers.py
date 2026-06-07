@@ -134,25 +134,12 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         user = self.scope.get("user")
-        query = self.scope.get("query_string", b"")[:120]
-        print(
-            f"[WS child] connect attempt: user={user!r} "
-            f"anonymous={getattr(user, 'is_anonymous', None)} "
-            f"role={getattr(user, 'role', None)} "
-            f"id={getattr(user, 'id', None)} query={query!r}",
-            flush=True,
-        )
 
         if not user or user.is_anonymous:
-            print("[WS child] REJECT 4001 anonymous", flush=True)
             await self.close(code=4001)
             return
 
         if user.role != User.ROLE_CHILD:
-            print(
-                f"[WS child] REJECT 4003 wrong role: '{user.role}' != 'child'",
-                flush=True,
-            )
             await self.close(code=4003)
             return
 
