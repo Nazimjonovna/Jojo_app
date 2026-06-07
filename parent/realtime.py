@@ -49,6 +49,19 @@ def _parent_ids_for(child):
     )
 
 
+def broadcast_child_presence(child, payload):
+    """Bola WS'ga ulangani / uzilgani / presence ping yuborgani haqida
+    ota-onalarga broadcast. Joylashuv yo'q, faqat 'online/offline + battery'."""
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    for parent_id in _parent_ids_for(child):
+        async_to_sync(channel_layer.group_send)(
+            f"parent_{parent_id}",
+            {"type": "child.presence", "payload": payload},
+        )
+
+
 def broadcast_child_location(child, location, route_statuses=None):
     channel_layer = get_channel_layer()
 

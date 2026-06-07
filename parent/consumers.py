@@ -116,6 +116,12 @@ class ParentTrackingConsumer(AsyncJsonWebsocketConsumer):
     async def child_location(self, event):
         await self.send_json(event["payload"])
 
+    async def child_presence(self, event):
+        # `payload`ni "t" bilan o'rab parent dasturiga yuboramiz.
+        payload = dict(event.get("payload") or {})
+        payload["t"] = "presence"
+        await self.send_json(payload)
+
     async def route_alert(self, event):
         await self.send_json(event["payload"])
 
@@ -154,11 +160,28 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
 
         await self.send_json({"t": "connected"})
 
+        # Bola dasturga kirgani zahoti parent'ga "online" broadcast.
+        # Bu hali birinchi GPS fix kelmagunga qadar ham parent dasturda
+        # "Online" ko'rinishini ta'minlaydi.
+        await self._broadcast_presence({
+            "child_id": user.id,
+            "online": True,
+            "has_gps_fix": False,
+            "battery_level": None,
+            "is_charging": False,
+            "network_type": None,
+            "captured_at": None,
+        })
+
     async def receive_json(self, content, **kwargs):
         msg_type = content.get("t") or content.get("action")
 
         if msg_type == "ping":
             await self.send_json({"t": "pong"})
+            return
+
+        if msg_type == "presence":
+            await self._handle_presence(content)
             return
 
         if msg_type in ("loc", "location.update"):
@@ -179,6 +202,30 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
                 "msg": f"Unknown action: {msg_type}",
             }
         )
+
+    async def _handle_presence(self, content):
+        """GPS hali kelmagan paytda yoki tinch turgan paytda bola dasturi
+        15s da bir yuboradigan presence ping. Backend hech narsani
+        saqlamaydi — faqat parent'larga 'child online' broadcast qiladi.
+        Shu orqali parent dasturi WS uzilmasdan bolaning real online
+        statusini bilib turadi."""
+        child = self.scope["user"]
+        payload = {
+            "child_id": child.id,
+            "online": True,
+            "has_gps_fix": bool(content.get("has_gps_fix")),
+            "battery_level": content.get("battery_level"),
+            "is_charging": bool(content.get("is_charging")),
+            "network_type": content.get("network_type"),
+            "captured_at": content.get("captured_at"),
+        }
+        await self._broadcast_presence(payload)
+
+    @database_sync_to_async
+    def _broadcast_presence(self, payload):
+        from .realtime import broadcast_child_presence
+
+        broadcast_child_presence(self.scope["user"], payload)
 
     async def _handle_single(self, content, *, silent=False):
         payload = _payload_from_message(content)
@@ -219,6 +266,21 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
                 self.child_group_name,
                 self.channel_name,
             )
+        # Bola uzilganda parent'larga "offline" broadcast.
+        user = self.scope.get("user")
+        if user and not user.is_anonymous and user.role == User.ROLE_CHILD:
+            try:
+                await self._broadcast_presence({
+                    "child_id": user.id,
+                    "online": False,
+                    "has_gps_fix": False,
+                    "battery_level": None,
+                    "is_charging": False,
+                    "network_type": None,
+                    "captured_at": None,
+                })
+            except Exception:
+                pass
 
     # === Group event handlers ===
 
