@@ -1,3 +1,15 @@
+"""
+Real-time broadcasts — emits over Socket.IO.
+
+Migrated from Django Channels group_send to socket.io rooms. Each helper
+emits a single named event to the relevant `parent_<id>` or `child_<id>`
+room. Clients subscribe via `core/socketio_server.py`.
+
+Channel-layer (group_send) call sites are kept as a no-op fallback in
+case anyone is still on the old WS code path; once kids/parent apps are
+fully migrated, those layers can be deleted entirely.
+"""
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
@@ -49,60 +61,63 @@ def _parent_ids_for(child):
     )
 
 
+# ---------------------------------------------------------------------------
+# Socket.IO emit helper — single entry-point. Old code path (Channels
+# group_send) is kept as a best-effort dual-write so legacy WS clients
+# still get the message during migration.
+# ---------------------------------------------------------------------------
+
+def _emit(event: str, payload: dict, room: str, *, legacy_type: str = None):
+    """Emit `event` to `room` over Socket.IO. Also tries the old Channels
+    group_send so any still-connected WebSocket consumer continues to
+    receive it. Both paths are wrapped in try/except — a single failure
+    must never break the caller (Django views/services)."""
+    try:
+        from core.socketio_server import emit_to_room_sync
+        emit_to_room_sync(event, payload, room)
+    except Exception:
+        pass
+
+    if legacy_type:
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer is not None:
+                async_to_sync(channel_layer.group_send)(
+                    room,
+                    {"type": legacy_type, "payload": payload},
+                )
+        except Exception:
+            pass
+
+
 def broadcast_sos_alert(parent_id, payload):
-    """SOS event — parent dasturda darhol full-screen ogohlantirish
-    chiqishi uchun alohida high-priority kanal. Inbox yozuvi va FCM
-    `record_parent_notification` orqali alohida boradi."""
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    async_to_sync(channel_layer.group_send)(
-        f"parent_{parent_id}",
-        {"type": "sos.alert", "payload": payload},
-    )
+    _emit("sos_alert", payload, f"parent_{parent_id}", legacy_type="sos.alert")
 
 
 def broadcast_child_presence(child, payload):
-    """Bola WS'ga ulangani / uzilgani / presence ping yuborgani haqida
-    ota-onalarga broadcast. Joylashuv yo'q, faqat 'online/offline + battery'."""
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
     for parent_id in _parent_ids_for(child):
-        async_to_sync(channel_layer.group_send)(
-            f"parent_{parent_id}",
-            {"type": "child.presence", "payload": payload},
-        )
+        _emit("child.presence", payload, f"parent_{parent_id}",
+              legacy_type="child.presence")
 
 
 def broadcast_child_location(child, location, route_statuses=None):
-    channel_layer = get_channel_layer()
-
     payload = build_location_payload(
         child=child,
         location=location,
         route_statuses=route_statuses,
     )
-
     for parent_id in _parent_ids_for(child):
-        async_to_sync(channel_layer.group_send)(
-            f"parent_{parent_id}",
-            {"type": "child.location", "payload": payload},
-        )
-
+        _emit("child.location", payload, f"parent_{parent_id}",
+              legacy_type="child.location")
     return payload
 
 
 def broadcast_route_alert(parent_id, payload):
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f"parent_{parent_id}",
-        {"type": "route.alert", "payload": payload},
-    )
+    _emit("route.alert", payload, f"parent_{parent_id}",
+          legacy_type="route.alert")
 
 
 def broadcast_saved_location_event(child, event):
-    channel_layer = get_channel_layer()
     payload = {
         "t": "saved_location_event",
         "child_id": child.id,
@@ -118,16 +133,11 @@ def broadcast_saved_location_event(child, event):
         },
     }
     for parent_id in _parent_ids_for(child):
-        async_to_sync(channel_layer.group_send)(
-            f"parent_{parent_id}",
-            {"type": "saved.location.event", "payload": payload},
-        )
+        _emit("saved_location_event", payload, f"parent_{parent_id}",
+              legacy_type="saved.location.event")
 
 
 def broadcast_parent_notification(parent_id, notification):
-    """Yangi inbox yozuvi haqida real-time xabar — UI darhol ro'yxatga
-    qo'shadi va `unreadCount` oshadi."""
-    channel_layer = get_channel_layer()
     payload = {
         "t": "notification_created",
         "notification": {
@@ -141,36 +151,21 @@ def broadcast_parent_notification(parent_id, notification):
             "created_at": notification.created_at.isoformat(),
         },
     }
-    async_to_sync(channel_layer.group_send)(
-        f"parent_{parent_id}",
-        {"type": "parent.notification", "payload": payload},
-    )
+    _emit("notification_created", payload, f"parent_{parent_id}",
+          legacy_type="parent.notification")
 
 
 def broadcast_child_app_policy(child_id, policies):
-    """Bola qurilmasidagi WS soketga app policy yangilanishini push qiladi.
-
-    `policies` — `[{"package_name": "...", "is_blocked": bool,
-    "daily_limit_seconds": int|null}, ...]` ko'rinishida list.
-
-    Bola tomonida `tracking_service.dart` shu xabarni qabul qilib
-    SharedPreferences'ga yozadi va AccessibilityService darrov darrov
-    qayta o'qib oladi (PrefsListener). Block buyurtmasi parent tugmasini
-    bosishi bilan kuchga kiradi — endi polling kerakmas.
-    """
-    channel_layer = get_channel_layer()
+    """Bola qurilmasidagi soketga app policy yangilanishini push qiladi."""
     payload = {
         "t": "app_policy_update",
         "policies": policies,
     }
-    async_to_sync(channel_layer.group_send)(
-        f"child_{child_id}",
-        {"type": "app.policy.update", "payload": payload},
-    )
+    _emit("app_policy_update", payload, f"child_{child_id}",
+          legacy_type="app.policy.update")
 
 
 def broadcast_destination_prediction(parent_id, prediction):
-    channel_layer = get_channel_layer()
     payload = {
         "t": "destination_prediction",
         "child_id": prediction.child_id,
@@ -187,7 +182,5 @@ def broadcast_destination_prediction(parent_id, prediction):
         "body": prediction.body,
         "created_at": prediction.created_at.isoformat(),
     }
-    async_to_sync(channel_layer.group_send)(
-        f"parent_{parent_id}",
-        {"type": "destination.prediction", "payload": payload},
-    )
+    _emit("destination_prediction", payload, f"parent_{parent_id}",
+          legacy_type="destination.prediction")
