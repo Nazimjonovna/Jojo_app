@@ -143,6 +143,13 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=4003)
             return
 
+        # Push channeli — server tomondan policy update yuborish uchun.
+        self.child_group_name = f"child_{user.id}"
+        await self.channel_layer.group_add(
+            self.child_group_name,
+            self.channel_name,
+        )
+
         await self.accept()
 
         await self.send_json({"t": "connected"})
@@ -205,3 +212,16 @@ class ChildLocationConsumer(AsyncJsonWebsocketConsumer):
             **payload,
         )
         return broadcast_payload
+
+    async def disconnect(self, close_code):
+        if hasattr(self, "child_group_name"):
+            await self.channel_layer.group_discard(
+                self.child_group_name,
+                self.channel_name,
+            )
+
+    # === Group event handlers ===
+
+    async def app_policy_update(self, event):
+        """`broadcast_child_app_policy` chaqirig'idan keladigan payload."""
+        await self.send_json(event["payload"])

@@ -1114,6 +1114,37 @@ class ParentChildAppListView(APIView):
         return response
 
 
+def _build_and_push_child_policies(child_id):
+    """Bola uchun joriy policy ro'yxatini yig'ib WS push qiladi.
+    Block + limit ikkalasini ham birgalikda yuboradi — kids tomondagi
+    `JojoAccessibilityService` shu format'da kutadi.
+    """
+    from .realtime import broadcast_child_app_policy
+
+    apps = (
+        ChildInstalledApp.objects
+        .filter(child_id=child_id, is_active=True)
+        .select_related("limit", "block")
+    )
+    policies = []
+    for app in apps:
+        limit = getattr(app, "limit", None)
+        block = getattr(app, "block", None)
+        is_blocked = bool(block and block.is_blocked)
+        if not is_blocked and (not limit or not limit.is_enabled):
+            continue
+        policies.append({
+            "package_name": app.package_name,
+            "is_blocked": is_blocked,
+            "daily_limit_seconds":
+                limit.daily_limit_seconds if (limit and limit.is_enabled) else None,
+        })
+    try:
+        broadcast_child_app_policy(child_id=child_id, policies=policies)
+    except Exception:
+        pass
+
+
 class ParentSetChildAppLimitView(APIView):
     permission_classes = [IsParentOfChild]
     @swagger_auto_schema(request_body=SetChildAppLimitSerializer, tags=["app-control"])
@@ -1124,12 +1155,14 @@ class ParentSetChildAppLimitView(APIView):
         serializer = SetChildAppLimitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         limit, _ = ChildAppLimit.objects.update_or_create(child_id=child_id, app=app, defaults={"daily_limit_seconds": serializer.validated_data["daily_limit_seconds"], "is_enabled": serializer.validated_data.get("is_enabled", True), "created_by": request.user})
+        _build_and_push_child_policies(child_id)
         return Response({"status": True, "detail": "App limit saqlandi.", "limit": ChildAppLimitSerializer(limit).data}, status=status.HTTP_200_OK)
     def delete(self, request, child_id, app_id):
         app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
             return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
         ChildAppLimit.objects.filter(child_id=child_id, app=app).delete()
+        _build_and_push_child_policies(child_id)
         return Response({"status": True, "detail": "App limit o‘chirildi."}, status=status.HTTP_200_OK)
 
 
@@ -1143,6 +1176,7 @@ class ParentBlockChildAppView(APIView):
         serializer = BlockChildAppSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         blocked_app, _ = ChildBlockedApp.objects.update_or_create(child_id=child_id, app=app, defaults={"is_blocked": serializer.validated_data.get("is_blocked", True), "reason": serializer.validated_data.get("reason"), "created_by": request.user})
+        _build_and_push_child_policies(child_id)
         return Response({"status": True, "detail": "App block holati yangilandi.", "blocked_app": ChildBlockedAppSerializer(blocked_app).data}, status=status.HTTP_200_OK)
 
 

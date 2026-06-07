@@ -121,6 +121,28 @@ def broadcast_parent_notification(parent_id, notification):
     )
 
 
+def broadcast_child_app_policy(child_id, policies):
+    """Bola qurilmasidagi WS soketga app policy yangilanishini push qiladi.
+
+    `policies` — `[{"package_name": "...", "is_blocked": bool,
+    "daily_limit_seconds": int|null}, ...]` ko'rinishida list.
+
+    Bola tomonida `tracking_service.dart` shu xabarni qabul qilib
+    SharedPreferences'ga yozadi va AccessibilityService darrov darrov
+    qayta o'qib oladi (PrefsListener). Block buyurtmasi parent tugmasini
+    bosishi bilan kuchga kiradi — endi polling kerakmas.
+    """
+    channel_layer = get_channel_layer()
+    payload = {
+        "t": "app_policy_update",
+        "policies": policies,
+    }
+    async_to_sync(channel_layer.group_send)(
+        f"child_{child_id}",
+        {"type": "app.policy.update", "payload": payload},
+    )
+
+
 def broadcast_destination_prediction(parent_id, prediction):
     channel_layer = get_channel_layer()
     payload = {
