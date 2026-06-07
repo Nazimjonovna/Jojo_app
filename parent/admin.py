@@ -50,6 +50,15 @@ from .models import (
     BlogPost,
     BlogPostSave,
     BlogPostLike,
+    ParentStoreCategory,
+    ParentStoreProduct,
+    ParentStoreProductImage,
+    ParentStorePromoBanner,
+    ParentStoreSavedProduct,
+    ParentStoreOrder,
+    ChildFrequentPlace,
+    ChildDestinationPrediction,
+    ParentNotification,
 )
 
 
@@ -67,6 +76,12 @@ CONTENT_ADMIN_MODELS = {
     "BlogPost",
     "BlogPostSave",
     "BlogPostLike",
+    "ParentStoreCategory",
+    "ParentStoreProduct",
+    "ParentStoreProductImage",
+    "ParentStorePromoBanner",
+    "ParentStoreSavedProduct",
+    "ParentStoreOrder",
 }
 
 
@@ -1878,3 +1893,221 @@ class BlogPostLikeAdmin(admin.ModelAdmin):
     list_filter = (
         "created_at",
     )
+
+# ============================================================================
+# Parent Store admin
+# ============================================================================
+
+
+class ParentStoreProductImageInline(admin.TabularInline):
+    model = ParentStoreProductImage
+    extra = 1
+    fields = ("image", "order")
+
+
+@admin.register(ParentStoreCategory)
+class ParentStoreCategoryAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "slug",
+        "product_type",
+        "order",
+        "is_active",
+        "created_at",
+    )
+    list_filter = ("product_type", "is_active", "created_at")
+    search_fields = ("name", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+    ordering = ("order", "id")
+
+
+@admin.register(ParentStoreProduct)
+class ParentStoreProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "category",
+        "price",
+        "old_price",
+        "badge",
+        "is_featured",
+        "is_active",
+        "order",
+        "created_at",
+    )
+    list_filter = (
+        "category",
+        "badge",
+        "is_featured",
+        "is_active",
+        "created_at",
+    )
+    search_fields = ("name", "slug", "category_label", "short_description")
+    readonly_fields = ("created_at", "updated_at")
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = [ParentStoreProductImageInline]
+    ordering = ("order", "-created_at")
+
+
+@admin.register(ParentStorePromoBanner)
+class ParentStorePromoBannerAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "title",
+        "kicker",
+        "theme",
+        "link_product",
+        "link_category_type",
+        "is_active",
+        "order",
+        "created_at",
+    )
+    list_filter = ("theme", "is_active", "link_category_type")
+    search_fields = ("title", "kicker", "subtitle")
+    ordering = ("order", "id")
+
+
+@admin.register(ParentStoreSavedProduct)
+class ParentStoreSavedProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "user", "product", "created_at")
+    search_fields = ("user__phone", "user__full_name", "product__name")
+    list_filter = ("created_at",)
+    ordering = ("-created_at",)
+
+
+@admin.register(ParentStoreOrder)
+class ParentStoreOrderAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id",
+        "code",
+        "user",
+        "product",
+        "quantity",
+        "total_price",
+        "status",
+        "created_at",
+    )
+    list_filter = ("status", "created_at")
+    search_fields = (
+        "code",
+        "user__phone",
+        "user__full_name",
+        "product__name",
+        "contact_phone",
+        "contact_name",
+    )
+    readonly_fields = (
+        "code",
+        "unit_price",
+        "total_price",
+        "sent_at",
+        "review_at",
+        "confirmed_at",
+        "shipping_at",
+        "delivered_at",
+        "cancelled_at",
+        "created_at",
+        "updated_at",
+    )
+    ordering = ("-created_at",)
+
+    def save_model(self, request, obj, form, change):
+        previous_status = None
+        if change:
+            previous_status = (
+                ParentStoreOrder.objects.filter(pk=obj.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
+        status_changed = previous_status != obj.status
+        if status_changed:
+            obj.stamp_status(obj.status)
+        super().save_model(request, obj, form, change)
+
+        if status_changed:
+            from .services import record_parent_notification
+            status_label_map = dict(ParentStoreOrder.STATUS_CHOICES)
+            status_label = status_label_map.get(obj.status, obj.status)
+            category = (
+                ParentNotification.CATEGORY_SHIPPING
+                if obj.status == ParentStoreOrder.STATUS_SHIPPING
+                else ParentNotification.CATEGORY_ORDER
+            )
+            record_parent_notification(
+                parent=obj.user,
+                child=None,
+                category=category,
+                title=f"Buyurtma {obj.code}: {status_label}",
+                body=(obj.product.name if obj.product else ""),
+                data={
+                    "type": "order_status",
+                    "order_id": obj.id,
+                    "order_code": obj.code,
+                    "status": obj.status,
+                    "route": "store",
+                },
+            )
+
+
+@admin.register(ChildFrequentPlace)
+class ChildFrequentPlaceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "visit_count",
+        "total_dwell_seconds",
+        "latitude",
+        "longitude",
+        "saved_location",
+        "is_recommendation_dismissed",
+        "last_seen_at",
+    )
+    list_filter = ("is_recommendation_dismissed", "last_seen_at")
+    search_fields = ("child__phone", "child__full_name", "label")
+    readonly_fields = ("first_seen_at", "last_seen_at")
+
+
+@admin.register(ChildDestinationPrediction)
+class ChildDestinationPredictionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "child",
+        "parent",
+        "saved_location",
+        "event_type",
+        "distance_meters",
+        "speed_kmh",
+        "eta_seconds",
+        "created_at",
+    )
+    list_filter = ("event_type", "created_at")
+    search_fields = (
+        "child__phone",
+        "child__full_name",
+        "saved_location__name",
+    )
+    readonly_fields = ("created_at",)
+
+
+@admin.register(ParentNotification)
+class ParentNotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "parent",
+        "child",
+        "category",
+        "title",
+        "is_read",
+        "created_at",
+    )
+    list_filter = ("category", "is_read", "created_at")
+    search_fields = (
+        "parent__phone",
+        "parent__full_name",
+        "child__phone",
+        "child__full_name",
+        "title",
+        "body",
+    )
+    readonly_fields = ("created_at", "read_at")

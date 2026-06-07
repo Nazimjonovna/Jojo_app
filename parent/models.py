@@ -288,6 +288,18 @@ class ChildLocation(models.Model):
         (SOURCE_WEBSOCKET, "WebSocket"),
     )
 
+    PROVIDER_GPS = "gps"
+    PROVIDER_FUSED = "fused"
+    PROVIDER_NETWORK = "network"
+    PROVIDER_PASSIVE = "passive"
+
+    PROVIDER_CHOICES = (
+        (PROVIDER_GPS, "GPS"),
+        (PROVIDER_FUSED, "Fused"),
+        (PROVIDER_NETWORK, "Network"),
+        (PROVIDER_PASSIVE, "Passive"),
+    )
+
     child = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -298,9 +310,43 @@ class ChildLocation(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7)
 
     accuracy = models.FloatField(null=True, blank=True)
+    altitude = models.FloatField(null=True, blank=True)
+    altitude_accuracy = models.FloatField(null=True, blank=True)
+
     battery_level = models.IntegerField(null=True, blank=True)
-    speed = models.FloatField(null=True, blank=True)
+    is_charging = models.BooleanField(null=True, blank=True)
+
+    speed = models.FloatField(null=True, blank=True, help_text="m/s")
+    speed_accuracy = models.FloatField(null=True, blank=True)
     heading = models.FloatField(null=True, blank=True)
+
+    signal_strength = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="0..4 ASU yoki -100..-50 dBm asosida 0..4 ko‘rsatkich.",
+    )
+    network_type = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="wifi/cellular/none",
+    )
+
+    provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        blank=True,
+        default="",
+    )
+
+    is_mock_location = models.BooleanField(default=False)
+
+    activity_type = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="still/walking/running/in_vehicle/on_bicycle/unknown",
+    )
 
     source = models.CharField(
         max_length=20,
@@ -308,10 +354,17 @@ class ChildLocation(models.Model):
         default=SOURCE_REST,
     )
 
+    # Klient tomondagi cheklov-vaqtni saqlash — batch yuborilganda kerak.
+    captured_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["child", "-created_at"], name="child_loc_recent_idx"),
+            models.Index(fields=["child", "created_at"], name="child_loc_range_idx"),
+        ]
 
     def __str__(self):
         return f"{self.child_id}: {self.latitude}, {self.longitude}"
@@ -328,9 +381,21 @@ class ChildLastLocation(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7)
 
     accuracy = models.FloatField(null=True, blank=True)
+    altitude = models.FloatField(null=True, blank=True)
+
     battery_level = models.IntegerField(null=True, blank=True)
+    is_charging = models.BooleanField(null=True, blank=True)
+
     speed = models.FloatField(null=True, blank=True)
     heading = models.FloatField(null=True, blank=True)
+
+    signal_strength = models.IntegerField(null=True, blank=True)
+    network_type = models.CharField(max_length=20, blank=True, default="")
+
+    activity_type = models.CharField(max_length=20, blank=True, default="")
+    provider = models.CharField(max_length=20, blank=True, default="")
+
+    captured_at = models.DateTimeField(null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1618,6 +1683,13 @@ class BlogPost(models.Model):
 
     reading_time_minutes = models.PositiveIntegerField(default=5)
 
+    duration_label = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="Video davomiyligi, masalan '11:38'. Faqat video uchun.",
+    )
+
     likes_count = models.PositiveIntegerField(default=0)
     views_count = models.PositiveIntegerField(default=0)
 
@@ -1686,3 +1758,590 @@ class BlogPostLike(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.post_id}"
+# ============================================================================
+# Parent Store (Do‘kon) — STEM o‘yinchoq, kitob va boshqalar.
+# Kids ShopItem/ShopCategory dan farqi: pul birligi so‘m, real buyurtma
+# yetkazib berish, ko‘p surat/video galereya va promo bannerlar bilan.
+# ============================================================================
+
+
+class ParentStoreCategory(models.Model):
+    TYPE_STEM = "stem"
+    TYPE_BOOK = "book"
+    TYPE_OTHER = "other"
+
+    TYPE_CHOICES = (
+        (TYPE_STEM, "STEM"),
+        (TYPE_BOOK, "Kitob"),
+        (TYPE_OTHER, "Boshqa"),
+    )
+
+    name = models.CharField(max_length=150)
+    slug = models.SlugField(max_length=160, unique=True)
+    product_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default=TYPE_OTHER,
+    )
+    icon = models.ImageField(
+        upload_to="parent_store/categories/",
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "Parent Store Category"
+        verbose_name_plural = "Parent Store Categories"
+
+    def __str__(self):
+        return self.name
+
+
+class ParentStoreProduct(models.Model):
+    BADGE_NONE = "none"
+    BADGE_TOP = "top"
+    BADGE_YANGI = "yangi"
+
+    BADGE_CHOICES = (
+        (BADGE_NONE, "Belgi yo‘q"),
+        (BADGE_TOP, "TOP"),
+        (BADGE_YANGI, "YANGI"),
+    )
+
+    category = models.ForeignKey(
+        ParentStoreCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="products",
+    )
+
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+
+    category_label = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Kartochkada chiqadigan kichik label, masalan STEM O‘YINCHOQ",
+    )
+
+    age_label = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="Masalan 6+ yosh",
+    )
+
+    price = models.PositiveIntegerField(help_text="so‘m")
+    old_price = models.PositiveIntegerField(null=True, blank=True)
+
+    badge = models.CharField(
+        max_length=10,
+        choices=BADGE_CHOICES,
+        default=BADGE_NONE,
+    )
+
+    features = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="String list, masalan [\"Bluetooth\", \"50+ daraja\"]",
+    )
+
+    short_description = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+    )
+
+    description = models.TextField(blank=True, default="")
+
+    thumbnail = models.ImageField(
+        upload_to="parent_store/products/thumbnails/",
+        null=True,
+        blank=True,
+    )
+
+    video_url = models.URLField(blank=True, default="")
+
+    video_file = models.FileField(
+        upload_to="parent_store/products/videos/",
+        null=True,
+        blank=True,
+    )
+
+    deal_ends_at = models.DateTimeField(null=True, blank=True)
+
+    is_featured = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    placeholder_label = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="Surat yuklanmaganda ko‘rsatiladigan label (offline placeholder).",
+    )
+    placeholder_tint = models.CharField(
+        max_length=9,
+        blank=True,
+        default="",
+        help_text="Placeholder fon rangi, hex (#RRGGBB).",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+        verbose_name = "Parent Store Product"
+        verbose_name_plural = "Parent Store Products"
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def has_video(self):
+        return bool(self.video_url) or bool(self.video_file)
+
+    @property
+    def discount_percent(self):
+        if not self.old_price or self.old_price <= self.price:
+            return 0
+        return round(((self.old_price - self.price) / self.old_price) * 100)
+
+
+class ParentStoreProductImage(models.Model):
+    product = models.ForeignKey(
+        ParentStoreProduct,
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+    image = models.ImageField(upload_to="parent_store/products/gallery/")
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.product_id} #{self.order}"
+
+
+class ParentStorePromoBanner(models.Model):
+    THEME_CREAM = "cream"
+    THEME_SKY = "sky"
+    THEME_GREEN = "green"
+
+    THEME_CHOICES = (
+        (THEME_CREAM, "Cream"),
+        (THEME_SKY, "Sky"),
+        (THEME_GREEN, "Green"),
+    )
+
+    kicker = models.CharField(max_length=80)
+    title = models.CharField(max_length=160)
+    subtitle = models.CharField(max_length=255, blank=True, default="")
+    theme = models.CharField(
+        max_length=10,
+        choices=THEME_CHOICES,
+        default=THEME_CREAM,
+    )
+
+    image = models.ImageField(
+        upload_to="parent_store/banners/",
+        null=True,
+        blank=True,
+    )
+
+    link_product = models.ForeignKey(
+        ParentStoreProduct,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Banner bosilganda ochiladigan mahsulot.",
+    )
+
+    link_category_type = models.CharField(
+        max_length=20,
+        choices=ParentStoreCategory.TYPE_CHOICES,
+        blank=True,
+        default="",
+        help_text="Mahsulot biriktirilmagan bo‘lsa, banner bosilganda filtrlanadigan tip.",
+    )
+
+    gift_icon = models.BooleanField(default=False)
+
+    placeholder_label = models.CharField(max_length=40, blank=True, default="")
+    placeholder_tint = models.CharField(max_length=9, blank=True, default="")
+
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "Parent Store Promo Banner"
+        verbose_name_plural = "Parent Store Promo Banners"
+
+    def __str__(self):
+        return self.title
+
+
+class ParentStoreSavedProduct(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="parent_store_saved",
+    )
+    product = models.ForeignKey(
+        ParentStoreProduct,
+        on_delete=models.CASCADE,
+        related_name="saved_by_users",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "product")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.product_id}"
+
+
+class ParentStoreOrder(models.Model):
+    STATUS_SENT = "sent"
+    STATUS_REVIEW = "review"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_SHIPPING = "shipping"
+    STATUS_DELIVERED = "delivered"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = (
+        (STATUS_SENT, "Yuborildi"),
+        (STATUS_REVIEW, "Ko‘rib chiqilmoqda"),
+        (STATUS_CONFIRMED, "Tasdiqlandi"),
+        (STATUS_SHIPPING, "Yetkazilmoqda"),
+        (STATUS_DELIVERED, "Yetkazildi"),
+        (STATUS_CANCELLED, "Bekor qilindi"),
+    )
+
+    ACTIVE_STATUSES = (
+        STATUS_SENT,
+        STATUS_REVIEW,
+        STATUS_CONFIRMED,
+        STATUS_SHIPPING,
+    )
+
+    code = models.CharField(
+        max_length=24,
+        unique=True,
+        help_text="Foydalanuvchiga ko‘rsatiladigan buyurtma raqami, masalan JOJ-1043",
+    )
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="parent_store_orders",
+    )
+
+    product = models.ForeignKey(
+        ParentStoreProduct,
+        on_delete=models.PROTECT,
+        related_name="orders",
+    )
+
+    quantity = models.PositiveIntegerField(default=1)
+
+    unit_price = models.PositiveIntegerField(
+        help_text="Buyurtma yaratilgan paytdagi mahsulot narxi (so‘m).",
+    )
+
+    total_price = models.PositiveIntegerField()
+
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_SENT,
+    )
+
+    contact_phone = models.CharField(max_length=20, blank=True, default="")
+    contact_name = models.CharField(max_length=150, blank=True, default="")
+    address = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+
+    sent_at = models.DateTimeField(null=True, blank=True)
+    review_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    shipping_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Parent Store Order"
+        verbose_name_plural = "Parent Store Orders"
+
+    def __str__(self):
+        return self.code
+
+    @property
+    def is_active(self):
+        return self.status in self.ACTIVE_STATUSES
+
+    def status_timestamps(self):
+        return {
+            self.STATUS_SENT: self.sent_at,
+            self.STATUS_REVIEW: self.review_at,
+            self.STATUS_CONFIRMED: self.confirmed_at,
+            self.STATUS_SHIPPING: self.shipping_at,
+            self.STATUS_DELIVERED: self.delivered_at,
+            self.STATUS_CANCELLED: self.cancelled_at,
+        }
+
+    def stamp_status(self, status_value, when=None):
+        when = when or timezone.now()
+        field = {
+            self.STATUS_SENT: "sent_at",
+            self.STATUS_REVIEW: "review_at",
+            self.STATUS_CONFIRMED: "confirmed_at",
+            self.STATUS_SHIPPING: "shipping_at",
+            self.STATUS_DELIVERED: "delivered_at",
+            self.STATUS_CANCELLED: "cancelled_at",
+        }.get(status_value)
+        if field:
+            setattr(self, field, when)
+        self.status = status_value
+
+
+def generate_parent_store_order_code():
+    """JOJ-XXXX shaklidagi keyingi tartib raqamini qaytaradi."""
+    last = ParentStoreOrder.objects.order_by("-id").first()
+    next_id = (last.id + 1) if last else 1
+    return f"JOJ-{1000 + next_id}"
+
+
+
+# ============================================================================
+# Tracking: Frequent places & place recommendations
+# Bola joylashuvlari ustida clustering qilib, ko‘p tashrif buyuradigan
+# joylarni topib ota-onaga "Saved location'ga qo‘shing" tavsiyasi beradi.
+# ============================================================================
+
+
+class ChildFrequentPlace(models.Model):
+    """Clusterlanган hotspot. Bir nuqta — bir cluster (DBSCAN/grid asosida)."""
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="frequent_places",
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="children_frequent_places",
+        null=True,
+        blank=True,
+    )
+
+    latitude = models.DecimalField(max_digits=10, decimal_places=7)
+    longitude = models.DecimalField(max_digits=10, decimal_places=7)
+
+    radius_meters = models.PositiveIntegerField(default=120)
+
+    visit_count = models.PositiveIntegerField(default=0)
+    total_dwell_seconds = models.PositiveIntegerField(default=0)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    label = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Avtomatik label (masalan, 'Doim boriladigan joy').",
+    )
+
+    is_recommendation_dismissed = models.BooleanField(default=False)
+    saved_location = models.ForeignKey(
+        "SavedLocation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="frequent_places",
+        help_text="Agar ota-ona uni saved location'ga aylantirgan bo‘lsa.",
+    )
+
+    class Meta:
+        ordering = ["-visit_count", "-last_seen_at"]
+        indexes = [
+            models.Index(fields=["child", "-visit_count"], name="child_fp_visit_idx"),
+        ]
+
+    def __str__(self):
+        return f"#{self.id} child={self.child_id} visits={self.visit_count}"
+
+
+class ChildDestinationPrediction(models.Model):
+    """Bola yo'lda yurganida 'X tomon ketayapti' bashorati audit logi."""
+
+    EVENT_HEADING_TO = "heading_to"
+    EVENT_ARRIVING_SOON = "arriving_soon"
+
+    EVENT_CHOICES = (
+        (EVENT_HEADING_TO, "Heading to"),
+        (EVENT_ARRIVING_SOON, "Arriving soon"),
+    )
+
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="destination_predictions",
+    )
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="children_destination_predictions",
+    )
+    saved_location = models.ForeignKey(
+        "SavedLocation",
+        on_delete=models.CASCADE,
+        related_name="destination_predictions",
+    )
+    event_type = models.CharField(
+        max_length=20,
+        choices=EVENT_CHOICES,
+        default=EVENT_HEADING_TO,
+    )
+
+    distance_meters = models.FloatField()
+    speed_kmh = models.FloatField(null=True, blank=True)
+    eta_seconds = models.FloatField(null=True, blank=True)
+
+    title = models.CharField(max_length=120, blank=True, default="")
+    body = models.CharField(max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["child", "saved_location", "-created_at"],
+                name="child_pred_recent_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.child_id} -> {self.saved_location_id} ({self.event_type})"
+
+
+# ============================================================================
+# Parent Notification Inbox — barcha eventlar (FCM, saved location, prediction,
+# route alert, frequent place recommendation, store order) yagona joyga
+# yoziladi. Ota-ona ilovasidagi "Bildirishnomalar" sahifasi shu jadvaldan
+# o'qiydi va tarix sifatida saqlanadi.
+# ============================================================================
+
+
+class ParentNotification(models.Model):
+    CATEGORY_ZONE_IN = "zone_in"
+    CATEGORY_ZONE_OUT = "zone_out"
+    CATEGORY_ZONE_TRANSITION = "zone_transition"
+    CATEGORY_DESTINATION = "destination"
+    CATEGORY_BATTERY = "battery"
+    CATEGORY_OFFLINE = "offline"
+    CATEGORY_LOGIN = "login"
+    CATEGORY_ORDER = "order"
+    CATEGORY_SHIPPING = "shipping"
+    CATEGORY_DEAL = "deal"
+    CATEGORY_SCREEN = "screen"
+    CATEGORY_PREMIUM = "premium"
+    CATEGORY_TIP = "tip"
+    CATEGORY_ROUTE = "route"
+    CATEGORY_PLACE_RECOMMENDATION = "place_recommendation"
+    CATEGORY_SYSTEM = "system"
+
+    CATEGORY_CHOICES = (
+        (CATEGORY_ZONE_IN, "Zone in"),
+        (CATEGORY_ZONE_OUT, "Zone out"),
+        (CATEGORY_ZONE_TRANSITION, "Zone transition"),
+        (CATEGORY_DESTINATION, "Destination"),
+        (CATEGORY_BATTERY, "Battery"),
+        (CATEGORY_OFFLINE, "Offline"),
+        (CATEGORY_LOGIN, "Login"),
+        (CATEGORY_ORDER, "Order"),
+        (CATEGORY_SHIPPING, "Shipping"),
+        (CATEGORY_DEAL, "Deal"),
+        (CATEGORY_SCREEN, "Screen time"),
+        (CATEGORY_PREMIUM, "Premium"),
+        (CATEGORY_TIP, "Tip"),
+        (CATEGORY_ROUTE, "Route"),
+        (CATEGORY_PLACE_RECOMMENDATION, "Place recommendation"),
+        (CATEGORY_SYSTEM, "System"),
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="parent_notifications",
+    )
+    child = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="related_parent_notifications",
+    )
+
+    category = models.CharField(
+        max_length=32,
+        choices=CATEGORY_CHOICES,
+        default=CATEGORY_SYSTEM,
+    )
+
+    title = models.CharField(max_length=150)
+    body = models.CharField(max_length=500, blank=True, default="")
+
+    data = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text="Marshrutlash uchun route/screen va eventga oid context.",
+    )
+
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["parent", "is_read", "-created_at"],
+                name="parent_notif_inbox_idx",
+            ),
+            models.Index(
+                fields=["parent", "-created_at"],
+                name="parent_notif_recent_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"#{self.id} {self.category} -> parent {self.parent_id}"
+
+    def mark_read(self, save=True):
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            if save:
+                self.save(update_fields=["is_read", "read_at"])

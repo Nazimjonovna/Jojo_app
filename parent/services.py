@@ -1,6 +1,7 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 import math
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .firebase import send_fcm_multicast
 from .models import (
@@ -13,9 +14,18 @@ from .models import (
     SavedLocation,
     ChildSavedLocationState,
     ChildSavedLocationEvent,
+    ChildFrequentPlace,
+    ChildDestinationPrediction,
+    ParentNotification,
     UserSubscription, SubscriptionPlan,
 )
-from .realtime import broadcast_child_location, broadcast_route_alert
+from .realtime import (
+    broadcast_child_location,
+    broadcast_route_alert,
+    broadcast_saved_location_event,
+    broadcast_destination_prediction,
+    broadcast_parent_notification,
+)
 from .utils import nearest_route_point_distance
 
 
@@ -37,6 +47,32 @@ def to_int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def record_parent_notification(parent, child, category, title, body, data=None):
+    """Inbox yozuvi yaratadi va WS orqali parent ilovaga darhol uzatadi.
+
+    Bu funksiya `send_fcm_multicast` chaqiriqlari yonida ishlatiladi —
+    FCM tashqi yetkazib beruvchi, bu esa ichki tarix + UI'da darhol ko'rinish.
+    """
+    if not parent:
+        return None
+    try:
+        notification = ParentNotification.objects.create(
+            parent=parent,
+            child=child,
+            category=category,
+            title=(title or "")[:150],
+            body=(body or "")[:500],
+            data=data or {},
+        )
+    except Exception:
+        return None
+    try:
+        broadcast_parent_notification(parent_id=parent.id, notification=notification)
+    except Exception:
+        pass
+    return notification
 
 
 def speed_to_kmh(speed):
@@ -104,6 +140,15 @@ def send_route_deviation_notification(assignment, location, distance_meters):
             )
         except Exception:
             pass
+
+    record_parent_notification(
+        parent=parent,
+        child=child,
+        category=ParentNotification.CATEGORY_ROUTE,
+        title=title,
+        body=body,
+        data=payload,
+    )
 
     broadcast_route_alert(
         parent_id=parent.id,
@@ -190,6 +235,17 @@ def get_route_statuses_for_child(child, latitude, longitude, location):
     return statuses
 
 
+def _parse_captured_at(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    parsed = parse_datetime(str(value))
+    if parsed and timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.utc)
+    return parsed
+
+
 def process_child_location(
     child,
     latitude,
@@ -198,9 +254,18 @@ def process_child_location(
     battery_level=None,
     speed=None,
     heading=None,
+    altitude=None,
+    altitude_accuracy=None,
+    speed_accuracy=None,
+    is_charging=None,
+    signal_strength=None,
+    network_type=None,
+    provider=None,
+    is_mock_location=None,
+    activity_type=None,
+    captured_at=None,
     source=ChildLocation.SOURCE_REST,
 ):
-   
 
     latitude = to_float(latitude)
     longitude = to_float(longitude)
@@ -208,15 +273,30 @@ def process_child_location(
     battery_level = to_int(battery_level)
     speed = to_float(speed)
     heading = to_float(heading)
+    altitude = to_float(altitude)
+    altitude_accuracy = to_float(altitude_accuracy)
+    speed_accuracy = to_float(speed_accuracy)
+    signal_strength = to_int(signal_strength)
+    captured_at = _parse_captured_at(captured_at)
 
     location = ChildLocation.objects.create(
         child=child,
         latitude=latitude,
         longitude=longitude,
         accuracy=accuracy,
+        altitude=altitude,
+        altitude_accuracy=altitude_accuracy,
         battery_level=battery_level,
+        is_charging=is_charging if is_charging is not None else None,
         speed=speed,
+        speed_accuracy=speed_accuracy,
         heading=heading,
+        signal_strength=signal_strength,
+        network_type=(network_type or "")[:20],
+        provider=(provider or "")[:20],
+        is_mock_location=bool(is_mock_location) if is_mock_location is not None else False,
+        activity_type=(activity_type or "")[:20],
+        captured_at=captured_at,
         source=source,
     )
 
@@ -226,9 +306,16 @@ def process_child_location(
             "latitude": latitude,
             "longitude": longitude,
             "accuracy": accuracy,
+            "altitude": altitude,
             "battery_level": battery_level,
+            "is_charging": is_charging,
             "speed": speed,
             "heading": heading,
+            "signal_strength": signal_strength,
+            "network_type": (network_type or "")[:20],
+            "activity_type": (activity_type or "")[:20],
+            "provider": (provider or "")[:20],
+            "captured_at": captured_at,
         }
     )
 
@@ -238,11 +325,23 @@ def process_child_location(
         longitude=longitude,
         location=location,
     )
-    
+
     saved_location_events = process_saved_location_events(
-    child=child,
-    location=location,
+        child=child,
+        location=location,
     )
+
+    # Frequent place detection — har ~30 sekundda bir nuqta yetarli.
+    try:
+        update_frequent_places_for_location(child=child, location=location)
+    except Exception:
+        pass
+
+    # Destination prediction (uy/maktab/do'st uyiga yaqinlashishi).
+    try:
+        run_destination_predictions(child=child, location=location)
+    except Exception:
+        pass
 
     payload = broadcast_child_location(
         child=child,
@@ -410,6 +509,23 @@ def send_saved_location_notification(parent, child, event, location):
             )
         except Exception:
             pass
+
+    category_map = {
+        ChildSavedLocationEvent.EVENT_ENTER: ParentNotification.CATEGORY_ZONE_IN,
+        ChildSavedLocationEvent.EVENT_EXIT: ParentNotification.CATEGORY_ZONE_OUT,
+        ChildSavedLocationEvent.EVENT_MOVING_HOME_TO_SCHOOL:
+            ParentNotification.CATEGORY_ZONE_TRANSITION,
+        ChildSavedLocationEvent.EVENT_MOVING_SCHOOL_TO_HOME:
+            ParentNotification.CATEGORY_ZONE_TRANSITION,
+    }
+    record_parent_notification(
+        parent=parent,
+        child=child,
+        category=category_map.get(event.event_type, ParentNotification.CATEGORY_ZONE_IN),
+        title=event.title,
+        body=event.body,
+        data=payload,
+    )
         
 def process_saved_location_events(child, location):
     parent = get_child_parent(child)
@@ -652,3 +768,322 @@ def activate_paid_subscription(user, plan, source=UserSubscription.SOURCE_PAYMEN
     user.save(update_fields=["is_premium", "premium_expires_at"])
 
     return subscription
+
+# ============================================================================
+# Frequent-places: clustering + recommendation
+# ============================================================================
+
+
+FREQUENT_PLACE_RADIUS_METERS = 120
+FREQUENT_PLACE_MIN_VISITS_FOR_RECOMMENDATION = 5
+FREQUENT_PLACE_MIN_DWELL_SECONDS = 5 * 60          # 5 daqiqa dwell hisoblanadi
+FREQUENT_PLACE_VISIT_WINDOW_HOURS = 2              # bir tashrif oralig'i
+
+
+def _now():
+    return timezone.now()
+
+
+def update_frequent_places_for_location(child, location):
+    """Sodda inline clustering.
+
+    - Birinchi marta yaqin nuqtani topib oladi
+    - Topilsa, visit_count'ni oshiradi va dwell qo'shadi
+    - Topilmasa, yangi cluster yaratadi
+    Bu agressiv DBSCAN emas — har bir nuqtada O(N) joriy cluster soni.
+    Ko'p farzand uchun N kichik bo'ladi (~ < 50).
+    """
+    parent = get_child_parent(child)
+
+    lat = float(location.latitude)
+    lng = float(location.longitude)
+
+    nearest = None
+    nearest_distance = None
+
+    for place in ChildFrequentPlace.objects.filter(child=child):
+        distance = calculate_distance_meters(
+            lat1=lat, lon1=lng,
+            lat2=float(place.latitude), lon2=float(place.longitude),
+        )
+        if distance > place.radius_meters:
+            continue
+        if nearest_distance is None or distance < nearest_distance:
+            nearest = place
+            nearest_distance = distance
+
+    now = _now()
+
+    if nearest is None:
+        ChildFrequentPlace.objects.create(
+            child=child,
+            parent=parent,
+            latitude=lat,
+            longitude=lng,
+            radius_meters=FREQUENT_PLACE_RADIUS_METERS,
+            visit_count=1,
+            total_dwell_seconds=0,
+        )
+        return None
+
+    # Bu joyga oxirgi marta `FREQUENT_PLACE_VISIT_WINDOW_HOURS` oldin kelgan bo'lsa
+    # — yangi tashrif sifatida hisoblaymiz, aks holda dwell.
+    visit_added = False
+    if nearest.last_seen_at and (now - nearest.last_seen_at).total_seconds() > FREQUENT_PLACE_VISIT_WINDOW_HOURS * 3600:
+        nearest.visit_count = (nearest.visit_count or 0) + 1
+        visit_added = True
+    else:
+        # Dwell qo'shamiz
+        if nearest.last_seen_at:
+            delta = (now - nearest.last_seen_at).total_seconds()
+            if 0 < delta < 30 * 60:  # 30 daqiqadan kichik delta — haqiqiy dwell
+                nearest.total_dwell_seconds = (nearest.total_dwell_seconds or 0) + int(delta)
+
+    # Markazni surilgan o'rtacha (running average)
+    new_lat = (float(nearest.latitude) * 9 + lat) / 10
+    new_lng = (float(nearest.longitude) * 9 + lng) / 10
+    nearest.latitude = new_lat
+    nearest.longitude = new_lng
+
+    nearest.save(update_fields=[
+        "visit_count", "total_dwell_seconds",
+        "latitude", "longitude", "last_seen_at",
+    ])
+
+    if visit_added:
+        _maybe_emit_recommendation(parent=parent, child=child, place=nearest)
+
+    return nearest
+
+
+def _maybe_emit_recommendation(parent, child, place):
+    """Visit_count threshold'ga yetganda recommendation kanaliga yuboradi.
+
+    Real recommendation lists `/parent/.../place-recommendations/` REST
+    endpointidan o'qiladi (qaytariladigan flag bilan). Bu yerda faqat
+    FCM yuborish va broadcast qilish.
+    """
+    if not parent:
+        return
+    if place.is_recommendation_dismissed or place.saved_location_id:
+        return
+    if (place.visit_count or 0) < FREQUENT_PLACE_MIN_VISITS_FOR_RECOMMENDATION:
+        return
+
+    # Saved location ostida bormi tekshiramiz — agar shu radius ichida saved
+    # location bor bo'lsa, recommendation chiqarmaymiz.
+    overlapping = SavedLocation.objects.filter(parent=parent, is_active=True).only(
+        "latitude", "longitude", "radius_meters",
+    )
+    for sl in overlapping:
+        distance = calculate_distance_meters(
+            lat1=float(place.latitude), lon1=float(place.longitude),
+            lat2=float(sl.latitude), lon2=float(sl.longitude),
+        )
+        if distance <= max(place.radius_meters, sl.radius_meters):
+            return  # allaqachon saqlangan
+
+    # FCM tavsiyasi
+    tokens = list(
+        DeviceToken.objects.filter(user=parent, is_active=True)
+        .values_list("token", flat=True)
+    )
+    child_name = child.full_name or child.first_name or "Farzandingiz"
+    title = "Jojo"
+    body = f"{child_name} ushbu joyga ko‘p marta tashrif buyuradi. Saqlanganga qo‘shamizmi?"
+
+    payload = {
+        "type": "place_recommendation",
+        "child_id": child.id,
+        "place_id": place.id,
+        "latitude": float(place.latitude),
+        "longitude": float(place.longitude),
+        "visit_count": place.visit_count,
+    }
+
+    if tokens:
+        try:
+            send_fcm_multicast(tokens=tokens, title=title, body=body, data=payload)
+        except Exception:
+            pass
+
+    record_parent_notification(
+        parent=parent,
+        child=child,
+        category=ParentNotification.CATEGORY_PLACE_RECOMMENDATION,
+        title=title,
+        body=body,
+        data=payload,
+    )
+
+
+# ============================================================================
+# Destination prediction (uy/maktab/do'st uyiga yaqinlashish)
+# ============================================================================
+
+
+DEST_HEADING_TOLERANCE_DEGREES = 35       # yo'nalish gradusi qancha mos kelishi
+DEST_MIN_SPEED_KMH = 3                     # past tezlikda harakat hisoblanmaydi
+DEST_NEAR_RADIUS_METERS = 400              # shu masofadan kelganda "yaqinlashyapti"
+DEST_ARRIVING_RADIUS_METERS = 80           # "yetib kelyapti" pasligi
+DEST_THROTTLE_MINUTES = 15                 # bir hil bashoratni qayta yubormaymiz
+
+
+def _bearing_deg(lat1, lon1, lat2, lon2):
+    """Initial bearing from (1) to (2) in degrees 0..360."""
+    phi1 = math.radians(float(lat1))
+    phi2 = math.radians(float(lat2))
+    dl = math.radians(float(lon2) - float(lon1))
+
+    x = math.sin(dl) * math.cos(phi2)
+    y = (
+        math.cos(phi1) * math.sin(phi2)
+        - math.sin(phi1) * math.cos(phi2) * math.cos(dl)
+    )
+    deg = math.degrees(math.atan2(x, y))
+    return (deg + 360) % 360
+
+
+def _angle_diff(a, b):
+    diff = abs(a - b) % 360
+    return diff if diff <= 180 else 360 - diff
+
+
+def run_destination_predictions(child, location):
+    """Hozirgi joylashuv, tezlik va yo'nalish asosida saved locationga
+    yaqinlashayotganligi haqida xabar berish."""
+
+    parent = get_child_parent(child)
+    if not parent:
+        return []
+
+    heading = to_float(location.heading)
+    speed = to_float(location.speed)
+    if speed is None:
+        speed = 0
+    speed_kmh = speed * 3.6
+
+    if speed_kmh < DEST_MIN_SPEED_KMH:
+        return []
+
+    lat = float(location.latitude)
+    lng = float(location.longitude)
+
+    saved_locations = SavedLocation.objects.filter(
+        parent=parent, is_active=True,
+    )
+
+    emitted = []
+
+    for sl in saved_locations:
+        distance = calculate_distance_meters(
+            lat1=lat, lon1=lng,
+            lat2=float(sl.latitude), lon2=float(sl.longitude),
+        )
+
+        if distance > DEST_NEAR_RADIUS_METERS:
+            continue
+
+        # Saved location ichida bo'lsa — bu boshqa event (enter), o'tkazib yuboramiz.
+        if distance <= sl.radius_meters:
+            continue
+
+        # Yo'nalish saved locationga qaragandami?
+        if heading is not None:
+            bearing_to_target = _bearing_deg(lat, lng, float(sl.latitude), float(sl.longitude))
+            if _angle_diff(bearing_to_target, heading) > DEST_HEADING_TOLERANCE_DEGREES:
+                continue
+
+        # Throttle — oxirgi bashoratdan beri 15 daqiqa o'tdimi?
+        last = ChildDestinationPrediction.objects.filter(
+            child=child, saved_location=sl,
+        ).order_by("-created_at").first()
+        if last and (_now() - last.created_at) < timedelta(minutes=DEST_THROTTLE_MINUTES):
+            continue
+
+        event_type = (
+            ChildDestinationPrediction.EVENT_ARRIVING_SOON
+            if distance <= DEST_ARRIVING_RADIUS_METERS
+            else ChildDestinationPrediction.EVENT_HEADING_TO
+        )
+
+        eta = distance / max(speed, 0.5)  # sekund (m / (m/s))
+
+        title, body = _build_prediction_message(
+            child=child, saved_location=sl, event_type=event_type,
+        )
+
+        prediction = ChildDestinationPrediction.objects.create(
+            child=child,
+            parent=parent,
+            saved_location=sl,
+            event_type=event_type,
+            distance_meters=distance,
+            speed_kmh=round(speed_kmh, 2),
+            eta_seconds=round(eta, 1),
+            title=title,
+            body=body,
+        )
+
+        # FCM
+        tokens = list(
+            DeviceToken.objects.filter(user=parent, is_active=True)
+            .values_list("token", flat=True)
+        )
+        prediction_payload = {
+            "type": "destination_prediction",
+            "event_type": event_type,
+            "child_id": child.id,
+            "saved_location_id": sl.id,
+            "distance_meters": round(distance, 1),
+            "eta_seconds": round(eta, 1),
+        }
+        if tokens:
+            try:
+                send_fcm_multicast(
+                    tokens=tokens,
+                    title=title,
+                    body=body,
+                    data=prediction_payload,
+                )
+            except Exception:
+                pass
+
+        record_parent_notification(
+            parent=parent,
+            child=child,
+            category=ParentNotification.CATEGORY_DESTINATION,
+            title=title,
+            body=body,
+            data=prediction_payload,
+        )
+
+        # WS broadcast
+        try:
+            broadcast_destination_prediction(parent_id=parent.id, prediction=prediction)
+        except Exception:
+            pass
+
+        emitted.append(prediction)
+
+    return emitted
+
+
+def _build_prediction_message(child, saved_location, event_type):
+    child_name = child.full_name or child.first_name or "Farzandingiz"
+    place_name = saved_location.name
+    place_type = (saved_location.location_type or "").lower()
+
+    if event_type == ChildDestinationPrediction.EVENT_ARRIVING_SOON:
+        if place_type == SavedLocation.LOCATION_HOME:
+            return ("Jojo", f"{child_name} uyga yetib keldi.")
+        if place_type == SavedLocation.LOCATION_SCHOOL:
+            return ("Jojo", f"{child_name} maktabga yaqin qoldi.")
+        return ("Jojo", f"{child_name} '{place_name}' yaqiniga keldi.")
+
+    # heading_to
+    if place_type == SavedLocation.LOCATION_HOME:
+        return ("Jojo", f"{child_name} uyga yaqinlashyapti.")
+    if place_type == SavedLocation.LOCATION_SCHOOL:
+        return ("Jojo", f"{child_name} maktab tomon ketmoqda.")
+    return ("Jojo", f"{child_name} '{place_name}' tomon ketmoqda.")

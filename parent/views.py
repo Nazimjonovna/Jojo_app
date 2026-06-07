@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
-from django.db.models import Sum
+from django.db.models import Sum, Q, F
 from .pagination import paginate_queryset
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -46,6 +46,15 @@ from .models import (
     BlogPost,
     BlogPostSave,
     BlogPostLike,
+    ParentStoreCategory,
+    ParentStoreProduct,
+    ParentStorePromoBanner,
+    ParentStoreSavedProduct,
+    ParentStoreOrder,
+    generate_parent_store_order_code,
+    ChildFrequentPlace,
+    ChildDestinationPrediction,
+    ParentNotification,
 )
 from .serializers import (
     SendOTPSerializer,
@@ -94,6 +103,16 @@ from .serializers import (
     ActivateSubscriptionSerializer,
     AdminGiveSubscriptionSerializer,
     BlogCategorySerializer,
+    BlogPostListSerializer,
+    BlogPostDetailSerializer,
+    ParentStoreCategorySerializer,
+    ParentStoreProductListSerializer,
+    ParentStoreProductDetailSerializer,
+    ParentStorePromoBannerSerializer,
+    ParentStoreSavedProductSerializer,
+    ParentStoreOrderSerializer,
+    ParentStoreOrderCreateSerializer,
+    ParentNotificationSerializer,
 )
 from .services import (process_child_location, )
 from .subscription import (
@@ -1792,4 +1811,699 @@ class BlogPostLikeToggleView(APIView):
                 "likes_count": post.likes_count,
             },
             status=status.HTTP_200_OK
+        )
+
+# ============================================================================
+# Parent Store (Do‘kon) views
+# ============================================================================
+
+
+class ParentStoreCategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        categories = ParentStoreCategory.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+
+        return paginate_queryset(
+            request=request,
+            queryset=categories,
+            serializer_class=ParentStoreCategorySerializer,
+            page_size=50,
+        )
+
+
+class ParentStorePromoBannerListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        banners = ParentStorePromoBanner.objects.filter(
+            is_active=True
+        ).select_related("link_product").order_by("order", "id")
+
+        return paginate_queryset(
+            request=request,
+            queryset=banners,
+            serializer_class=ParentStorePromoBannerSerializer,
+            page_size=20,
+        )
+
+
+class ParentStoreProductListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        product_type = request.query_params.get("type")
+        category_id = request.query_params.get("category_id")
+        featured = request.query_params.get("featured")
+        deal = request.query_params.get("deal")
+        search = request.query_params.get("q")
+
+        products = ParentStoreProduct.objects.filter(
+            is_active=True
+        ).select_related("category").prefetch_related("images")
+
+        if product_type:
+            products = products.filter(category__product_type=product_type)
+
+        if category_id:
+            products = products.filter(category_id=category_id)
+
+        if featured == "true":
+            products = products.filter(is_featured=True)
+
+        if deal == "true":
+            products = products.filter(
+                old_price__isnull=False,
+                old_price__gt=F("price"),
+            )
+
+        if search:
+            products = products.filter(
+                Q(name__icontains=search)
+                | Q(category_label__icontains=search)
+                | Q(short_description__icontains=search)
+            )
+
+        products = products.order_by("order", "-created_at")
+
+        return paginate_queryset(
+            request=request,
+            queryset=products,
+            serializer_class=ParentStoreProductListSerializer,
+            context={"request": request},
+            page_size=30,
+        )
+
+
+class ParentStoreProductDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request, product_id):
+        product = (
+            ParentStoreProduct.objects
+            .filter(id=product_id, is_active=True)
+            .select_related("category")
+            .prefetch_related("images")
+            .first()
+        )
+
+        if not product:
+            return Response(
+                {"status": False, "detail": "Mahsulot topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "status": True,
+                "product": ParentStoreProductDetailSerializer(
+                    product, context={"request": request}
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ParentStoreSavedProductListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        saved = (
+            ParentStoreSavedProduct.objects
+            .filter(user=request.user, product__is_active=True)
+            .select_related("product", "product__category")
+            .prefetch_related("product__images")
+        )
+
+        return paginate_queryset(
+            request=request,
+            queryset=saved,
+            serializer_class=ParentStoreSavedProductSerializer,
+            context={"request": request},
+            page_size=50,
+        )
+
+
+class ParentStoreSavedProductToggleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def post(self, request, product_id):
+        product = ParentStoreProduct.objects.filter(
+            id=product_id, is_active=True
+        ).first()
+        if not product:
+            return Response(
+                {"status": False, "detail": "Mahsulot topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        existing = ParentStoreSavedProduct.objects.filter(
+            user=request.user, product=product
+        ).first()
+
+        if existing:
+            existing.delete()
+            return Response(
+                {
+                    "status": True,
+                    "is_saved": False,
+                    "detail": "Saqlanganlardan olib tashlandi.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        ParentStoreSavedProduct.objects.create(user=request.user, product=product)
+        return Response(
+            {
+                "status": True,
+                "is_saved": True,
+                "detail": "Saqlanganlarga qo‘shildi.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ParentStoreOrderListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        orders = (
+            ParentStoreOrder.objects
+            .filter(user=request.user)
+            .select_related("product")
+            .order_by("-created_at")
+        )
+
+        only = request.query_params.get("only")
+        if only == "active":
+            orders = orders.filter(status__in=ParentStoreOrder.ACTIVE_STATUSES)
+
+        return paginate_queryset(
+            request=request,
+            queryset=orders,
+            serializer_class=ParentStoreOrderSerializer,
+            page_size=30,
+        )
+
+    @swagger_auto_schema(
+        tags=["parent-store"],
+        request_body=ParentStoreOrderCreateSerializer,
+    )
+    def post(self, request):
+        serializer = ParentStoreOrderCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        product = ParentStoreProduct.objects.filter(
+            id=serializer.validated_data["product_id"],
+            is_active=True,
+        ).first()
+
+        if not product:
+            return Response(
+                {"status": False, "detail": "Mahsulot topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        quantity = serializer.validated_data.get("quantity", 1)
+        now = timezone.now()
+
+        order = ParentStoreOrder(
+            code=generate_parent_store_order_code(),
+            user=request.user,
+            product=product,
+            quantity=quantity,
+            unit_price=product.price,
+            total_price=product.price * quantity,
+            status=ParentStoreOrder.STATUS_SENT,
+            sent_at=now,
+            contact_phone=serializer.validated_data.get("contact_phone", ""),
+            contact_name=serializer.validated_data.get("contact_name", ""),
+            address=serializer.validated_data.get("address", ""),
+            note=serializer.validated_data.get("note", ""),
+        )
+        order.save()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Buyurtma yuborildi.",
+                "order": ParentStoreOrderSerializer(order).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ParentStoreOrderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request, order_id):
+        order = (
+            ParentStoreOrder.objects
+            .filter(id=order_id, user=request.user)
+            .select_related("product")
+            .first()
+        )
+        if not order:
+            return Response(
+                {"status": False, "detail": "Buyurtma topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {"status": True, "order": ParentStoreOrderSerializer(order).data},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ParentStoreOrderCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def post(self, request, order_id):
+        order = ParentStoreOrder.objects.filter(
+            id=order_id, user=request.user
+        ).first()
+
+        if not order:
+            return Response(
+                {"status": False, "detail": "Buyurtma topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if order.status in (
+            ParentStoreOrder.STATUS_DELIVERED,
+            ParentStoreOrder.STATUS_CANCELLED,
+        ):
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Bu buyurtmani bekor qilib bo‘lmaydi.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.stamp_status(ParentStoreOrder.STATUS_CANCELLED)
+        order.save()
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Buyurtma bekor qilindi.",
+                "order": ParentStoreOrderSerializer(order).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+# ============================================================================
+# Tracking: Trajectory + Frequent place recommendations
+# ============================================================================
+
+
+class ChildDailyTrajectoryView(APIView):
+    """Bola kun davomidagi marshruti — polyline + nuqtalar ro'yxati.
+
+    Query params:
+      - date (YYYY-MM-DD, default: bugun)
+      - decimate: int (har N-nuqtani qoldirish, default: 1 — to'liq)
+
+    Bola id orqali izlanadi, faqat o'sha bolaning ota-onasi ko'ra oladi.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {"status": False, "detail": "Faqat ota-onalar uchun."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        date_str = request.query_params.get("date")
+        if date_str:
+            day = parse_date(date_str)
+            if not day:
+                return Response(
+                    {"status": False, "detail": "date YYYY-MM-DD formatida bo‘lsin."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            day = timezone.now().date()
+
+        start = timezone.make_aware(
+            timezone.datetime.combine(day, timezone.datetime.min.time())
+        ) if timezone.is_naive(timezone.datetime.combine(day, timezone.datetime.min.time())) else timezone.datetime.combine(day, timezone.datetime.min.time())
+
+        # Simpler: bound by created_at__date
+        locations = (
+            ChildLocation.objects
+            .filter(child_id=child_id, created_at__date=day)
+            .order_by("created_at")
+            .values(
+                "id", "latitude", "longitude", "accuracy",
+                "speed", "heading", "battery_level", "signal_strength",
+                "activity_type", "created_at", "captured_at",
+            )
+        )
+
+        try:
+            decimate = max(1, int(request.query_params.get("decimate") or 1))
+        except ValueError:
+            decimate = 1
+
+        points = []
+        for i, loc in enumerate(locations):
+            if i % decimate != 0:
+                continue
+            points.append({
+                "id": loc["id"],
+                "lat": float(loc["latitude"]),
+                "lng": float(loc["longitude"]),
+                "acc": loc["accuracy"],
+                "spd": loc["speed"],
+                "hdg": loc["heading"],
+                "bat": loc["battery_level"],
+                "sig": loc["signal_strength"],
+                "act": loc["activity_type"],
+                "ts": (loc["captured_at"] or loc["created_at"]).isoformat(),
+            })
+
+        # Trajectory tafsiloti
+        distance_meters = 0.0
+        if len(points) >= 2:
+            from .services import calculate_distance_meters
+            for i in range(1, len(points)):
+                a = points[i - 1]
+                b = points[i]
+                distance_meters += calculate_distance_meters(
+                    a["lat"], a["lng"], b["lat"], b["lng"],
+                )
+
+        return Response(
+            {
+                "status": True,
+                "date": day.isoformat(),
+                "child_id": child_id,
+                "points_count": len(points),
+                "distance_meters": round(distance_meters, 2),
+                "points": points,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ChildFrequentPlacesView(APIView):
+    """Bola uchun aniqlangan ko'p tashrif buyuradigan joylar (tavsiyalar)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def get(self, request, child_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {"status": False, "detail": "Faqat ota-onalar uchun."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        only_recommendable = request.query_params.get("recommendable") == "true"
+        min_visits = int(request.query_params.get("min_visits") or 0)
+
+        places = ChildFrequentPlace.objects.filter(child_id=child_id)
+        if only_recommendable:
+            places = places.filter(
+                is_recommendation_dismissed=False,
+                saved_location__isnull=True,
+                visit_count__gte=max(min_visits, 3),
+            )
+        elif min_visits:
+            places = places.filter(visit_count__gte=min_visits)
+
+        results = [
+            {
+                "id": p.id,
+                "lat": float(p.latitude),
+                "lng": float(p.longitude),
+                "radius_meters": p.radius_meters,
+                "visit_count": p.visit_count,
+                "total_dwell_seconds": p.total_dwell_seconds,
+                "label": p.label,
+                "saved_location_id": p.saved_location_id,
+                "is_recommendation_dismissed": p.is_recommendation_dismissed,
+                "first_seen_at": p.first_seen_at.isoformat(),
+                "last_seen_at": p.last_seen_at.isoformat(),
+            }
+            for p in places.order_by("-visit_count", "-last_seen_at")[:50]
+        ]
+
+        return Response(
+            {"status": True, "results": results},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ChildFrequentPlaceSaveView(APIView):
+    """Frequent place'ni SavedLocation'ga aylantirish."""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def post(self, request, child_id, place_id):
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {"status": False, "detail": "Faqat ota-onalar uchun."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        place = ChildFrequentPlace.objects.filter(
+            id=place_id, child_id=child_id,
+        ).first()
+        if not place:
+            return Response(
+                {"status": False, "detail": "Joy topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        name = request.data.get("name") or "Yangi joy"
+        location_type = request.data.get("location_type") or SavedLocation.LOCATION_OTHER
+        radius_meters = int(
+            request.data.get("radius_meters") or place.radius_meters or 120
+        )
+
+        saved = SavedLocation.objects.create(
+            parent=request.user,
+            name=name[:150],
+            location_type=location_type,
+            latitude=place.latitude,
+            longitude=place.longitude,
+            radius_meters=radius_meters,
+            is_active=True,
+        )
+
+        place.saved_location = saved
+        place.save(update_fields=["saved_location"])
+
+        return Response(
+            {
+                "status": True,
+                "saved_location_id": saved.id,
+                "detail": "Joy saqlanganlarga qo‘shildi.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ChildFrequentPlaceDismissView(APIView):
+    """Tavsiyani rad etish — qayta ko'rsatilmaydi."""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def post(self, request, child_id, place_id):
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        place = ChildFrequentPlace.objects.filter(
+            id=place_id, child_id=child_id,
+        ).first()
+        if not place:
+            return Response(
+                {"status": False, "detail": "Joy topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        place.is_recommendation_dismissed = True
+        place.save(update_fields=["is_recommendation_dismissed"])
+
+        return Response(
+            {"status": True, "detail": "Tavsiya rad etildi."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ChildDestinationPredictionListView(APIView):
+    """Oxirgi destination prediction-larni qaytaradi (debug/audit uchun)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["tracking"])
+    def get(self, request, child_id):
+        if not ParentChild.objects.filter(
+            parent=request.user, child_id=child_id
+        ).exists():
+            return Response(
+                {"status": False, "detail": "Sizning farzandingiz emas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        preds = ChildDestinationPrediction.objects.filter(
+            child_id=child_id,
+        ).select_related("saved_location").order_by("-created_at")[:50]
+
+        results = [
+            {
+                "id": p.id,
+                "saved_location_id": p.saved_location_id,
+                "saved_location_name": p.saved_location.name if p.saved_location else "",
+                "event_type": p.event_type,
+                "distance_meters": p.distance_meters,
+                "speed_kmh": p.speed_kmh,
+                "eta_seconds": p.eta_seconds,
+                "title": p.title,
+                "body": p.body,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in preds
+        ]
+        return Response(
+            {"status": True, "results": results},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ============================================================================
+# Parent notification inbox endpoints
+# ============================================================================
+
+
+class ParentNotificationListView(APIView):
+    """GET /parent/notifications/
+
+    Filtrlar:
+      - category=...        — bitta yoki vergul bilan ajratilgan ro'yxat
+      - only=unread         — faqat o'qilmaganlarni
+      - since=<iso>         — vaqtdan keyin yaratilganlar
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-notifications"])
+    def get(self, request):
+        qs = ParentNotification.objects.filter(parent=request.user)
+
+        categories = request.query_params.get("category")
+        if categories:
+            qs = qs.filter(category__in=[c.strip() for c in categories.split(",") if c.strip()])
+
+        if request.query_params.get("only") == "unread":
+            qs = qs.filter(is_read=False)
+
+        since = request.query_params.get("since")
+        if since:
+            from django.utils.dateparse import parse_datetime as _pd
+            parsed = _pd(since)
+            if parsed:
+                qs = qs.filter(created_at__gt=parsed)
+
+        qs = qs.order_by("-created_at")
+
+        return paginate_queryset(
+            request=request,
+            queryset=qs,
+            serializer_class=ParentNotificationSerializer,
+            page_size=50,
+        )
+
+
+class ParentNotificationUnreadCountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-notifications"])
+    def get(self, request):
+        count = ParentNotification.objects.filter(
+            parent=request.user, is_read=False
+        ).count()
+        return Response({"status": True, "unread_count": count}, status=status.HTTP_200_OK)
+
+
+class ParentNotificationMarkReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-notifications"])
+    def post(self, request, notification_id):
+        notification = ParentNotification.objects.filter(
+            id=notification_id, parent=request.user
+        ).first()
+        if not notification:
+            return Response(
+                {"status": False, "detail": "Topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        notification.mark_read()
+        return Response(
+            {
+                "status": True,
+                "notification": ParentNotificationSerializer(notification).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ParentNotificationMarkAllReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-notifications"])
+    def post(self, request):
+        now = timezone.now()
+        updated = ParentNotification.objects.filter(
+            parent=request.user, is_read=False
+        ).update(is_read=True, read_at=now)
+        return Response(
+            {"status": True, "updated": updated},
+            status=status.HTTP_200_OK,
         )

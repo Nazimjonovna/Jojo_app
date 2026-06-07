@@ -33,6 +33,13 @@ from .models import (
     BlogPost,
     BlogPostSave,
     BlogPostLike,
+    ParentStoreCategory,
+    ParentStoreProduct,
+    ParentStoreProductImage,
+    ParentStorePromoBanner,
+    ParentStoreSavedProduct,
+    ParentStoreOrder,
+    ParentNotification,
 )
 
 
@@ -1396,6 +1403,7 @@ class BlogPostListSerializer(serializers.ModelSerializer):
             "video_file",
             "external_url",
             "reading_time_minutes",
+            "duration_label",
             "likes_count",
             "views_count",
             "published_at",
@@ -1438,6 +1446,7 @@ class BlogPostDetailSerializer(serializers.ModelSerializer):
             "video_file",
             "external_url",
             "reading_time_minutes",
+            "duration_label",
             "likes_count",
             "views_count",
             "published_at",
@@ -1459,3 +1468,192 @@ class BlogPostDetailSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return BlogPostLike.objects.filter(user=request.user, post=obj).exists()
+
+# ============================================================================
+# Parent Store (Do‘kon) serializers
+# ============================================================================
+
+
+class ParentStoreCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParentStoreCategory
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "product_type",
+            "icon",
+            "is_active",
+            "order",
+        ]
+
+
+class ParentStoreProductImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParentStoreProductImage
+        fields = ["id", "image", "order"]
+
+
+class ParentStoreProductListSerializer(serializers.ModelSerializer):
+    category = ParentStoreCategorySerializer(read_only=True)
+    images = ParentStoreProductImageSerializer(many=True, read_only=True)
+    is_saved = serializers.SerializerMethodField()
+    has_video = serializers.BooleanField(read_only=True)
+    discount_percent = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = ParentStoreProduct
+        fields = [
+            "id",
+            "category",
+            "name",
+            "slug",
+            "category_label",
+            "age_label",
+            "price",
+            "old_price",
+            "discount_percent",
+            "badge",
+            "features",
+            "short_description",
+            "thumbnail",
+            "images",
+            "has_video",
+            "video_url",
+            "is_featured",
+            "is_saved",
+            "placeholder_label",
+            "placeholder_tint",
+            "deal_ends_at",
+        ]
+
+    def get_is_saved(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return ParentStoreSavedProduct.objects.filter(
+            user=request.user, product=obj
+        ).exists()
+
+
+class ParentStoreProductDetailSerializer(ParentStoreProductListSerializer):
+    class Meta(ParentStoreProductListSerializer.Meta):
+        fields = ParentStoreProductListSerializer.Meta.fields + [
+            "description",
+            "video_file",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ParentStorePromoBannerSerializer(serializers.ModelSerializer):
+    link_product_slug = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ParentStorePromoBanner
+        fields = [
+            "id",
+            "kicker",
+            "title",
+            "subtitle",
+            "theme",
+            "image",
+            "link_product",
+            "link_product_slug",
+            "link_category_type",
+            "gift_icon",
+            "placeholder_label",
+            "placeholder_tint",
+            "order",
+        ]
+
+    def get_link_product_slug(self, obj):
+        return obj.link_product.slug if obj.link_product else None
+
+
+class ParentStoreSavedProductSerializer(serializers.ModelSerializer):
+    product = ParentStoreProductListSerializer(read_only=True)
+
+    class Meta:
+        model = ParentStoreSavedProduct
+        fields = ["id", "product", "created_at"]
+
+
+class ParentStoreOrderProductSnippetSerializer(serializers.ModelSerializer):
+    """Buyurtma ro‘yxati uchun mahsulotning yengillashtirilgan ko‘rinishi."""
+
+    class Meta:
+        model = ParentStoreProduct
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "category_label",
+            "thumbnail",
+            "placeholder_label",
+            "placeholder_tint",
+            "price",
+        ]
+
+
+class ParentStoreOrderSerializer(serializers.ModelSerializer):
+    product = ParentStoreOrderProductSnippetSerializer(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    timestamps = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ParentStoreOrder
+        fields = [
+            "id",
+            "code",
+            "product",
+            "quantity",
+            "unit_price",
+            "total_price",
+            "status",
+            "is_active",
+            "contact_phone",
+            "contact_name",
+            "address",
+            "note",
+            "timestamps",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_timestamps(self, obj):
+        result = {}
+        for key, value in obj.status_timestamps().items():
+            result[key] = value.isoformat() if value else None
+        return result
+
+
+class ParentStoreOrderCreateSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    contact_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    contact_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    note = serializers.CharField(required=False, allow_blank=True)
+
+
+# ============================================================================
+# Parent Notification serializer
+# ============================================================================
+
+
+class ParentNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ParentNotification
+        fields = [
+            "id",
+            "category",
+            "title",
+            "body",
+            "data",
+            "is_read",
+            "child",
+            "created_at",
+            "read_at",
+        ]
+        read_only_fields = fields
