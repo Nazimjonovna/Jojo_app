@@ -95,8 +95,11 @@ def broadcast_sos_alert(parent_id, payload):
 
 
 def broadcast_child_presence(child, payload):
+    # Klient `onAny` orqali event nomini `t` qiymati sifatida ko'radi —
+    # eski klient `t == 'presence'` deb tekshiradi, shuning uchun event
+    # nomi `presence` (uchburchak yo'q).
     for parent_id in _parent_ids_for(child):
-        _emit("child.presence", payload, f"parent_{parent_id}",
+        _emit("presence", payload, f"parent_{parent_id}",
               legacy_type="child.presence")
 
 
@@ -107,13 +110,13 @@ def broadcast_child_location(child, location, route_statuses=None):
         route_statuses=route_statuses,
     )
     for parent_id in _parent_ids_for(child):
-        _emit("child.location", payload, f"parent_{parent_id}",
+        _emit("child_location", payload, f"parent_{parent_id}",
               legacy_type="child.location")
     return payload
 
 
 def broadcast_route_alert(parent_id, payload):
-    _emit("route.alert", payload, f"parent_{parent_id}",
+    _emit("route_alert", payload, f"parent_{parent_id}",
           legacy_type="route.alert")
 
 

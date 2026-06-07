@@ -286,8 +286,10 @@ async def _broadcast_child_presence_async(child, payload):
     parent_ids = list(
         ParentChild.objects.filter(child=child).values_list("parent_id", flat=True)
     )
+    # Klient eski WS protokoldagi 't=presence' bilan moslashishi uchun
+    # event nomi `presence`.
     for parent_id in parent_ids:
-        await sio.emit("child.presence", payload, room=f"parent_{parent_id}")
+        await sio.emit("presence", payload, room=f"parent_{parent_id}")
 
 
 def emit_to_room_sync(event: str, payload: dict, room: str):
