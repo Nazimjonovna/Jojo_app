@@ -29,6 +29,10 @@ from .models import (
     SavedLocationVisit,
     ChildSavedLocationEvent,
     SubscriptionPlan, UserSubscription, SubscriptionPayment,
+    BlogCategory,
+    BlogPost,
+    BlogPostSave,
+    BlogPostLike,
 )
 
 
@@ -1358,3 +1362,100 @@ class AdminGiveSubscriptionSerializer(serializers.Serializer):
     user_id = serializers.IntegerField(required=False)
     phone = serializers.CharField(required=False)
     days = serializers.IntegerField(min_value=1, max_value=365)
+
+
+class BlogCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlogCategory
+        fields = [
+            "id",
+            "name",
+            "icon",
+            "is_active",
+            "order",
+            "created_at",
+        ]
+
+
+class BlogPostListSerializer(serializers.ModelSerializer):
+    category = BlogCategorySerializer(read_only=True)
+    is_saved = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BlogPost
+        fields = [
+            "id",
+            "category",
+            "title",
+            "short_description",
+            "post_type",
+            "thumbnail",
+            "banner",
+            "video_url",
+            "video_file",
+            "external_url",
+            "reading_time_minutes",
+            "likes_count",
+            "views_count",
+            "published_at",
+            "is_featured",
+            "is_saved",
+            "is_liked",
+            "created_at",
+        ]
+
+    def get_is_saved(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return BlogPostSave.objects.filter(user=request.user, post=obj).exists()
+
+    def get_is_liked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return BlogPostLike.objects.filter(user=request.user, post=obj).exists()
+
+
+class BlogPostDetailSerializer(serializers.ModelSerializer):
+    category = BlogCategorySerializer(read_only=True)
+    is_saved = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BlogPost
+        fields = [
+            "id",
+            "category",
+            "title",
+            "short_description",
+            "content",
+            "post_type",
+            "thumbnail",
+            "banner",
+            "video_url",
+            "video_file",
+            "external_url",
+            "reading_time_minutes",
+            "likes_count",
+            "views_count",
+            "published_at",
+            "is_featured",
+            "is_saved",
+            "is_liked",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_is_saved(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return BlogPostSave.objects.filter(user=request.user, post=obj).exists()
+
+    def get_is_liked(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return BlogPostLike.objects.filter(user=request.user, post=obj).exists()

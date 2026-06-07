@@ -19,7 +19,7 @@ from .views import (
     AppVersionCheckView, ParentHomeSummaryView, ChildDailyActivitySyncView,
     ChildSavedLocationVisitSyncView,ParentSavedLocationEventListView,ParentChildAppAnalyticsView,
     SubscriptionPlanListView, MySubscriptionView, ActivateSubscriptionView, CancelSubscriptionView,
-    AdminGiveSubscriptionView, 
+    AdminGiveSubscriptionView, BlogCategoryListView, BlogPostListView, BlogPostDetailView, BlogPostSaveToggleView, BlogPostLikeToggleView,
 )
 
 
@@ -77,4 +77,9 @@ urlpatterns = [
     path("subscription/activate/", ActivateSubscriptionView.as_view(), name="subscription-activate"),
     path("subscription/cancel/", CancelSubscriptionView.as_view(), name="subscription-cancel"),
     path("admin/subscription/give/", AdminGiveSubscriptionView.as_view(), name="admin-give-subscription"),
+    path("blog/categories/", BlogCategoryListView.as_view(), name="blog-categories"),
+    path("blog/posts/", BlogPostListView.as_view(), name="blog-posts"),
+    path("blog/posts/<int:post_id>/", BlogPostDetailView.as_view(), name="blog-post-detail"),
+    path("blog/posts/<int:post_id>/save/", BlogPostSaveToggleView.as_view(), name="blog-post-save-toggle"),
+    path("blog/posts/<int:post_id>/like/", BlogPostLikeToggleView.as_view(), name="blog-post-like-toggle"),
 ]

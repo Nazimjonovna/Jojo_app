@@ -46,6 +46,10 @@ from .models import (
     UserSubscription,  
     CallCenterTicket,
     CallCenterComment,  
+    BlogCategory,
+    BlogPost,
+    BlogPostSave,
+    BlogPostLike,
 )
 
 
@@ -59,6 +63,10 @@ CONTENT_ADMIN_MODELS = {
     "GameItem",
     "ShopCategory",
     "ShopItem",
+    "BlogCategory",
+    "BlogPost",
+    "BlogPostSave",
+    "BlogPostLike",
 }
 
 
@@ -78,6 +86,10 @@ SUPPORT_ADMIN_MODELS = {
     "ChildAppLimit",
     "ChildBlockedApp",
     "ChildAppUsage",
+    "BlogCategory",
+    "BlogPost",
+    "BlogPostSave",
+    "BlogPostLike",
 }
 
 
@@ -93,6 +105,10 @@ SUPPORT_READONLY_MODELS = {
     "ShopPurchase",
     "ChildInstalledApp",
     "ChildAppUsage",
+    "BlogCategory",
+    "BlogPost",
+    "BlogPostSave",
+    "BlogPostLike",
 }
 
 
@@ -1765,3 +1781,100 @@ def get_call_center_urls():
 if not getattr(admin.site, "_call_center_urls_patched", False):
     admin.site.get_urls = get_call_center_urls
     admin.site._call_center_urls_patched = True
+
+
+@admin.register(BlogCategory)
+class BlogCategoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "is_active",
+        "order",
+        "created_at",
+    )
+    list_filter = (
+        "is_active",
+        "created_at",
+    )
+    search_fields = (
+        "name",
+    )
+    ordering = ("order", "id")
+
+
+@admin.register(BlogPost)
+class BlogPostAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "title",
+        "category",
+        "post_type",
+        "reading_time_minutes",
+        "likes_count",
+        "views_count",
+        "is_active",
+        "is_featured",
+        "order",
+        "published_at",
+        "created_at",
+    )
+    list_filter = (
+        "post_type",
+        "category",
+        "is_active",
+        "is_featured",
+        "published_at",
+        "created_at",
+    )
+    search_fields = (
+        "title",
+        "short_description",
+        "content",
+    )
+    readonly_fields = (
+        "likes_count",
+        "views_count",
+        "created_at",
+        "updated_at",
+    )
+    ordering = (
+        "order",
+        "-published_at",
+        "-created_at",
+    )
+
+
+@admin.register(BlogPostSave)
+class BlogPostSaveAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "post",
+        "created_at",
+    )
+    search_fields = (
+        "user__phone",
+        "user__full_name",
+        "post__title",
+    )
+    list_filter = (
+        "created_at",
+    )
+
+
+@admin.register(BlogPostLike)
+class BlogPostLikeAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user",
+        "post",
+        "created_at",
+    )
+    search_fields = (
+        "user__phone",
+        "user__full_name",
+        "post__title",
+    )
+    list_filter = (
+        "created_at",
+    )

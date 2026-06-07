@@ -42,6 +42,10 @@ from .models import (
     SubscriptionPlan, 
     UserSubscription, 
     SubscriptionPayment,
+    BlogCategory,
+    BlogPost,
+    BlogPostSave,
+    BlogPostLike,
 )
 from .serializers import (
     SendOTPSerializer,
@@ -89,6 +93,7 @@ from .serializers import (
     SubscriptionPaymentSerializer,
     ActivateSubscriptionSerializer,
     AdminGiveSubscriptionSerializer,
+    BlogCategorySerializer,
 )
 from .services import (process_child_location, )
 from .subscription import (
@@ -1585,6 +1590,206 @@ class CancelSubscriptionView(APIView):
                 "should_choose_paid_plan": not request.user.has_active_premium(),
                 "tariffs": SubscriptionPlanSerializer(paid_plans, many=True).data if not request.user.has_active_premium() else [],
                 "user": UserSerializer(request.user).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class BlogCategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["blog-video"])
+    def get(self, request):
+        categories = BlogCategory.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+
+        return paginate_queryset(
+            request=request,
+            queryset=categories,
+            serializer_class=BlogCategorySerializer,
+            page_size=20,
+        )
+
+
+class BlogPostListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["blog-video"])
+    def get(self, request):
+        post_type = request.query_params.get("type")
+        category_id = request.query_params.get("category_id")
+        saved = request.query_params.get("saved")
+        featured = request.query_params.get("featured")
+        search = request.query_params.get("q")
+
+        posts = BlogPost.objects.filter(
+            is_active=True
+        ).select_related("category")
+
+        if post_type in [BlogPost.TYPE_BLOG, BlogPost.TYPE_VIDEO]:
+            posts = posts.filter(post_type=post_type)
+
+        if category_id:
+            posts = posts.filter(category_id=category_id)
+
+        if featured == "true":
+            posts = posts.filter(is_featured=True)
+
+        if search:
+            posts = posts.filter(
+                Q(title__icontains=search)
+                | Q(short_description__icontains=search)
+                | Q(content__icontains=search)
+            )
+
+        if saved == "true":
+            posts = posts.filter(saved_by_users__user=request.user)
+
+        posts = posts.order_by("order", "-published_at", "-created_at")
+
+        return paginate_queryset(
+            request=request,
+            queryset=posts,
+            serializer_class=BlogPostListSerializer,
+            context={"request": request},
+            page_size=20,
+        )
+
+
+class BlogPostDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["blog-video"])
+    def get(self, request, post_id):
+        post = BlogPost.objects.filter(
+            id=post_id,
+            is_active=True,
+        ).select_related("category").first()
+
+        if not post:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Blog/video topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        BlogPost.objects.filter(id=post.id).update(
+            views_count=F("views_count") + 1
+        )
+
+        post.refresh_from_db()
+
+        return Response(
+            {
+                "status": True,
+                "post": BlogPostDetailSerializer(
+                    post,
+                    context={"request": request},
+                ).data,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class BlogPostSaveToggleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["blog-video"])
+    def post(self, request, post_id):
+        post = BlogPost.objects.filter(
+            id=post_id,
+            is_active=True,
+        ).first()
+
+        if not post:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Blog/video topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        saved = BlogPostSave.objects.filter(
+            user=request.user,
+            post=post,
+        ).first()
+
+        if saved:
+            saved.delete()
+            is_saved = False
+            detail = "Saqlanganlardan olib tashlandi."
+        else:
+            BlogPostSave.objects.create(
+                user=request.user,
+                post=post,
+            )
+            is_saved = True
+            detail = "Saqlanganlarga qo‘shildi."
+
+        return Response(
+            {
+                "status": True,
+                "detail": detail,
+                "is_saved": is_saved,
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class BlogPostLikeToggleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["blog-video"])
+    def post(self, request, post_id):
+        post = BlogPost.objects.filter(
+            id=post_id,
+            is_active=True,
+        ).first()
+
+        if not post:
+            return Response(
+                {
+                    "status": False,
+                    "detail": "Blog/video topilmadi."
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        liked = BlogPostLike.objects.filter(
+            user=request.user,
+            post=post,
+        ).first()
+
+        if liked:
+            liked.delete()
+            BlogPost.objects.filter(id=post.id, likes_count__gt=0).update(
+                likes_count=F("likes_count") - 1
+            )
+            is_liked = False
+            detail = "Foydali belgisi olib tashlandi."
+        else:
+            BlogPostLike.objects.create(
+                user=request.user,
+                post=post,
+            )
+            BlogPost.objects.filter(id=post.id).update(
+                likes_count=F("likes_count") + 1
+            )
+            is_liked = True
+            detail = "Foydali deb belgilandi."
+
+        post.refresh_from_db()
+
+        return Response(
+            {
+                "status": True,
+                "detail": detail,
+                "is_liked": is_liked,
+                "likes_count": post.likes_count,
             },
             status=status.HTTP_200_OK
         )

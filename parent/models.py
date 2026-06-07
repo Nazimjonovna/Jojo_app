@@ -1530,3 +1530,159 @@ class CallCenterComment(models.Model):
 
     def __str__(self):
         return f"{self.ticket_id} - {self.operator_id}"
+
+
+class BlogCategory(models.Model):
+    name = models.CharField(max_length=150)
+    icon = models.ImageField(
+        upload_to="blog/categories/",
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "Blog Category"
+        verbose_name_plural = "Blog Categories"
+
+    def __str__(self):
+        return self.name
+
+
+class BlogPost(models.Model):
+    TYPE_BLOG = "blog"
+    TYPE_VIDEO = "video"
+
+    TYPE_CHOICES = (
+        (TYPE_BLOG, "Blog"),
+        (TYPE_VIDEO, "Video"),
+    )
+
+    category = models.ForeignKey(
+        BlogCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="posts",
+    )
+
+    title = models.CharField(max_length=255)
+
+    short_description = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+    )
+
+    content = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    post_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default=TYPE_BLOG,
+    )
+
+    thumbnail = models.ImageField(
+        upload_to="blog/thumbnails/",
+        null=True,
+        blank=True,
+    )
+
+    banner = models.ImageField(
+        upload_to="blog/banners/",
+        null=True,
+        blank=True,
+    )
+
+    video_url = models.URLField(
+        null=True,
+        blank=True,
+    )
+
+    video_file = models.FileField(
+        upload_to="blog/videos/",
+        null=True,
+        blank=True,
+    )
+
+    external_url = models.URLField(
+        null=True,
+        blank=True,
+    )
+
+    reading_time_minutes = models.PositiveIntegerField(default=5)
+
+    likes_count = models.PositiveIntegerField(default=0)
+    views_count = models.PositiveIntegerField(default=0)
+
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "-published_at", "-created_at"]
+        verbose_name = "Blog / Video"
+        verbose_name_plural = "Blogs / Videos"
+
+    def __str__(self):
+        return self.title
+
+
+class BlogPostSave(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="saved_blog_posts",
+    )
+
+    post = models.ForeignKey(
+        BlogPost,
+        on_delete=models.CASCADE,
+        related_name="saved_by_users",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "post")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.post_id}"
+
+
+class BlogPostLike(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="liked_blog_posts",
+    )
+
+    post = models.ForeignKey(
+        BlogPost,
+        on_delete=models.CASCADE,
+        related_name="liked_by_users",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "post")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user_id} - {self.post_id}"
