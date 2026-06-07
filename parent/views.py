@@ -1104,7 +1104,21 @@ class ParentChildAppListView(APIView):
                 Q(app_name__icontains=query)
                 | Q(package_name__icontains=query)
             )
-        apps = apps.order_by("app_name")
+        # Eng ko'p ishlatilgan dasturlar ro'yxat boshida — bugun ishlatish
+        # vaqti bo'yicha kamayish tartibida. Ishlatilmaganlar nom bo'yicha
+        # alfavit tartibida. NULL usage 0 deb sanaladi (Coalesce).
+        from django.db.models import Sum, Q as Qf, Value, IntegerField
+        from django.db.models.functions import Coalesce
+        apps = apps.annotate(
+            today_usage_sort=Coalesce(
+                Sum(
+                    "usages__total_usage_seconds",
+                    filter=Qf(usages__usage_date=parsed_date),
+                ),
+                Value(0),
+                output_field=IntegerField(),
+            )
+        ).order_by("-today_usage_sort", "app_name")
         response = paginate_queryset(
             request=request,
             queryset=apps,
