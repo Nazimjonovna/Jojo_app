@@ -299,6 +299,11 @@ def process_child_location(
         captured_at=captured_at,
         source=source,
     )
+    print(
+        f"[LOC] child={child.id} lat={latitude} lng={longitude} "
+        f"spd={speed} bat={battery_level} act={activity_type} src={source}",
+        flush=True,
+    )
 
     ChildLastLocation.objects.update_or_create(
         child=child,
