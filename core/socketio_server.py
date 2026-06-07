@@ -53,6 +53,13 @@ sio = socketio.AsyncServer(
     engineio_logger=False,
 )
 
+# Sync Django view'lardan emit qilish uchun alohida write-only RedisManager.
+# AsyncRedisManager'ni sync kontekstdan async_to_sync orqali chaqirish
+# event loop ma'noda noto'g'ri ishlaydi (publish dispatch'i kechikadi yoki
+# umuman bormaydi). python-socketio docs aniq tavsiya etadi: tashqi
+# protsessdan emit qilish uchun `write_only=True` RedisManager ochish.
+external_sio = socketio.RedisManager(_redis_url, write_only=True)
+
 
 # ---------------------------------------------------------------------------
 # Auth — JWT'ni `auth={'token': ...}` orqali qabul qilamiz. URL `?token=` ham
@@ -294,9 +301,9 @@ async def _broadcast_child_presence_async(child, payload):
 
 def emit_to_room_sync(event: str, payload: dict, room: str):
     """Sync entry-point — Django view'lar yoki services.py shu yerdan
-    chaqiradi. `sio.emit` asinxron, lekin `async_to_sync` orqali ish bajaramiz."""
-    from asgiref.sync import async_to_sync
+    chaqiradi. Tashqi `RedisManager`'ga emit qiladi — u Redis pub/sub
+    orqali AsyncServer'ga yetadi va ulangan klientlarga yuboriladi."""
     try:
-        async_to_sync(sio.emit)(event, payload, room=room)
+        external_sio.emit(event, payload, room=room)
     except Exception as e:
         logger.warning("emit_to_room_sync(%s, %s) failed: %s", event, room, e)
