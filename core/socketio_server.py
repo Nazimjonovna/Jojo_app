@@ -109,7 +109,8 @@ def _extract_token(auth, environ) -> Optional[str]:
 
 
 def _authenticate(token: str):
-    """JWT'ni tekshirib `User` obyektini qaytaradi yoki None."""
+    """JWT'ni tekshirib `User` obyektini qaytaradi yoki None.
+    Sync — async kontekstda chaqirilsa `sync_to_async` orqali."""
     if not token:
         return None
     try:
@@ -119,8 +120,18 @@ def _authenticate(token: str):
         user = auth.get_user(validated)
         return user
     except Exception as e:
-        logger.debug("sio auth failed: %s", e)
+        # INFO level — auth fail sababini ko'rish kerak (token expired, signature, ...).
+        logger.info("sio auth failed: %s", e)
         return None
+
+
+async def _authenticate_async(token: str):
+    """Async-safe wrapper — JWTAuthentication.get_user() sync DB chaqirig'i
+    qiladi, async kontekstdan to'g'ridan-to'g'ri chaqirib bo'lmaydi."""
+    if not token:
+        return None
+    from asgiref.sync import sync_to_async
+    return await sync_to_async(_authenticate, thread_sensitive=True)(token)
 
 
 # ---------------------------------------------------------------------------
@@ -139,10 +150,13 @@ async def connect(sid, environ, auth=None):
             (environ or {}).get("QUERY_STRING", "")[:80],
             bool((environ or {}).get("HTTP_AUTHORIZATION")),
         )
-    user = _authenticate(token) if token else None
+        raise socketio.exceptions.ConnectionRefusedError("auth_required")
+
+    # JWTAuthentication.get_user() sync DB chaqirig'i — sync_to_async ichiga
+    # o'rab async kontekstdan xavfsiz ishlatish kerak.
+    user = await _authenticate_async(token)
     if not user or getattr(user, "is_anonymous", True):
-        logger.info("sio reject (no auth) sid=%s", sid)
-        # Raising ConnectionRefusedError tells the client why.
+        logger.info("sio reject (bad token) sid=%s tok_len=%d", sid, len(token))
         raise socketio.exceptions.ConnectionRefusedError("auth_required")
 
     role = getattr(user, "role", None)
@@ -173,10 +187,6 @@ async def connect(sid, environ, auth=None):
         })
 
 
-def _authenticate_sync(token):
-    return _authenticate(token)
-
-
 @sio.event
 async def disconnect(sid):
     session = await sio.get_session(sid)
@@ -186,19 +196,16 @@ async def disconnect(sid):
     user_id = session.get("user_id")
     logger.info("sio disconnect sid=%s user=%s role=%s", sid, user_id, role)
     if role == "child" and user_id:
-        # Ota-onalarga "offline".
         try:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = await sio.start_background_task(_get_user, user_id) if False else _get_user(user_id)
+            user = await _get_user_async(user_id)
             if user:
                 await _broadcast_child_presence_async(user, {
                     "child_id": user.id,
                     "online": False,
                     "has_gps_fix": False,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.info("sio disconnect broadcast failed: %s", e)
 
 
 def _get_user(user_id):
@@ -208,6 +215,11 @@ def _get_user(user_id):
         return User.objects.filter(id=user_id).first()
     except Exception:
         return None
+
+
+async def _get_user_async(user_id):
+    from asgiref.sync import sync_to_async
+    return await sync_to_async(_get_user, thread_sensitive=True)(user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +232,7 @@ async def presence(sid, data):
     if not session or session.get("role") != "child":
         return
     user_id = session["user_id"]
-    user = _get_user(user_id)
+    user = await _get_user_async(user_id)
     if not user:
         return
     payload = {
@@ -318,11 +330,17 @@ async def ping(sid, data=None):
 # Server -> client: helpers (used by parent.realtime)
 # ---------------------------------------------------------------------------
 
-async def _broadcast_child_presence_async(child, payload):
+def _parent_ids_for_child(child):
+    """Sync — DB chaqirig'i."""
     from parent.models import ParentChild
-    parent_ids = list(
+    return list(
         ParentChild.objects.filter(child=child).values_list("parent_id", flat=True)
     )
+
+
+async def _broadcast_child_presence_async(child, payload):
+    from asgiref.sync import sync_to_async
+    parent_ids = await sync_to_async(_parent_ids_for_child, thread_sensitive=True)(child)
     # Klient eski WS protokoldagi 't=presence' bilan moslashishi uchun
     # event nomi `presence`.
     for parent_id in parent_ids:
