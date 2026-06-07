@@ -1088,6 +1088,7 @@ class ParentChildAppListView(APIView):
     def get(self, request, child_id):
         tab = request.query_params.get("tab", "all")
         usage_date = request.query_params.get("date")
+        query = (request.query_params.get("q") or "").strip()
         parsed_date = parse_date(usage_date) if usage_date else timezone.localdate()
         apps = ChildInstalledApp.objects.filter(
             child_id=child_id,
@@ -1097,6 +1098,12 @@ class ParentChildAppListView(APIView):
             apps = apps.filter(block__is_blocked=True)
         if tab == "limits":
             apps = apps.filter(limit__is_enabled=True)
+        if query:
+            from django.db.models import Q
+            apps = apps.filter(
+                Q(app_name__icontains=query)
+                | Q(package_name__icontains=query)
+            )
         apps = apps.order_by("app_name")
         response = paginate_queryset(
             request=request,
