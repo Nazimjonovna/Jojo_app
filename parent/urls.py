@@ -117,3 +117,43 @@ urlpatterns = [
     path("parent/notifications/<int:notification_id>/mark-read/", ParentNotificationMarkReadView.as_view(), name="parent-notification-mark-read"),
     path("parent/children/<int:child_id>/journey/", ChildJourneyView.as_view(), name="child-journey"),
 ]
+
+# ============================================================================
+# Admin panel API
+# ============================================================================
+
+from .admin_views import (
+    AdminLoginView, AdminMeView, AdminDashboardStatsView,
+    AdminBannerListCreate, AdminBannerDetail,
+    AdminStoreCategoryListCreate, AdminStoreCategoryDetail,
+    AdminStoreProductListCreate, AdminStoreProductDetail,
+    AdminBlogCategoryListCreate, AdminBlogCategoryDetail,
+    AdminBlogPostListCreate, AdminBlogPostDetail,
+    AdminUserListView, AdminUserToggleActiveView,
+    AdminSOSAlertListView, AdminBroadcastNotificationView,
+)
+
+urlpatterns += [
+    path("admin/login/", AdminLoginView.as_view(), name="admin-login"),
+    path("admin/me/", AdminMeView.as_view(), name="admin-me"),
+    path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
+
+    path("admin/banners/", AdminBannerListCreate.as_view(), name="admin-banner-list-create"),
+    path("admin/banners/<int:pk>/", AdminBannerDetail.as_view(), name="admin-banner-detail"),
+
+    path("admin/store/categories/", AdminStoreCategoryListCreate.as_view(), name="admin-store-category-list"),
+    path("admin/store/categories/<int:pk>/", AdminStoreCategoryDetail.as_view(), name="admin-store-category-detail"),
+    path("admin/store/products/", AdminStoreProductListCreate.as_view(), name="admin-store-product-list"),
+    path("admin/store/products/<int:pk>/", AdminStoreProductDetail.as_view(), name="admin-store-product-detail"),
+
+    path("admin/blog/categories/", AdminBlogCategoryListCreate.as_view(), name="admin-blog-category-list"),
+    path("admin/blog/categories/<int:pk>/", AdminBlogCategoryDetail.as_view(), name="admin-blog-category-detail"),
+    path("admin/blog/posts/", AdminBlogPostListCreate.as_view(), name="admin-blog-post-list"),
+    path("admin/blog/posts/<int:pk>/", AdminBlogPostDetail.as_view(), name="admin-blog-post-detail"),
+
+    path("admin/users/", AdminUserListView.as_view(), name="admin-user-list"),
+    path("admin/users/<int:user_id>/toggle-active/", AdminUserToggleActiveView.as_view(), name="admin-user-toggle-active"),
+
+    path("admin/sos/", AdminSOSAlertListView.as_view(), name="admin-sos-list"),
+    path("admin/broadcast/", AdminBroadcastNotificationView.as_view(), name="admin-broadcast"),
+]
