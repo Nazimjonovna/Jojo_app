@@ -67,23 +67,44 @@ external_sio = socketio.RedisManager(_redis_url, write_only=True)
 # ---------------------------------------------------------------------------
 
 def _extract_token(auth, environ) -> Optional[str]:
+    """Token uchta joydan kelishi mumkin:
+       1. `auth={'token': '...'}` (yangi klientlar)
+       2. URL query string `?token=...` (eski format / fallback)
+       3. `Authorization: Bearer ...` header (REST namuna)
+    Birinchi topilganni qaytaramiz."""
+    # 1) auth dict — Socket.IO v4 standarti
     if isinstance(auth, dict):
         token = auth.get("token") or auth.get("access")
         if token:
             return str(token)
-    # Query string
-    qs = environ.get("QUERY_STRING", "") if environ else ""
-    if "token=" in qs:
-        for part in qs.split("&"):
-            if part.startswith("token="):
-                return part[len("token="):]
-    # Authorization header
-    headers = environ.get("asgi.scope", {}).get("headers") if environ else []
-    if not headers and environ:
-        # ASGI sets HTTP_AUTHORIZATION
-        raw = environ.get("HTTP_AUTHORIZATION")
-        if raw and raw.lower().startswith("bearer "):
-            return raw[7:]
+
+    if not environ:
+        return None
+
+    # 2) Query string (python-socketio ASGI mode WSGI-style environ beradi)
+    import urllib.parse as _urlparse
+    qs = environ.get("QUERY_STRING", "")
+    if qs:
+        params = _urlparse.parse_qs(qs)
+        if "token" in params and params["token"]:
+            return params["token"][0]
+
+    # 3) Authorization header. ASGI scope ichidagi raw headers ham, WSGI-style
+    # `HTTP_AUTHORIZATION` ham bo'lishi mumkin.
+    raw_auth = environ.get("HTTP_AUTHORIZATION")
+    if raw_auth and raw_auth.lower().startswith("bearer "):
+        return raw_auth[7:]
+
+    scope = environ.get("asgi.scope") or {}
+    for name, value in scope.get("headers", []):
+        try:
+            key = name.decode("ascii").lower() if isinstance(name, bytes) else str(name).lower()
+            val = value.decode("ascii") if isinstance(value, bytes) else str(value)
+        except Exception:
+            continue
+        if key == "authorization" and val.lower().startswith("bearer "):
+            return val[7:]
+
     return None
 
 
@@ -109,7 +130,16 @@ def _authenticate(token: str):
 @sio.event
 async def connect(sid, environ, auth=None):
     token = _extract_token(auth, environ)
-    user = await sio.start_background_task(_authenticate_sync, token) if False else _authenticate(token)
+    # Diagnostika — token yo'q bo'lsa nimaga yo'qligini bilamiz.
+    if not token:
+        logger.info(
+            "sio no-token sid=%s auth=%r qs=%r has_auth_hdr=%s",
+            sid,
+            type(auth).__name__,
+            (environ or {}).get("QUERY_STRING", "")[:80],
+            bool((environ or {}).get("HTTP_AUTHORIZATION")),
+        )
+    user = _authenticate(token) if token else None
     if not user or getattr(user, "is_anonymous", True):
         logger.info("sio reject (no auth) sid=%s", sid)
         # Raising ConnectionRefusedError tells the client why.
