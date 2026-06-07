@@ -2270,6 +2270,7 @@ class ParentNotification(models.Model):
     CATEGORY_ROUTE = "route"
     CATEGORY_PLACE_RECOMMENDATION = "place_recommendation"
     CATEGORY_SYSTEM = "system"
+    CATEGORY_SOS = "sos"
 
     CATEGORY_CHOICES = (
         (CATEGORY_ZONE_IN, "Zone in"),
@@ -2288,6 +2289,7 @@ class ParentNotification(models.Model):
         (CATEGORY_ROUTE, "Route"),
         (CATEGORY_PLACE_RECOMMENDATION, "Place recommendation"),
         (CATEGORY_SYSTEM, "System"),
+        (CATEGORY_SOS, "SOS"),
     )
 
     parent = models.ForeignKey(

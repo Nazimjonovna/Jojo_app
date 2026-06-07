@@ -995,6 +995,51 @@ class KidsSOSCreateView(APIView):
             except ChildLastLocation.DoesNotExist:
                 pass
         sos = SOSAlert.objects.create(child=request.user, parent=parent, latitude=latitude, longitude=longitude, address=serializer.validated_data.get("address"), note=serializer.validated_data.get("note"))
+
+        # Parent dasturiga darrov xabar — WS push + inbox yozuvi + FCM.
+        # `record_parent_notification` o'zi `broadcast_parent_notification` ni
+        # chaqiradi. Qo'shimcha ravishda alohida 'sos.alert' WS xabarini ham
+        # yuboramiz — parent dasturda darhol modal/full-screen ogohlantirish
+        # ko'rinishi uchun.
+        try:
+            from .services import record_parent_notification
+            from .realtime import broadcast_sos_alert
+            child_name = (request.user.first_name or request.user.username or "Farzand").strip()
+            title = "SOS! Farzand yordam so'ramoqda"
+            body = f"{child_name} SOS tugmasini bosdi"
+            if serializer.validated_data.get("note"):
+                body = f"{body}\n{serializer.validated_data.get('note')}"
+            record_parent_notification(
+                parent=parent,
+                child=request.user,
+                category=ParentNotification.CATEGORY_SOS if hasattr(ParentNotification, "CATEGORY_SOS") else "sos",
+                title=title,
+                body=body,
+                data={
+                    "sos_id": sos.id,
+                    "child_id": request.user.id,
+                    "child_name": child_name,
+                    "latitude": float(latitude) if latitude is not None else None,
+                    "longitude": float(longitude) if longitude is not None else None,
+                    "address": serializer.validated_data.get("address"),
+                },
+            )
+            broadcast_sos_alert(
+                parent_id=parent.id,
+                payload={
+                    "sos_id": sos.id,
+                    "child_id": request.user.id,
+                    "child_name": child_name,
+                    "latitude": float(latitude) if latitude is not None else None,
+                    "longitude": float(longitude) if longitude is not None else None,
+                    "address": serializer.validated_data.get("address"),
+                    "note": serializer.validated_data.get("note"),
+                    "created_at": sos.created_at.isoformat() if hasattr(sos, "created_at") else None,
+                },
+            )
+        except Exception:
+            pass
+
         return Response({"status": True, "detail": "SOS yuborildi.", "sos": SOSAlertSerializer(sos).data, "parent_phone": parent.phone}, status=status.HTTP_201_CREATED)
 
 

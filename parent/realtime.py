@@ -49,6 +49,19 @@ def _parent_ids_for(child):
     )
 
 
+def broadcast_sos_alert(parent_id, payload):
+    """SOS event — parent dasturda darhol full-screen ogohlantirish
+    chiqishi uchun alohida high-priority kanal. Inbox yozuvi va FCM
+    `record_parent_notification` orqali alohida boradi."""
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    async_to_sync(channel_layer.group_send)(
+        f"parent_{parent_id}",
+        {"type": "sos.alert", "payload": payload},
+    )
+
+
 def broadcast_child_presence(child, payload):
     """Bola WS'ga ulangani / uzilgani / presence ping yuborgani haqida
     ota-onalarga broadcast. Joylashuv yo'q, faqat 'online/offline + battery'."""

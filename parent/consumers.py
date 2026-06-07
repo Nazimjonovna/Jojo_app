@@ -122,6 +122,11 @@ class ParentTrackingConsumer(AsyncJsonWebsocketConsumer):
         payload["t"] = "presence"
         await self.send_json(payload)
 
+    async def sos_alert(self, event):
+        payload = dict(event.get("payload") or {})
+        payload["t"] = "sos_alert"
+        await self.send_json(payload)
+
     async def route_alert(self, event):
         await self.send_json(event["payload"])
 
