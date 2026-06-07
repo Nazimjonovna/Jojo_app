@@ -225,8 +225,7 @@ def _payload_from_message(content):
     }
 
 
-@sio.event
-async def location(sid, data):
+async def _handle_location(sid, data):
     session = await sio.get_session(sid)
     if not session or session.get("role") != "child":
         return
@@ -238,6 +237,17 @@ async def location(sid, data):
         await sio.start_background_task(_save_and_broadcast_location, user_id, payload)
     except Exception as e:
         logger.warning("sio location save failed: %s", e)
+
+
+@sio.event
+async def location(sid, data):
+    await _handle_location(sid, data)
+
+
+# Eski klient `'loc'` event nomi bilan yuborardi — bir xil handler.
+@sio.on("loc")
+async def _location_alias(sid, data):
+    await _handle_location(sid, data)
 
 
 def _save_and_broadcast_location(user_id, payload):
