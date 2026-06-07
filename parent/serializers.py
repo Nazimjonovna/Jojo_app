@@ -283,6 +283,7 @@ class ChildSerializer(serializers.ModelSerializer):
     pending_delete_time_left_seconds = serializers.SerializerMethodField()
     pending_delete_time_left_days = serializers.SerializerMethodField()
     pairing_code = serializers.SerializerMethodField()
+    today_activity = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -303,6 +304,7 @@ class ChildSerializer(serializers.ModelSerializer):
             "pending_delete_time_left_days",
             "pairing_code",
             "last_location",
+            "today_activity",
         ]
 
     def get_last_location(self, obj):
@@ -310,6 +312,26 @@ class ChildSerializer(serializers.ModelSerializer):
             return ChildLastLocationSerializer(obj.last_location).data
         except ChildLastLocation.DoesNotExist:
             return None
+
+    def get_today_activity(self, obj):
+        if obj.role != User.ROLE_CHILD:
+            return None
+        from django.utils import timezone as _tz
+        activity = ChildDailyActivity.objects.filter(
+            child=obj,
+            activity_date=_tz.now().date(),
+        ).first()
+        if not activity:
+            return {
+                "distance_meters": 0,
+                "steps_count": 0,
+                "active_seconds": 0,
+            }
+        return {
+            "distance_meters": activity.distance_meters,
+            "steps_count": activity.steps_count,
+            "active_seconds": activity.active_seconds,
+        }
 
     def get_pending_delete_time_left_seconds(self, obj):
         if obj.role != User.ROLE_CHILD:

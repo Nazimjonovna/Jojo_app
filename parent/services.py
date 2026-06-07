@@ -16,6 +16,7 @@ from .models import (
     ChildSavedLocationEvent,
     ChildFrequentPlace,
     ChildDestinationPrediction,
+    ChildDailyActivity,
     ParentNotification,
     UserSubscription, SubscriptionPlan,
 )
@@ -304,6 +305,13 @@ def process_child_location(
         f"spd={speed} bat={battery_level} act={activity_type} src={source}",
         flush=True,
     )
+
+    # ChildDailyActivity'ni bugungi kun uchun yangilash:
+    # oxirgi nuqta bilan masofa farqi qo'shiladi.
+    try:
+        _accumulate_daily_activity(child=child, location=location)
+    except Exception:
+        pass
 
     ChildLastLocation.objects.update_or_create(
         child=child,
@@ -1092,3 +1100,71 @@ def _build_prediction_message(child, saved_location, event_type):
     if place_type == SavedLocation.LOCATION_SCHOOL:
         return ("Jojo", f"{child_name} maktab tomon ketmoqda.")
     return ("Jojo", f"{child_name} '{place_name}' tomon ketmoqda.")
+
+
+# ============================================================================
+# Daily activity (km) auto-update
+# Kids ilovaning explicit sync'iga tayanmasdan, har bir kelgan location
+# nuqtasidan oldingisigacha bo'lgan masofa ChildDailyActivity'ga qo'shiladi.
+# Bu real-time km ko'rsatkichini imkon beradi.
+# ============================================================================
+
+
+# Bog'liq emas — barcha tezliklarni avtomatik filterlash uchun limitlar.
+_DAILY_MIN_STEP_METERS = 3       # 3 metrdan kichik kichik shovqin — qabul qilmaymiz
+_DAILY_MAX_STEP_METERS = 1500    # 1.5 km dan katta sakrash — GPS xatosi
+_DAILY_MAX_GAP_SECONDS = 600     # 10 daqiqadan ko'p oraliq — boshqa kun ehtimol
+
+
+def _accumulate_daily_activity(child, location):
+    today = location.created_at.date()
+
+    # Oldingi location
+    previous = ChildLocation.objects.filter(
+        child=child,
+        created_at__lt=location.created_at,
+    ).order_by("-created_at").only(
+        "latitude", "longitude", "created_at",
+    ).first()
+
+    if not previous:
+        # Kunning birinchi nuqtasi — distance 0, lekin row yarataymiz.
+        ChildDailyActivity.objects.get_or_create(
+            child=child,
+            activity_date=today,
+        )
+        return
+
+    # Bir kun ichida bo'lsami?
+    if previous.created_at.date() != today:
+        ChildDailyActivity.objects.get_or_create(
+            child=child,
+            activity_date=today,
+        )
+        return
+
+    gap_seconds = (location.created_at - previous.created_at).total_seconds()
+    if gap_seconds > _DAILY_MAX_GAP_SECONDS:
+        return
+
+    distance = calculate_distance_meters(
+        lat1=previous.latitude, lon1=previous.longitude,
+        lat2=location.latitude, lon2=location.longitude,
+    )
+
+    if distance < _DAILY_MIN_STEP_METERS:
+        return  # GPS shovqini, hisobga kiritmaymiz
+    if distance > _DAILY_MAX_STEP_METERS:
+        return  # Sakrash — istisno
+
+    activity, _created = ChildDailyActivity.objects.get_or_create(
+        child=child,
+        activity_date=today,
+    )
+
+    # Atomic update — multiple concurrent saves uchun
+    from django.db.models import F as _F
+    ChildDailyActivity.objects.filter(pk=activity.pk).update(
+        distance_meters=_F("distance_meters") + int(distance),
+        active_seconds=_F("active_seconds") + int(min(gap_seconds, 60)),
+    )
