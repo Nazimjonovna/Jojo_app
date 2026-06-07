@@ -16,19 +16,27 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     BlogCategory,
     BlogPost,
+    CallCenterTicket,
     ParentStoreCategory,
+    ParentStoreOrder,
     ParentStoreProduct,
     ParentStoreProductImage,
     ParentStorePromoBanner,
-    SOSAlert,
     ParentNotification,
+    SOSAlert,
+    SubscriptionPayment,
+    SubscriptionPlan,
 )
 from .serializers import (
     BlogCategorySerializer,
     BlogPostDetailSerializer as BlogPostSerializer,
+    ParentNotificationSerializer,
     ParentStoreCategorySerializer,
+    ParentStoreOrderSerializer,
     ParentStoreProductDetailSerializer as ParentStoreProductSerializer,
     ParentStorePromoBannerSerializer,
+    SubscriptionPaymentSerializer,
+    SubscriptionPlanSerializer,
 )
 
 User = get_user_model()
@@ -344,3 +352,213 @@ class AdminDashboardStatsView(APIView):
             "banners": total_banners,
             "sos_alerts": sos_count,
         })
+
+
+# ============================================================================
+# Orders (parent_store)
+# ============================================================================
+
+
+class AdminOrderListView(generics.ListAPIView):
+    queryset = ParentStoreOrder.objects.select_related("product", "parent").order_by("-created_at")
+    serializer_class = ParentStoreOrderSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        return qs
+
+
+class AdminOrderDetailView(generics.RetrieveUpdateAPIView):
+    queryset = ParentStoreOrder.objects.all()
+    serializer_class = ParentStoreOrderSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+
+# ============================================================================
+# Subscription plans (Premium)
+# ============================================================================
+
+
+class AdminSubscriptionPlanListCreate(generics.ListCreateAPIView):
+    queryset = SubscriptionPlan.objects.all().order_by("order", "id")
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+
+class AdminSubscriptionPlanDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset = SubscriptionPlan.objects.all()
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+
+# ============================================================================
+# Subscription payments (Payments page)
+# ============================================================================
+
+
+class AdminSubscriptionPaymentListView(generics.ListAPIView):
+    queryset = SubscriptionPayment.objects.select_related("user", "plan").order_by("-created_at")
+    serializer_class = SubscriptionPaymentSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        s = self.request.query_params.get("status")
+        if s:
+            qs = qs.filter(status=s)
+        return qs
+
+
+# ============================================================================
+# Notifications history (inbox)
+# ============================================================================
+
+
+class AdminNotificationListView(generics.ListAPIView):
+    queryset = ParentNotification.objects.select_related("parent", "child").order_by("-created_at")
+    serializer_class = ParentNotificationSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        cat = self.request.query_params.get("category")
+        if cat:
+            qs = qs.filter(category=cat)
+        return qs
+
+
+# ============================================================================
+# Operators / Support tickets (Call center)
+# ============================================================================
+
+
+class AdminTicketListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = CallCenterTicket.objects.all().select_related("user", "assignee").order_by("-created_at")
+        s = request.query_params.get("status")
+        if s:
+            qs = qs.filter(status=s)
+        page_size = int(request.query_params.get("page_size", 30))
+        offset = int(request.query_params.get("offset", 0))
+        items = []
+        for t in qs[offset:offset + page_size]:
+            items.append({
+                "id": t.id,
+                "subject": t.subject,
+                "status": t.status,
+                "priority": t.priority,
+                "user": {
+                    "id": t.user_id,
+                    "name": (t.user.full_name or t.user.first_name or t.user.phone) if t.user else None,
+                    "phone": t.user.phone if t.user else None,
+                } if t.user_id else None,
+                "assignee": {
+                    "id": t.assignee_id,
+                    "name": (t.assignee.full_name or t.assignee.first_name or t.assignee.phone) if t.assignee else None,
+                } if t.assignee_id else None,
+                "created_at": t.created_at.isoformat(),
+                "updated_at": t.updated_at.isoformat() if hasattr(t, "updated_at") else None,
+            })
+        return Response({"count": qs.count(), "results": items, "offset": offset, "page_size": page_size})
+
+
+class AdminTicketUpdateStatusView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, ticket_id):
+        ticket = CallCenterTicket.objects.filter(id=ticket_id).first()
+        if not ticket:
+            return Response({"detail": "Topilmadi"}, status=404)
+        new_status = request.data.get("status")
+        if new_status:
+            ticket.status = new_status
+            ticket.save(update_fields=["status"])
+        return Response({"id": ticket.id, "status": ticket.status})
+
+
+# ============================================================================
+# Operators (call-center staff) management
+# ============================================================================
+
+
+class AdminOperatorListView(APIView):
+    """Call operator rolidagi foydalanuvchilar.
+    Loyihada alohida "operator" rol bo'lmasa, `is_staff=True` ammo
+    superuser bo'lmagan foydalanuvchilarni qaytaramiz."""
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = User.objects.filter(is_staff=True, is_superuser=False).order_by("-date_joined")
+        items = list(qs.values(
+            "id", "phone", "username", "first_name", "last_name",
+            "is_active", "date_joined",
+        ))
+        return Response({"count": qs.count(), "results": items})
+
+
+class AdminOperatorCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        phone = (request.data.get("phone") or "").strip()
+        password = request.data.get("password") or ""
+        full_name = (request.data.get("full_name") or "").strip()
+        if not phone or not password:
+            return Response({"detail": "phone va password majburiy"}, status=400)
+        if User.objects.filter(phone=phone).exists():
+            return Response({"detail": "Bunday telefon bilan foydalanuvchi mavjud"}, status=400)
+        u = User(phone=phone, username=phone, first_name=full_name, is_staff=True, role=getattr(User, "ROLE_PARENT", "parent"))
+        u.set_password(password)
+        u.save()
+        return Response({
+            "id": u.id, "phone": u.phone, "username": u.username,
+            "first_name": u.first_name, "is_active": u.is_active,
+        }, status=201)
+
+
+# ============================================================================
+# Settings — admin profilini o'zgartirish (parolni almashtirish)
+# ============================================================================
+
+
+class AdminChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        old = request.data.get("old_password") or ""
+        new = request.data.get("new_password") or ""
+        if not new or len(new) < 4:
+            return Response({"detail": "Yangi parol 4+ belgidan iborat bo'lishi kerak"}, status=400)
+        user = request.user
+        if not user.check_password(old):
+            return Response({"detail": "Joriy parol noto'g'ri"}, status=400)
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        return Response({"status": True})
+
+
+# ============================================================================
+# Children — read-only list for "Children" tab
+# ============================================================================
+
+
+class AdminChildrenListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = User.objects.filter(role=User.ROLE_CHILD).order_by("-date_joined")
+        page_size = int(request.query_params.get("page_size", 50))
+        offset = int(request.query_params.get("offset", 0))
+        total = qs.count()
+        items = list(qs[offset:offset + page_size].values(
+            "id", "phone", "username", "first_name", "child_status",
+            "age", "gender", "language", "is_active", "date_joined",
+        ))
+        return Response({"count": total, "results": items, "offset": offset, "page_size": page_size})

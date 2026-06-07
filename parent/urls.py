@@ -131,6 +131,14 @@ from .admin_views import (
     AdminBlogPostListCreate, AdminBlogPostDetail,
     AdminUserListView, AdminUserToggleActiveView,
     AdminSOSAlertListView, AdminBroadcastNotificationView,
+    AdminOrderListView, AdminOrderDetailView,
+    AdminSubscriptionPlanListCreate, AdminSubscriptionPlanDetail,
+    AdminSubscriptionPaymentListView,
+    AdminNotificationListView,
+    AdminTicketListView, AdminTicketUpdateStatusView,
+    AdminOperatorListView, AdminOperatorCreateView,
+    AdminChangePasswordView,
+    AdminChildrenListView,
 )
 
 urlpatterns += [
@@ -156,4 +164,22 @@ urlpatterns += [
 
     path("admin/sos/", AdminSOSAlertListView.as_view(), name="admin-sos-list"),
     path("admin/broadcast/", AdminBroadcastNotificationView.as_view(), name="admin-broadcast"),
+
+    path("admin/orders/", AdminOrderListView.as_view(), name="admin-order-list"),
+    path("admin/orders/<int:pk>/", AdminOrderDetailView.as_view(), name="admin-order-detail"),
+
+    path("admin/subscription/plans/", AdminSubscriptionPlanListCreate.as_view(), name="admin-sub-plan-list"),
+    path("admin/subscription/plans/<int:pk>/", AdminSubscriptionPlanDetail.as_view(), name="admin-sub-plan-detail"),
+    path("admin/subscription/payments/", AdminSubscriptionPaymentListView.as_view(), name="admin-sub-payment-list"),
+
+    path("admin/notifications/", AdminNotificationListView.as_view(), name="admin-notif-list"),
+
+    path("admin/tickets/", AdminTicketListView.as_view(), name="admin-ticket-list"),
+    path("admin/tickets/<int:ticket_id>/status/", AdminTicketUpdateStatusView.as_view(), name="admin-ticket-status"),
+
+    path("admin/operators/", AdminOperatorListView.as_view(), name="admin-operator-list"),
+    path("admin/operators/create/", AdminOperatorCreateView.as_view(), name="admin-operator-create"),
+
+    path("admin/change-password/", AdminChangePasswordView.as_view(), name="admin-change-password"),
+    path("admin/children/", AdminChildrenListView.as_view(), name="admin-children-list"),
 ]
