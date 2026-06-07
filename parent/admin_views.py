@@ -112,7 +112,7 @@ class AdminMeView(APIView):
 
 
 class AdminBannerListCreate(generics.ListCreateAPIView):
-    queryset = ParentStorePromoBanner.objects.all().order_by("sort_order", "id")
+    queryset = ParentStorePromoBanner.objects.all().order_by("order", "id")
     serializer_class = ParentStorePromoBannerSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -129,7 +129,7 @@ class AdminBannerDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AdminStoreCategoryListCreate(generics.ListCreateAPIView):
-    queryset = ParentStoreCategory.objects.all().order_by("sort_order", "id")
+    queryset = ParentStoreCategory.objects.all().order_by("order", "id")
     serializer_class = ParentStoreCategorySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -173,7 +173,7 @@ class AdminStoreProductDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AdminBlogCategoryListCreate(generics.ListCreateAPIView):
-    queryset = BlogCategory.objects.all().order_by("sort_order", "id")
+    queryset = BlogCategory.objects.all().order_by("order", "id")
     serializer_class = BlogCategorySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
