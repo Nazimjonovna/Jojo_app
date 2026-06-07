@@ -283,7 +283,12 @@ async def _handle_location(sid, data):
     if payload["latitude"] is None or payload["longitude"] is None:
         return
     try:
-        await sio.start_background_task(_save_and_broadcast_location, user_id, payload)
+        # process_child_location va broadcast — sync. async kontekstdan
+        # sync_to_async ichiga o'raymiz. Awaitni esa background'ga
+        # tashlaymiz (await qilmasa frame yuborilishi tezroq).
+        from asgiref.sync import sync_to_async
+        await sync_to_async(_save_and_broadcast_location,
+                            thread_sensitive=False)(user_id, payload)
     except Exception as e:
         logger.warning("sio location save failed: %s", e)
 
