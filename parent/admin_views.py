@@ -12,6 +12,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, BasePermission
@@ -22,6 +23,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import (
     BlogCategory,
     BlogPost,
+    CallCenterComment,
     CallCenterTicket,
     ParentStoreCategory,
     ParentStoreOrder,
@@ -33,6 +35,7 @@ from .models import (
     SubscriptionPayment,
     SubscriptionPlan,
 )
+from .realtime import broadcast_lead_changed, broadcast_lead_comment
 from .serializers import (
     ParentNotificationSerializer,
     ParentStoreOrderSerializer,
@@ -444,50 +447,296 @@ class AdminNotificationListView(generics.ListAPIView):
 # ============================================================================
 
 
+def _lead_to_dict(t):
+    p = t.parent
+    op = t.operator
+    return {
+        "id": t.id,
+        "title": t.title,
+        "description": t.description or "",
+        "status": t.status,
+        "priority": t.priority,
+        "parent": {
+            "id": p.id,
+            "name": p.full_name or p.first_name or p.phone or "—",
+            "phone": p.phone,
+            "avatar": p.avatar.url if (p.avatar and hasattr(p.avatar, "url") and p.avatar.name) else None,
+        } if p else None,
+        "operator": {
+            "id": op.id,
+            "name": op.full_name or op.first_name or op.phone or "—",
+        } if op else None,
+        "last_contact_at": t.last_contact_at.isoformat() if t.last_contact_at else None,
+        "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+        "created_at": t.created_at.isoformat(),
+        "updated_at": t.updated_at.isoformat(),
+        "comments_count": t.comments.count(),
+    }
+
+
+def _comment_to_dict(c):
+    op = c.operator
+    return {
+        "id": c.id,
+        "ticket_id": c.ticket_id,
+        "text": c.text,
+        "status": getattr(c, "status", "") or "",
+        "operator": {
+            "id": op.id,
+            "name": op.full_name or op.first_name or op.phone or "—",
+        } if op else None,
+        "created_at": c.created_at.isoformat(),
+    }
+
+
 class AdminTicketListView(APIView):
+    """Eski endpoint — paginated flat list (Requests sahifasi ishlatadi)."""
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        qs = CallCenterTicket.objects.all().select_related("user", "assignee").order_by("-created_at")
+        qs = CallCenterTicket.objects.all().select_related(
+            "parent", "operator"
+        ).prefetch_related("comments").order_by("-updated_at")
         s = request.query_params.get("status")
         if s:
             qs = qs.filter(status=s)
+        q = request.query_params.get("q")
+        if q:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(title__icontains=q)
+                | Q(description__icontains=q)
+                | Q(parent__phone__icontains=q)
+                | Q(parent__first_name__icontains=q)
+                | Q(parent__full_name__icontains=q)
+            )
         page_size = int(request.query_params.get("page_size", 30))
         offset = int(request.query_params.get("offset", 0))
-        items = []
-        for t in qs[offset:offset + page_size]:
-            items.append({
-                "id": t.id,
-                "subject": t.subject,
-                "status": t.status,
-                "priority": t.priority,
-                "user": {
-                    "id": t.user_id,
-                    "name": (t.user.full_name or t.user.first_name or t.user.phone) if t.user else None,
-                    "phone": t.user.phone if t.user else None,
-                } if t.user_id else None,
-                "assignee": {
-                    "id": t.assignee_id,
-                    "name": (t.assignee.full_name or t.assignee.first_name or t.assignee.phone) if t.assignee else None,
-                } if t.assignee_id else None,
-                "created_at": t.created_at.isoformat(),
-                "updated_at": t.updated_at.isoformat() if hasattr(t, "updated_at") else None,
-            })
-        return Response({"count": qs.count(), "results": items, "offset": offset, "page_size": page_size})
+        items = [_lead_to_dict(t) for t in qs[offset:offset + page_size]]
+        return Response({
+            "count": qs.count(),
+            "results": items,
+            "offset": offset,
+            "page_size": page_size,
+        })
 
 
 class AdminTicketUpdateStatusView(APIView):
+    """Faqat statusni yangilaydi (Requests sahifasi tezda status o'zgartirish uchun)."""
     permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, ticket_id):
+        ticket = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
+        if not ticket:
+            return Response({"detail": "Topilmadi"}, status=404)
+        new_status = request.data.get("status")
+        if new_status and new_status in dict(CallCenterTicket.STATUS_CHOICES):
+            old = ticket.status
+            ticket.status = new_status
+            ticket.save(update_fields=["status", "updated_at"])
+            try:
+                broadcast_lead_changed({
+                    "type": "status_changed",
+                    "id": ticket.id,
+                    "from": old,
+                    "to": new_status,
+                    "lead": _lead_to_dict(ticket),
+                })
+            except Exception:
+                pass
+        return Response({"id": ticket.id, "status": ticket.status})
+
+
+# ============================================================================
+# Leads (kanban board) — call-center operatorlari uchun real-time CRM
+# ============================================================================
+
+
+class AdminLeadBoardView(APIView):
+    """Lead'larni status bo'yicha guruhlangan tarzda qaytaradi.
+    Frontend kanban kolonkalari uchun ideal shakl."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        statuses = [s[0] for s in CallCenterTicket.STATUS_CHOICES]
+        qs = CallCenterTicket.objects.all().select_related(
+            "parent", "operator"
+        ).prefetch_related("comments").order_by("-updated_at")
+
+        q = request.query_params.get("q")
+        if q:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(title__icontains=q)
+                | Q(description__icontains=q)
+                | Q(parent__phone__icontains=q)
+                | Q(parent__first_name__icontains=q)
+                | Q(parent__full_name__icontains=q)
+            )
+
+        # Operator filtersi — faqat shu operatorga biriktirilganlar
+        op_id = request.query_params.get("operator_id")
+        if op_id:
+            qs = qs.filter(operator_id=op_id)
+
+        # Har kolonkada qancha ko'rsatish — default 50.
+        per_column = int(request.query_params.get("per_column", 50))
+
+        columns = {}
+        counts = {}
+        for st in statuses:
+            sub = qs.filter(status=st)
+            counts[st] = sub.count()
+            columns[st] = [_lead_to_dict(t) for t in sub[:per_column]]
+
+        return Response({
+            "statuses": statuses,
+            "counts": counts,
+            "columns": columns,
+        })
+
+
+class AdminLeadListCreate(APIView):
+    """Yangi lead yaratish — qo'lda kiritilgan murojaatlar uchun."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        parent_id = request.data.get("parent_id")
+        title = (request.data.get("title") or "").strip() or "Foydalanuvchi murojaati"
+        description = request.data.get("description") or ""
+        priority = request.data.get("priority") or "normal"
+        status_val = request.data.get("status") or CallCenterTicket.STATUS_NEW
+        if status_val not in dict(CallCenterTicket.STATUS_CHOICES):
+            status_val = CallCenterTicket.STATUS_NEW
+        if not parent_id:
+            return Response({"detail": "parent_id majburiy"}, status=status.HTTP_400_BAD_REQUEST)
+        parent_user = User.objects.filter(id=parent_id, role="parent").first()
+        if not parent_user:
+            return Response({"detail": "Foydalanuvchi topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+        ticket = CallCenterTicket.objects.create(
+            parent=parent_user,
+            operator=request.user if request.user.is_staff else None,
+            title=title,
+            description=description,
+            priority=priority,
+            status=status_val,
+        )
+        data = _lead_to_dict(ticket)
+        try:
+            broadcast_lead_changed({"type": "created", "id": ticket.id, "lead": data})
+        except Exception:
+            pass
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class AdminLeadDetailView(APIView):
+    """Bitta lead'ni o'qish, yangilash yoki o'chirish."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, ticket_id):
+        t = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
+        if not t:
+            return Response({"detail": "Topilmadi"}, status=404)
+        return Response(_lead_to_dict(t))
+
+    def patch(self, request, ticket_id):
+        t = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
+        if not t:
+            return Response({"detail": "Topilmadi"}, status=404)
+        old_status = t.status
+        update_fields = []
+        for f in ("title", "description", "priority"):
+            if f in request.data:
+                setattr(t, f, request.data.get(f) or "")
+                update_fields.append(f)
+        if "status" in request.data:
+            s = request.data["status"]
+            if s in dict(CallCenterTicket.STATUS_CHOICES):
+                t.status = s
+                update_fields.append("status")
+                if s == CallCenterTicket.STATUS_CLOSED and not t.closed_at:
+                    t.closed_at = timezone.now()
+                    update_fields.append("closed_at")
+        if "operator_id" in request.data:
+            op_id = request.data["operator_id"]
+            if op_id:
+                op = User.objects.filter(id=op_id, is_staff=True).first()
+                t.operator = op
+            else:
+                t.operator = None
+            update_fields.append("operator")
+        if update_fields:
+            update_fields.append("updated_at")
+            t.save(update_fields=update_fields)
+        data = _lead_to_dict(t)
+        try:
+            broadcast_lead_changed({
+                "type": "updated",
+                "id": t.id,
+                "from": old_status,
+                "to": t.status,
+                "lead": data,
+            })
+        except Exception:
+            pass
+        return Response(data)
+
+    def delete(self, request, ticket_id):
+        t = CallCenterTicket.objects.filter(id=ticket_id).first()
+        if not t:
+            return Response({"detail": "Topilmadi"}, status=404)
+        tid = t.id
+        t.delete()
+        try:
+            broadcast_lead_changed({"type": "deleted", "id": tid})
+        except Exception:
+            pass
+        return Response(status=204)
+
+
+class AdminLeadCommentsView(APIView):
+    """Lead izohlari — operatorlar yozadigan history."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, ticket_id):
+        comments = CallCenterComment.objects.filter(
+            ticket_id=ticket_id
+        ).select_related("operator").order_by("-created_at")
+        return Response({
+            "results": [_comment_to_dict(c) for c in comments[:100]],
+        })
 
     def post(self, request, ticket_id):
         ticket = CallCenterTicket.objects.filter(id=ticket_id).first()
         if not ticket:
-            return Response({"detail": "Topilmadi"}, status=404)
-        new_status = request.data.get("status")
-        if new_status:
-            ticket.status = new_status
-            ticket.save(update_fields=["status"])
-        return Response({"id": ticket.id, "status": ticket.status})
+            return Response({"detail": "Lead topilmadi"}, status=404)
+        text = (request.data.get("text") or "").strip()
+        if not text:
+            return Response({"detail": "text majburiy"}, status=400)
+        # CallCenterComment.status field bor bo'lishi mumkin — joriy ticket statusiga set
+        kwargs = {
+            "ticket": ticket,
+            "operator": request.user,
+            "text": text,
+        }
+        try:
+            CallCenterComment._meta.get_field("status")
+            kwargs["status"] = ticket.status
+        except Exception:
+            pass
+        c = CallCenterComment.objects.create(**kwargs)
+        # last_contact_at'ni yangilaymiz
+        ticket.last_contact_at = timezone.now()
+        ticket.save(update_fields=["last_contact_at", "updated_at"])
+        payload = _comment_to_dict(c)
+        try:
+            broadcast_lead_comment({
+                "ticket_id": ticket.id,
+                "comment": payload,
+            })
+        except Exception:
+            pass
+        return Response(payload, status=201)
 
 
 # ============================================================================

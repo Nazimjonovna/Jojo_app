@@ -187,3 +187,18 @@ def broadcast_destination_prediction(parent_id, prediction):
     }
     _emit("destination_prediction", payload, f"parent_{parent_id}",
           legacy_type="destination.prediction")
+
+
+# ---------------------------------------------------------------------------
+# Lead / call-center kanban — staff_ops room ga real-time updates
+# ---------------------------------------------------------------------------
+
+def broadcast_lead_changed(payload):
+    """Lead (CallCenterTicket) o'zgardi: yangi/yangilangan/o'chirildi.
+    Barcha ulangan staff (admin/operator)larga emit qilamiz."""
+    _emit("lead_changed", payload, "staff_ops")
+
+
+def broadcast_lead_comment(payload):
+    """Lead ga yangi izoh qo'shildi."""
+    _emit("lead_comment", payload, "staff_ops")

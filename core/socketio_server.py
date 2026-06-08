@@ -160,8 +160,14 @@ async def connect(sid, environ, auth=None):
         raise socketio.exceptions.ConnectionRefusedError("auth_required")
 
     role = getattr(user, "role", None)
+    is_staff = bool(getattr(user, "is_staff", False))
     if role == "child":
         room = f"child_{user.id}"
+    elif role == "parent" and is_staff:
+        # Staff (admin/operator) — `staff_ops` room ga qo'shamiz.
+        # Lead board / call-center real-time updates uchun.
+        role = "staff"
+        room = "staff_ops"
     elif role == "parent":
         room = f"parent_{user.id}"
     else:

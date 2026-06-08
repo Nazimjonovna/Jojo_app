@@ -138,6 +138,7 @@ from .admin_views import (
     AdminSubscriptionPaymentListView,
     AdminNotificationListView,
     AdminTicketListView, AdminTicketUpdateStatusView,
+    AdminLeadBoardView, AdminLeadListCreate, AdminLeadDetailView, AdminLeadCommentsView,
     AdminOperatorListView, AdminOperatorCreateView,
     AdminChangePasswordView,
     AdminChildrenListView,
@@ -180,6 +181,10 @@ urlpatterns += [
 
     path("admin/tickets/", AdminTicketListView.as_view(), name="admin-ticket-list"),
     path("admin/tickets/<int:ticket_id>/status/", AdminTicketUpdateStatusView.as_view(), name="admin-ticket-status"),
+    path("admin/leads/board/", AdminLeadBoardView.as_view(), name="admin-lead-board"),
+    path("admin/leads/", AdminLeadListCreate.as_view(), name="admin-lead-create"),
+    path("admin/leads/<int:ticket_id>/", AdminLeadDetailView.as_view(), name="admin-lead-detail"),
+    path("admin/leads/<int:ticket_id>/comments/", AdminLeadCommentsView.as_view(), name="admin-lead-comments"),
 
     path("admin/operators/", AdminOperatorListView.as_view(), name="admin-operator-list"),
     path("admin/operators/create/", AdminOperatorCreateView.as_view(), name="admin-operator-create"),
