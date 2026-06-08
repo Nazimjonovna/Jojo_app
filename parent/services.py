@@ -300,11 +300,9 @@ def process_child_location(
         captured_at=captured_at,
         source=source,
     )
-    print(
-        f"[LOC] child={child.id} lat={latitude} lng={longitude} "
-        f"spd={speed} bat={battery_level} act={activity_type} src={source}",
-        flush=True,
-    )
+    # [LOC] print olib tashlandi — har bir GPS ping'da log yozish I/O ni
+    # to'ldirib boshqa endpointlarni sekinlashtirar edi. Agar debug kerak
+    # bo'lsa, logging.debug() ishlatib LOG_LEVEL=DEBUG qiling.
 
     # ChildDailyActivity'ni bugungi kun uchun yangilash:
     # oxirgi nuqta bilan masofa farqi qo'shiladi.
