@@ -712,14 +712,42 @@ class ParentChildUpdateView(APIView):
         # Device tokenlarni o'chirib qo'yamiz (active session uziladi)
         DeviceToken.objects.filter(user=child, is_active=True).update(is_active=False)
         # Kids ilovasi force_logout signalini olib o'zini tozalaydi.
+        # Alohida thread'da yuboramiz — socket emit yoki Redis sekin bo'lsa
+        # HTTP javobni kechiktirmasin.
         try:
+            import threading
             from .realtime import broadcast_child_force_logout
-            broadcast_child_force_logout(child.id, reason="parent_deleted")
+            threading.Thread(
+                target=broadcast_child_force_logout,
+                args=(child.id, "parent_deleted"),
+                daemon=True,
+            ).start()
         except Exception:
             pass
+
         name = child.full_name or child.first_name or ""
-        # Cascade orqali ParentChild, PairingCode, ChildLocation va h.k.
-        # avtomatik o'chiriladi (related_name on_delete=CASCADE).
+        # Cascade ORM ko'p ming yozuvni bittama-bitta SQL'da o'chiradi —
+        # 8000+ ChildLocation bo'lganda 30+ soniya ketadi va Flutter HTTP
+        # client timeout ushlanadi. Og'ir jadvallarni avval bulk delete
+        # qilamiz (bitta SQL), keyin User'ni o'chiramiz — qolgan kichik
+        # cascadelar darrov yopiladi.
+        from .models import (
+            ChildLocation, ChildLastLocation, ChildAppUsage,
+            ChildDailyActivity, SavedLocationVisit,
+            ChildSavedLocationEvent, ChildSavedLocationState,
+            ChildFrequentPlace, ChildDestinationPrediction,
+        )
+        for model in [
+            ChildLocation, ChildAppUsage, SavedLocationVisit,
+            ChildSavedLocationEvent, ChildSavedLocationState,
+            ChildFrequentPlace, ChildDestinationPrediction,
+            ChildDailyActivity, ChildLastLocation,
+        ]:
+            try:
+                model.objects.filter(child=child).delete()
+            except Exception:
+                pass
+
         child.delete()
         return Response(
             {
@@ -745,10 +773,15 @@ class ParentChildLogoutView(APIView):
         child.is_active = False
         child.save(update_fields=["child_status", "pending_delete_at", "is_active"])
         # Socket orqali bola qurilmasiga "tezda chiqib ket" eventi —
-        # kids ilova bu signalni olib auth sessionni tozalaydi.
+        # alohida thread'da, broadcast'ni kutmasdan javob qaytaramiz.
         try:
+            import threading
             from .realtime import broadcast_child_force_logout
-            broadcast_child_force_logout(child.id, reason="parent_logout")
+            threading.Thread(
+                target=broadcast_child_force_logout,
+                args=(child.id, "parent_logout"),
+                daemon=True,
+            ).start()
         except Exception:
             pass
         existing_pairing = PairingCode.objects.filter(parent=request.user, child=child, is_used=False).order_by("-created_at").first()

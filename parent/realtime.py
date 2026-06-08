@@ -202,12 +202,14 @@ def broadcast_lead_changed(payload):
 def broadcast_child_force_logout(child_id, reason=""):
     """Ota-ona bolani qurilmadan chiqardi — bola ilovasini majburiy
     sign-out qilishga buyruq. Kids ilovasi `force_logout` eventini
-    tinglaydi va sessiyani tozalab pairing ekraniga o'tadi."""
+    tinglaydi va sessiyani tozalab pairing ekraniga o'tadi.
+
+    Legacy Channels group_send chaqirilmaydi — bu signal faqat Socket.IO
+    klientga keladi, va Channels layer ba'zan sekin javob beradi."""
     _emit(
         "force_logout",
         {"reason": reason or "parent_logout"},
         f"child_{child_id}",
-        legacy_type="force.logout",
     )
 
 
