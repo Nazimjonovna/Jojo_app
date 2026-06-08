@@ -123,6 +123,14 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD", ""),
         "HOST": os.getenv("DB_HOST", ""),
         "PORT": os.getenv("DB_PORT", ""),
+        # CONN_MAX_AGE: har bir request uchun yangi DB connection ochish o'rniga
+        # workerda 60 soniya ushlab turamiz. 100k+ user bilan bu juda muhim —
+        # Postgres connection ochish ~5-10ms ketadi, har request'da 5-7 query
+        # bo'lsa, bu sezilarli sekinlik.
+        "CONN_MAX_AGE": 60,
+        # Sog'lom ulanishlarni qayta tekshirish — Postgres restart bo'lsa ham
+        # eski stale connection ishlatib ketmaslik uchun.
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
@@ -135,8 +143,11 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [(REDIS_HOST, REDIS_PORT)],
-            "capacity": 2000,
-            "expiry": 30,
+            # 100k+ socket uchun: har group'da 10k pending xabar yetadi,
+            # expiry pastroq — eski xabarlarni darrov tozalab Redis
+            # memoryni tejaymiz.
+            "capacity": 10000,
+            "expiry": 10,
         },
     },
 }

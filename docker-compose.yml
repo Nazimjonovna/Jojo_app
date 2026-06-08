@@ -4,6 +4,17 @@ services:
   redis:
     image: redis:7
     container_name: jojo_redis
+    # 100k klient uchun: 512MB cap + LRU eviction (eski kalitlar auto-remove),
+    # RDB snapshot o'chirilgan — disk I/O sekinligi bo'lmasin. AOF appendonly
+    # ham o'chirilgan: pub/sub uchun durability shart emas.
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+      --tcp-keepalive 60
+      --timeout 0
     restart: always
 
   db:
@@ -13,6 +24,26 @@ services:
       POSTGRES_DB: Jojo
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "0200"
+    # 100k ulanish uchun moslangan (8GB RAM VPS):
+    #  - max_connections: 300 (default 100 — gunicorn 4 worker × CONN_MAX_AGE
+    #    pool yetarli, lekin buffer'da bo'lsin)
+    #  - shared_buffers ~25% RAM
+    #  - effective_cache_size ~50% RAM (planner uchun)
+    #  - synchronous_commit=off — location pinglarini tez yozish uchun
+    #    (transaction safe, lekin OS crash'da oxirgi 200ms yo'qolishi mumkin)
+    command: >
+      postgres
+      -c max_connections=300
+      -c shared_buffers=2GB
+      -c effective_cache_size=4GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=256MB
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_buffers=16MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c synchronous_commit=off
     volumes:
       - jojo_postgres_data:/var/lib/postgresql/data
     restart: always
@@ -20,7 +51,27 @@ services:
   web:
     build: .
     container_name: jojo_backend
-    command: daphne -b 0.0.0.0 -p 8000 core.asgi:application
+    # gunicorn + uvicorn workers — 4 ta process bitta port'ni baham ko'radi
+    # (pre-fork). Har bir worker async event loop bilan WebSocket + HTTP
+    # birga xizmat qiladi. CPU core sonidan ortiq ishlatish foydasi yo'q.
+    #  -w 4              4 worker process
+    #  -k UvicornWorker  ASGI async
+    #  --timeout 90      uzun WebSocket connection
+    #  --keep-alive 75   client connection reuse
+    #  --max-requests    har worker 5000 request'dan keyin restart (memory leak'lar uchun)
+    command: >
+      gunicorn core.asgi:application
+      -w 4
+      -k uvicorn.workers.UvicornWorker
+      -b 0.0.0.0:8000
+      --timeout 90
+      --keep-alive 75
+      --max-requests 5000
+      --max-requests-jitter 500
+      --proxy-allow-from '*'
+      --access-logfile -
+      --error-logfile -
+      --log-level info
     volumes:
       - .:/app
     ports:

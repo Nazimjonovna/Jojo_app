@@ -202,6 +202,9 @@ async def disconnect(sid):
     user_id = session.get("user_id")
     logger.info("sio disconnect sid=%s user=%s role=%s", sid, user_id, role)
     if role == "child" and user_id:
+        # Rate-limiter state'ini tozalaymiz — keyingi reconnect'da yana
+        # darrov birinchi ping qabul qilinsin.
+        _last_location_at.pop(user_id, None)
         try:
             user = await _get_user_async(user_id)
             if user:
@@ -280,18 +283,39 @@ def _payload_from_message(content):
     }
 
 
+# ---------------------------------------------------------------------------
+# Location ping rate limiter — bola ilovasi har soniyada ping yuborishi mumkin
+# emas. Har bola uchun oxirgi ping vaqtini in-process dictionarida saqlaymiz
+# (worker'lar mustaqil — bir bola faqat bitta worker socket'iga ulangan, shu
+# uchun bu yetarli). Default minimal interval 2 soniya.
+# ---------------------------------------------------------------------------
+
+_LOCATION_MIN_INTERVAL_S = 2.0
+_last_location_at = {}  # user_id -> monotonic time
+
+
 async def _handle_location(sid, data):
     session = await sio.get_session(sid)
     if not session or session.get("role") != "child":
         return
     user_id = session["user_id"]
+
+    # Rate limit: agar oxirgi ping 2 soniyadan kam vaqt oldin kelgan bo'lsa
+    # tashlab yuboramiz. 100k bola × 2s = 50k ping/sec maksimal yuk;
+    # cheklamasdan har bir bola 5-10 ping/sec yuborishi mumkin.
+    import time
+    now = time.monotonic()
+    last = _last_location_at.get(user_id)
+    if last is not None and (now - last) < _LOCATION_MIN_INTERVAL_S:
+        return
+    _last_location_at[user_id] = now
+
     payload = _payload_from_message(data)
     if payload["latitude"] is None or payload["longitude"] is None:
         return
     try:
         # process_child_location va broadcast — sync. async kontekstdan
-        # sync_to_async ichiga o'raymiz. Awaitni esa background'ga
-        # tashlaymiz (await qilmasa frame yuborilishi tezroq).
+        # sync_to_async ichiga o'raymiz.
         from asgiref.sync import sync_to_async
         await sync_to_async(_save_and_broadcast_location,
                             thread_sensitive=False)(user_id, payload)
