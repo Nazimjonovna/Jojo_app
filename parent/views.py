@@ -203,6 +203,7 @@ def get_premium_payload(user):
 
 
 class SendOTPView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
     @swagger_auto_schema(request_body=SendOTPSerializer, tags=["register"])
     def post(self, request):
@@ -225,6 +226,7 @@ class SendOTPView(APIView):
 
 
 class VerifyOTPView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(request_body=VerifyOTPSerializer, tags=["register"])
@@ -367,6 +369,7 @@ class VerifyOTPView(APIView):
 
 
 class ParentRegisterView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(request_body=ParentRegisterSerializer, tags=["register"])
@@ -555,6 +558,10 @@ class CreatePairingCodeView(APIView):
 
 
 class ChildRegisterByCodeView(APIView):
+    # Bola hali login bo'lmagan — Authorization header bor bo'lsa ham
+    # tekshirilmasin. Aks holda eski/yaroqsiz JWT 401 qaytaradi va
+    # bola qayta pair qila olmaydi.
+    authentication_classes = []
     permission_classes = [AllowAny]
     @swagger_auto_schema(request_body=ChildRegisterByCodeSerializer, tags=["child"])
     def post(self, request):
