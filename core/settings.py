@@ -198,6 +198,11 @@ CORS_ALLOWED_ORIGINS = [
     "https://api.jojoapp.uz",
 ]
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://[a-z0-9-]+\.vercel\.app$",
+    r"^https://jojo-admin(-[a-z0-9-]+)?\.vercel\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
