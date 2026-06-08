@@ -602,6 +602,95 @@ class MyChildrenView(APIView):
         return Response({"status": True, "deleted_expired_children_count": expired_count, "active_children": ChildSerializer(active_children, many=True).data, "non_active_children": ChildSerializer(non_active_children, many=True).data}, status=status.HTTP_200_OK)
 
 
+class ParentChildUpdateView(APIView):
+    """Bolaning ma'lumotlarini ota-ona tomonidan tahrirlash.
+
+    PATCH /api/parent/children/<child_id>/
+    Body: {name?, age?, gender?, avatar_url?}
+    Faqat shu parentning bolasi tahrirlanadi.
+    """
+    permission_classes = [IsParentOfChild]
+
+    @swagger_auto_schema(tags=["child"])
+    def patch(self, request, child_id):
+        child = User.objects.filter(id=child_id, role=User.ROLE_CHILD).first()
+        if not child:
+            return Response(
+                {"status": False, "detail": "Child topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        update_fields = []
+        name = request.data.get("name")
+        if name is not None:
+            name = name.strip()
+            if len(name) < 2:
+                return Response(
+                    {"status": False, "detail": "Ism kamida 2 belgidan iborat."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            child.full_name = name
+            child.first_name = name
+            update_fields += ["full_name", "first_name"]
+
+        age = request.data.get("age")
+        if age is not None:
+            try:
+                age = int(age)
+            except (TypeError, ValueError):
+                return Response(
+                    {"status": False, "detail": "Yosh raqam bo'lishi kerak."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if age < 1 or age > 18:
+                return Response(
+                    {"status": False, "detail": "Yosh 1-18 oralig'ida bo'lishi kerak."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            child.age = age
+            update_fields.append("age")
+
+        gender = request.data.get("gender")
+        if gender is not None:
+            if gender not in ("male", "female"):
+                return Response(
+                    {"status": False, "detail": "Jins male yoki female bo'lishi kerak."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            child.gender = gender
+            update_fields.append("gender")
+
+        # Avatar URL — parent upload endpoint'idan kelgan URL
+        avatar_url = request.data.get("avatar_url")
+        if avatar_url is not None:
+            from urllib.parse import urlparse
+            from django.conf import settings as dj_settings
+            s = str(avatar_url).strip()
+            if s == "":
+                child.avatar = None
+                update_fields.append("avatar")
+            elif s.startswith("http"):
+                path = urlparse(s).path
+                media_url = (dj_settings.MEDIA_URL or "/media/").rstrip("/") + "/"
+                idx = path.find(media_url)
+                if idx != -1:
+                    rel = path[idx + len(media_url):]
+                    child.avatar.name = rel
+                    update_fields.append("avatar")
+
+        if update_fields:
+            child.save(update_fields=update_fields)
+
+        return Response(
+            {
+                "status": True,
+                "detail": "Bola ma'lumoti yangilandi.",
+                "child": ChildSerializer(child).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class ParentChildLogoutView(APIView):
     permission_classes = [IsParentOfChild]
     @swagger_auto_schema(tags=["child"])

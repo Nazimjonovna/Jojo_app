@@ -4,6 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     SendOTPView, VerifyOTPView, ParentRegisterView, MeView, UpdateLanguageView,
     CreatePairingCodeView, ChildRegisterByCodeView, MyChildrenView, ParentChildLogoutView,
+    ParentChildUpdateView,
     SendChildLocationView, ChildLastLocationView, ChildLocationHistoryView,
     DeviceTokenView, DeviceLogoutView,
     ParentRouteListCreateView, ParentRouteDetailView, AssignRouteToChildView,
@@ -52,6 +53,7 @@ urlpatterns = [
     path("parent/upload/", ParentMediaUploadView.as_view(), name="parent-media-upload"),
     path("parent/children/", MyChildrenView.as_view(), name="my-children"),
     path("parent/children/<int:child_id>/logout/", ParentChildLogoutView.as_view(), name="parent-child-logout"),
+    path("parent/children/<int:child_id>/", ParentChildUpdateView.as_view(), name="parent-child-update"),
     path("child/register-by-code/", ChildRegisterByCodeView.as_view(), name="child-register-by-code"),
     path("child/location/", SendChildLocationView.as_view(), name="send-child-location"),
     path("child/activity/sync/", ChildDailyActivitySyncView.as_view(), name="child-daily-activity-sync"),
