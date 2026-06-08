@@ -530,7 +530,22 @@ class CreatePairingCodeView(APIView):
             return Response({"status": True, "already_exists": False, "detail": f"{child.full_name or child.first_name} uchun pairing code yaratildi.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(pairing).data, "qr_payload": {"type": "jojo_child_pairing", "code": pairing.code, "child_id": child.id}}, status=status.HTTP_201_CREATED)
         serializer = CreateChildPairingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # `child_avatar` ImageField (multipart) yoki `child_avatar_url` URL
+        # string sifatida kelishi mumkin — ikkalasini ham qo'llab-quvvatlaymiz.
         child = User.objects.create_user(phone=f"+998CHILD{generate_numeric_code(8)}", username=f"child_{generate_numeric_code(10)}", full_name=serializer.validated_data["child_name"], first_name=serializer.validated_data["child_name"], role=User.ROLE_CHILD, gender=serializer.validated_data["child_gender"], age=serializer.validated_data["child_age"], language=request.user.language, avatar=serializer.validated_data.get("child_avatar"), child_status=User.CHILD_STATUS_NON_ACTIVE, pending_delete_at=timezone.now() + timedelta(days=3))
+        avatar_url = request.data.get("child_avatar_url")
+        if avatar_url and not child.avatar:
+            from urllib.parse import urlparse
+            from django.conf import settings
+            s = str(avatar_url).strip()
+            if s.startswith("http"):
+                path = urlparse(s).path
+                media_url = (settings.MEDIA_URL or "/media/").rstrip("/") + "/"
+                idx = path.find(media_url)
+                if idx != -1:
+                    rel = path[idx + len(media_url):]
+                    child.avatar.name = rel
+                    child.save(update_fields=["avatar"])
         ParentChild.objects.create(parent=request.user, child=child)
         code = generate_numeric_code(6)
         while PairingCode.objects.filter(code=code, is_used=False).exists():
@@ -2662,3 +2677,54 @@ class ChildJourneyView(APIView):
             {"status": True, **journey},
             status=status.HTTP_200_OK,
         )
+
+
+# ============================================================================
+# Parent media upload — bola avatari va boshqa mijoz tomon yuklab qo'yadigan rasmlar
+# ============================================================================
+
+
+class ParentMediaUploadView(APIView):
+    """Authenticated parent rasm yuklash uchun.
+
+    multipart/form-data: file=<image>, folder=<children|avatars|uploads>
+    Returns: {"url": "...", "path": "...", "name": "...", "size": ...}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        import os, uuid
+        from rest_framework.parsers import MultiPartParser, FormParser
+        from django.core.files.storage import default_storage
+
+        f = request.FILES.get("file")
+        if not f:
+            return Response({"status": False, "detail": "file majburiy"}, status=status.HTTP_400_BAD_REQUEST)
+        if f.size > 10 * 1024 * 1024:
+            return Response({"status": False, "detail": "Maksimal 10 MB"}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed_folders = {"children", "avatars", "uploads"}
+        folder = (request.data.get("folder") or "uploads").strip("/ ").lower()
+        if folder not in allowed_folders:
+            folder = "uploads"
+
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+            return Response({"status": False, "detail": "Faqat rasm: jpg/png/webp/gif"}, status=status.HTTP_400_BAD_REQUEST)
+
+        rel_path = f"parent_uploads/{folder}/{uuid.uuid4().hex}{ext}"
+        saved = default_storage.save(rel_path, f)
+        url = default_storage.url(saved)
+        if not url.startswith("http"):
+            url = request.build_absolute_uri(url)
+        return Response({
+            "status": True,
+            "url": url,
+            "path": saved,
+            "name": f.name,
+            "size": f.size,
+        }, status=status.HTTP_201_CREATED)
+
+    # multipart parser uchun klassdarajada belgilab qo'yamiz
+    from rest_framework.parsers import MultiPartParser as _MP, FormParser as _FP
+    parser_classes = [_MP, _FP]

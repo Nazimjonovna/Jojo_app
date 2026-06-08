@@ -35,6 +35,7 @@ from .views import (
     ParentNotificationMarkReadView,
     ParentNotificationMarkAllReadView,
     ChildJourneyView,
+    ParentMediaUploadView,
 )
 
 
@@ -48,6 +49,7 @@ urlpatterns = [
     path("version/check/", AppVersionCheckView.as_view(), name="version-check"),
     path("parent/home-summary/", ParentHomeSummaryView.as_view(), name="parent-home-summary"),
     path("parent/pairing-code/", CreatePairingCodeView.as_view(), name="create-pairing-code"),
+    path("parent/upload/", ParentMediaUploadView.as_view(), name="parent-media-upload"),
     path("parent/children/", MyChildrenView.as_view(), name="my-children"),
     path("parent/children/<int:child_id>/logout/", ParentChildLogoutView.as_view(), name="parent-child-logout"),
     path("child/register-by-code/", ChildRegisterByCodeView.as_view(), name="child-register-by-code"),
