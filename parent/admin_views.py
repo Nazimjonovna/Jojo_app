@@ -5,9 +5,15 @@ Endpoint'lar `/api/admin/` ostida joylashgan. Auth: JWT + foydalanuvchi
 `is_staff=True` bo'lishi shart.
 """
 
+import os
+import uuid
+
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
+from django.core.files.storage import default_storage
 from rest_framework import generics, status
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -564,3 +570,75 @@ class AdminChildrenListView(APIView):
             "age", "gender", "language", "is_active", "date_joined",
         ))
         return Response({"count": total, "results": items, "offset": offset, "page_size": page_size})
+
+
+# ============================================================================
+# Media upload — admin file picker uchun. Faylni saqlab, public URL qaytaradi.
+# ============================================================================
+
+
+_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+_ALLOWED_FOLDERS = {
+    "products",
+    "categories",
+    "banners",
+    "blog",
+    "blog/thumbnails",
+    "blog/banners",
+    "avatars",
+    "children",
+    "uploads",
+}
+_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+class AdminMediaUploadView(APIView):
+    """Multipart file upload. JSON qaytaradi: {url, path, name, size}.
+
+    Mijoz tarafda foydalanish:
+      const fd = new FormData(); fd.append("file", f); fd.append("folder", "products");
+      fetch("/api/admin/upload/", {method:"POST", body:fd, headers:{Authorization:"Bearer ..."}})
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        f = request.FILES.get("file")
+        if not f:
+            return Response(
+                {"detail": "file majburiy"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if f.size > _MAX_BYTES:
+            return Response(
+                {"detail": f"Maksimal {_MAX_BYTES // 1024 // 1024} MB"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        folder = (request.data.get("folder") or "uploads").strip("/ ").lower()
+        if folder not in _ALLOWED_FOLDERS:
+            folder = "uploads"
+
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in _ALLOWED_IMAGE_EXTS and not (request.data.get("any") == "1"):
+            return Response(
+                {"detail": f"Faqat rasm: {sorted(_ALLOWED_IMAGE_EXTS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rel_path = f"admin_uploads/{folder}/{uuid.uuid4().hex}{ext}"
+        saved = default_storage.save(rel_path, f)
+        # default_storage may return a different path than requested if conflict.
+        url = default_storage.url(saved)
+        # Absolute URL (so client can use it directly even from another origin).
+        if not url.startswith("http"):
+            url = request.build_absolute_uri(url)
+
+        return Response({
+            "url": url,
+            "path": saved,
+            "name": f.name,
+            "size": f.size,
+        }, status=status.HTTP_201_CREATED)

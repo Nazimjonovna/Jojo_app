@@ -139,12 +139,14 @@ from .admin_views import (
     AdminOperatorListView, AdminOperatorCreateView,
     AdminChangePasswordView,
     AdminChildrenListView,
+    AdminMediaUploadView,
 )
 
 urlpatterns += [
     path("admin/login/", AdminLoginView.as_view(), name="admin-login"),
     path("admin/me/", AdminMeView.as_view(), name="admin-me"),
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
+    path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
 
     path("admin/banners/", AdminBannerListCreate.as_view(), name="admin-banner-list-create"),
     path("admin/banners/<int:pk>/", AdminBannerDetail.as_view(), name="admin-banner-detail"),
