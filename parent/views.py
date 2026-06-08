@@ -690,6 +690,29 @@ class ParentChildUpdateView(APIView):
             status=status.HTTP_200_OK,
         )
 
+    @swagger_auto_schema(tags=["child"])
+    def delete(self, request, child_id):
+        """Bolani butunlay o'chirish — barcha bog'liq ma'lumotlar bilan."""
+        child = User.objects.filter(id=child_id, role=User.ROLE_CHILD).first()
+        if not child:
+            return Response(
+                {"status": False, "detail": "Child topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        # Device tokenlarni o'chirib qo'yamiz (active session uziladi)
+        DeviceToken.objects.filter(user=child, is_active=True).update(is_active=False)
+        name = child.full_name or child.first_name or ""
+        # Cascade orqali ParentChild, PairingCode, ChildLocation va h.k.
+        # avtomatik o'chiriladi (related_name on_delete=CASCADE).
+        child.delete()
+        return Response(
+            {
+                "status": True,
+                "detail": f"{name} muvaffaqiyatli o'chirildi.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class ParentChildLogoutView(APIView):
     permission_classes = [IsParentOfChild]
