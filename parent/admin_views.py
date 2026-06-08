@@ -28,15 +28,17 @@ from .models import (
     SubscriptionPlan,
 )
 from .serializers import (
-    BlogCategorySerializer,
-    BlogPostDetailSerializer as BlogPostSerializer,
     ParentNotificationSerializer,
-    ParentStoreCategorySerializer,
     ParentStoreOrderSerializer,
-    ParentStoreProductDetailSerializer as ParentStoreProductSerializer,
-    ParentStorePromoBannerSerializer,
     SubscriptionPaymentSerializer,
     SubscriptionPlanSerializer,
+)
+from .admin_serializers import (
+    AdminBannerSerializer as ParentStorePromoBannerSerializer,
+    AdminBlogCategorySerializer as BlogCategorySerializer,
+    AdminBlogPostSerializer as BlogPostSerializer,
+    AdminStoreCategorySerializer as ParentStoreCategorySerializer,
+    AdminStoreProductSerializer as ParentStoreProductSerializer,
 )
 
 User = get_user_model()
