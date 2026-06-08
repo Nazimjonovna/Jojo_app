@@ -582,7 +582,10 @@ class ChildRegisterByCodeView(APIView):
             return Response({"status": False, "detail": device_result["detail"], "active_device_id": device_result.get("active_device_id")}, status=status.HTTP_400_BAD_REQUEST)
         child.child_status = User.CHILD_STATUS_ACTIVE
         child.pending_delete_at = None
-        child.save(update_fields=["child_status", "pending_delete_at"])
+        # Avval `is_active=False` qilingan bo'lsa (parent logout chaqirgan),
+        # qayta yoqamiz — yangi JWT'lar ishlashi uchun.
+        child.is_active = True
+        child.save(update_fields=["child_status", "pending_delete_at", "is_active"])
         pairing.is_used = True
         pairing.save(update_fields=["is_used"])
         return Response({"status": True, "detail": "Child muvaffaqiyatli active qilindi.", "child": ChildSerializer(child).data, "device": DeviceTokenSerializer(device_result["device"]).data, "tokens": get_tokens_for_user(child)}, status=status.HTTP_200_OK)
@@ -730,7 +733,10 @@ class ParentChildLogoutView(APIView):
         DeviceToken.objects.filter(user=child, is_active=True).update(is_active=False)
         child.child_status = User.CHILD_STATUS_NON_ACTIVE
         child.pending_delete_at = timezone.now() + timedelta(days=3)
-        child.save(update_fields=["child_status", "pending_delete_at"])
+        # is_active=False — DRF JWT auth shu paytdan boshlab bu bola'ning
+        # eski tokenlarini darhol rad etadi. Re-pair'da `True`ga qaytadi.
+        child.is_active = False
+        child.save(update_fields=["child_status", "pending_delete_at", "is_active"])
         # Socket orqali bola qurilmasiga "tezda chiqib ket" eventi —
         # kids ilova bu signalni olib auth sessionni tozalaydi.
         try:
