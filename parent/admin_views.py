@@ -345,19 +345,56 @@ class AdminDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        from django.utils import timezone
         from datetime import timedelta
-        total_users = User.objects.filter(role=User.ROLE_PARENT).count()
+        from django.db.models import Sum
+        now = timezone.now()
+        month_ago = now - timedelta(days=30)
+        prev_month_start = now - timedelta(days=60)
+
+        total_parents = User.objects.filter(role=User.ROLE_PARENT).count()
+        prev_parents = User.objects.filter(
+            role=User.ROLE_PARENT, date_joined__lt=month_ago
+        ).count() or 1
         total_children = User.objects.filter(role=User.ROLE_CHILD).count()
-        active_24h = User.objects.filter(last_login__gte=timezone.now() - timedelta(days=1)).count()
+        connected_children = User.objects.filter(
+            role=User.ROLE_CHILD, child_status=User.CHILD_STATUS_ACTIVE
+        ).count()
+        active_24h = User.objects.filter(last_login__gte=now - timedelta(days=1)).count()
+        premium_users = User.objects.filter(
+            role=User.ROLE_PARENT, is_premium=True
+        ).count()
+        blocked_users = User.objects.filter(
+            role=User.ROLE_PARENT, is_active=False
+        ).count()
+        premium_revenue = SubscriptionPayment.objects.filter(
+            status="paid"
+        ).aggregate(s=Sum("amount"))["s"] or 0
+
+        # Last 30d for delta
+        new_this_month = User.objects.filter(
+            role=User.ROLE_PARENT, date_joined__gte=month_ago
+        ).count()
+        new_prev_month = User.objects.filter(
+            role=User.ROLE_PARENT,
+            date_joined__gte=prev_month_start,
+            date_joined__lt=month_ago,
+        ).count() or 1
+        parent_delta = round(((new_this_month - new_prev_month) / max(new_prev_month, 1)) * 100, 1)
+
         total_products = ParentStoreProduct.objects.filter(is_active=True).count()
         total_posts = BlogPost.objects.filter(is_active=True).count()
         total_banners = ParentStorePromoBanner.objects.filter(is_active=True).count()
         sos_count = SOSAlert.objects.count()
+
         return Response({
-            "parents": total_users,
+            "parents": total_parents,
+            "parents_delta_pct": parent_delta,
             "children": total_children,
+            "children_connected": connected_children,
             "active_24h": active_24h,
+            "premium_users": premium_users,
+            "premium_revenue": int(premium_revenue),
+            "blocked_users": blocked_users,
             "products": total_products,
             "blog_posts": total_posts,
             "banners": total_banners,
@@ -447,8 +484,52 @@ class AdminNotificationListView(generics.ListAPIView):
 # ============================================================================
 
 
-def _lead_to_dict(t):
-    p = t.parent
+def _parent_brief(p, *, request=None):
+    """Lead kartochkasi uchun parent ma'lumotlari."""
+    if not p:
+        return None
+    avatar_url = None
+    if p.avatar and hasattr(p.avatar, "url") and p.avatar.name:
+        avatar_url = p.avatar.url
+        if request and not avatar_url.startswith("http"):
+            avatar_url = request.build_absolute_uri(avatar_url)
+
+    # Bola ulanganmi — kamida bitta aktiv farzandi bormi
+    from .models import ParentChild
+    child_count = ParentChild.objects.filter(parent=p).count()
+    child_connected = ParentChild.objects.filter(
+        parent=p, child__child_status=User.CHILD_STATUS_ACTIVE
+    ).exists()
+
+    # Premium status
+    premium_active = bool(p.is_premium and (
+        p.premium_expires_at is None or p.premium_expires_at > timezone.now()
+    ))
+    premium_days_left = None
+    if premium_active and p.premium_expires_at:
+        delta = p.premium_expires_at - timezone.now()
+        premium_days_left = max(0, delta.days)
+
+    return {
+        "id": p.id,
+        "name": p.full_name or p.first_name or p.phone or "—",
+        "phone": p.phone,
+        "email": p.email or "",
+        "gender": p.gender or "",
+        "avatar": avatar_url,
+        "child_count": child_count,
+        "child_connected": child_connected,
+        "premium_active": premium_active,
+        "premium_expires_at": p.premium_expires_at.isoformat() if p.premium_expires_at else None,
+        "premium_days_left": premium_days_left,
+        "is_active": p.is_active,
+        "registered_at": p.date_joined.isoformat() if p.date_joined else None,
+        "last_activity": p.last_login.isoformat() if p.last_login else None,
+        "language": p.language or "",
+    }
+
+
+def _lead_to_dict(t, *, request=None):
     op = t.operator
     return {
         "id": t.id,
@@ -456,12 +537,7 @@ def _lead_to_dict(t):
         "description": t.description or "",
         "status": t.status,
         "priority": t.priority,
-        "parent": {
-            "id": p.id,
-            "name": p.full_name or p.first_name or p.phone or "—",
-            "phone": p.phone,
-            "avatar": p.avatar.url if (p.avatar and hasattr(p.avatar, "url") and p.avatar.name) else None,
-        } if p else None,
+        "parent": _parent_brief(t.parent, request=request),
         "operator": {
             "id": op.id,
             "name": op.full_name or op.first_name or op.phone or "—",
@@ -513,7 +589,7 @@ class AdminTicketListView(APIView):
             )
         page_size = int(request.query_params.get("page_size", 30))
         offset = int(request.query_params.get("offset", 0))
-        items = [_lead_to_dict(t) for t in qs[offset:offset + page_size]]
+        items = [_lead_to_dict(t, request=request) for t in qs[offset:offset + page_size]]
         return Response({
             "count": qs.count(),
             "results": items,
@@ -588,7 +664,7 @@ class AdminLeadBoardView(APIView):
         for st in statuses:
             sub = qs.filter(status=st)
             counts[st] = sub.count()
-            columns[st] = [_lead_to_dict(t) for t in sub[:per_column]]
+            columns[st] = [_lead_to_dict(t, request=request) for t in sub[:per_column]]
 
         return Response({
             "statuses": statuses,
@@ -622,7 +698,7 @@ class AdminLeadListCreate(APIView):
             priority=priority,
             status=status_val,
         )
-        data = _lead_to_dict(ticket)
+        data = _lead_to_dict(ticket, request=request)
         try:
             broadcast_lead_changed({"type": "created", "id": ticket.id, "lead": data})
         except Exception:
@@ -638,7 +714,7 @@ class AdminLeadDetailView(APIView):
         t = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
         if not t:
             return Response({"detail": "Topilmadi"}, status=404)
-        return Response(_lead_to_dict(t))
+        return Response(_lead_to_dict(t, request=request))
 
     def patch(self, request, ticket_id):
         t = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
@@ -669,7 +745,7 @@ class AdminLeadDetailView(APIView):
         if update_fields:
             update_fields.append("updated_at")
             t.save(update_fields=update_fields)
-        data = _lead_to_dict(t)
+        data = _lead_to_dict(t, request=request)
         try:
             broadcast_lead_changed({
                 "type": "updated",
@@ -693,6 +769,90 @@ class AdminLeadDetailView(APIView):
         except Exception:
             pass
         return Response(status=204)
+
+
+class AdminLeadFullView(APIView):
+    """Lead + parent + children + payments + activity — detail panel uchun."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, ticket_id):
+        from .models import ParentChild
+        t = CallCenterTicket.objects.filter(id=ticket_id).select_related("parent", "operator").first()
+        if not t:
+            return Response({"detail": "Topilmadi"}, status=404)
+        lead = _lead_to_dict(t, request=request)
+        parent = t.parent
+
+        # Bolalar
+        children = []
+        if parent:
+            links = ParentChild.objects.filter(parent=parent).select_related("child")
+            for link in links:
+                c = link.child
+                if not c:
+                    continue
+                avatar = None
+                if c.avatar and hasattr(c.avatar, "url") and c.avatar.name:
+                    avatar = c.avatar.url
+                    if not avatar.startswith("http"):
+                        avatar = request.build_absolute_uri(avatar)
+                children.append({
+                    "id": c.id,
+                    "name": c.full_name or c.first_name or "—",
+                    "age": c.age,
+                    "gender": c.gender,
+                    "status": c.child_status,
+                    "avatar": avatar,
+                    "phone": c.phone,
+                    "linked_at": link.created_at.isoformat() if link.created_at else None,
+                })
+
+        # To'lovlar
+        payments = []
+        if parent:
+            for p in SubscriptionPayment.objects.filter(
+                user=parent
+            ).select_related("plan").order_by("-created_at")[:50]:
+                payments.append({
+                    "id": p.id,
+                    "amount": int(getattr(p, "amount", 0) or 0),
+                    "currency": getattr(p, "currency", "UZS") or "UZS",
+                    "status": getattr(p, "status", "") or "",
+                    "plan_name": getattr(p.plan, "name", None) if getattr(p, "plan_id", None) else None,
+                    "created_at": p.created_at.isoformat(),
+                })
+
+        # Faollik (so'nggi loginlar + lead status o'zgarishlari + SOS)
+        activity = []
+        if parent and parent.last_login:
+            activity.append({
+                "type": "login",
+                "label": "Tizimga kirdi",
+                "at": parent.last_login.isoformat(),
+            })
+        if parent:
+            for s in SOSAlert.objects.filter(parent=parent).order_by("-created_at")[:10]:
+                activity.append({
+                    "type": "sos",
+                    "label": "SOS bildirishnoma",
+                    "at": s.created_at.isoformat() if hasattr(s, "created_at") else None,
+                })
+        # Lead status o'zgarishlari (CallCenterComment'dan)
+        for c in CallCenterComment.objects.filter(ticket=t).order_by("-created_at")[:20]:
+            if c.old_status and c.new_status and c.old_status != c.new_status:
+                activity.append({
+                    "type": "status",
+                    "label": f"Status o'zgartirildi: {c.old_status} → {c.new_status}",
+                    "at": c.created_at.isoformat(),
+                })
+        activity.sort(key=lambda x: x.get("at") or "", reverse=True)
+
+        return Response({
+            "lead": lead,
+            "children": children,
+            "payments": payments,
+            "activity": activity[:30],
+        })
 
 
 class AdminLeadCommentsView(APIView):
