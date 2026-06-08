@@ -199,6 +199,18 @@ def broadcast_lead_changed(payload):
     _emit("lead_changed", payload, "staff_ops")
 
 
+def broadcast_child_force_logout(child_id, reason=""):
+    """Ota-ona bolani qurilmadan chiqardi — bola ilovasini majburiy
+    sign-out qilishga buyruq. Kids ilovasi `force_logout` eventini
+    tinglaydi va sessiyani tozalab pairing ekraniga o'tadi."""
+    _emit(
+        "force_logout",
+        {"reason": reason or "parent_logout"},
+        f"child_{child_id}",
+        legacy_type="force.logout",
+    )
+
+
 def broadcast_lead_comment(payload):
     """Lead ga yangi izoh qo'shildi."""
     _emit("lead_comment", payload, "staff_ops")

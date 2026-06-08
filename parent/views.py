@@ -701,6 +701,12 @@ class ParentChildUpdateView(APIView):
             )
         # Device tokenlarni o'chirib qo'yamiz (active session uziladi)
         DeviceToken.objects.filter(user=child, is_active=True).update(is_active=False)
+        # Kids ilovasi force_logout signalini olib o'zini tozalaydi.
+        try:
+            from .realtime import broadcast_child_force_logout
+            broadcast_child_force_logout(child.id, reason="parent_deleted")
+        except Exception:
+            pass
         name = child.full_name or child.first_name or ""
         # Cascade orqali ParentChild, PairingCode, ChildLocation va h.k.
         # avtomatik o'chiriladi (related_name on_delete=CASCADE).
@@ -725,6 +731,13 @@ class ParentChildLogoutView(APIView):
         child.child_status = User.CHILD_STATUS_NON_ACTIVE
         child.pending_delete_at = timezone.now() + timedelta(days=3)
         child.save(update_fields=["child_status", "pending_delete_at"])
+        # Socket orqali bola qurilmasiga "tezda chiqib ket" eventi —
+        # kids ilova bu signalni olib auth sessionni tozalaydi.
+        try:
+            from .realtime import broadcast_child_force_logout
+            broadcast_child_force_logout(child.id, reason="parent_logout")
+        except Exception:
+            pass
         existing_pairing = PairingCode.objects.filter(parent=request.user, child=child, is_used=False).order_by("-created_at").first()
         if not existing_pairing:
             code = generate_numeric_code(6)
