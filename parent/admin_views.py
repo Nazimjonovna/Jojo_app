@@ -479,8 +479,9 @@ def _comment_to_dict(c):
     return {
         "id": c.id,
         "ticket_id": c.ticket_id,
-        "text": c.text,
-        "status": getattr(c, "status", "") or "",
+        "text": c.comment,
+        "old_status": c.old_status or "",
+        "new_status": c.new_status or "",
         "operator": {
             "id": op.id,
             "name": op.full_name or op.first_name or op.phone or "—",
@@ -713,18 +714,13 @@ class AdminLeadCommentsView(APIView):
         text = (request.data.get("text") or "").strip()
         if not text:
             return Response({"detail": "text majburiy"}, status=400)
-        # CallCenterComment.status field bor bo'lishi mumkin — joriy ticket statusiga set
-        kwargs = {
-            "ticket": ticket,
-            "operator": request.user,
-            "text": text,
-        }
-        try:
-            CallCenterComment._meta.get_field("status")
-            kwargs["status"] = ticket.status
-        except Exception:
-            pass
-        c = CallCenterComment.objects.create(**kwargs)
+        c = CallCenterComment.objects.create(
+            ticket=ticket,
+            operator=request.user,
+            comment=text,
+            old_status=ticket.status,
+            new_status=ticket.status,
+        )
         # last_contact_at'ni yangilaymiz
         ticket.last_contact_at = timezone.now()
         ticket.save(update_fields=["last_contact_at", "updated_at"])
