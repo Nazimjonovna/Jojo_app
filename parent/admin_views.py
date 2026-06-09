@@ -543,6 +543,63 @@ class AdminNotificationListView(generics.ListAPIView):
         return qs
 
 
+class AdminNotificationDetailView(APIView):
+    """Bildirishnomani tahrirlash yoki o'chirish.
+
+    PATCH /api/admin/notifications/<id>/ — title, body, category
+    DELETE /api/admin/notifications/<id>/ — yozuvni butunlay o'chiradi.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, notif_id):
+        notif = ParentNotification.objects.filter(id=notif_id).first()
+        if not notif:
+            return Response({"detail": "Topilmadi"}, status=404)
+        update_fields = []
+        for f in ("title", "body", "category"):
+            if f in request.data:
+                setattr(notif, f, request.data.get(f) or "")
+                update_fields.append(f)
+        if update_fields:
+            notif.save(update_fields=update_fields)
+        return Response({
+            "id": notif.id,
+            "title": notif.title,
+            "body": notif.body,
+            "category": notif.category,
+        })
+
+    def delete(self, request, notif_id):
+        notif = ParentNotification.objects.filter(id=notif_id).first()
+        if not notif:
+            return Response({"detail": "Topilmadi"}, status=404)
+        notif.delete()
+        return Response(status=204)
+
+
+class AdminBroadcastHistoryView(APIView):
+    """`AdminBroadcastNotificationView` har yuborganda hamma parentga bitta
+    ParentNotification yozuvi yaratadi. Bir xil title+body+category+yaqin
+    vaqtdagi yozuvlarni guruhlab "broadcast" tarixi sifatida qaytaramiz."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from django.db.models import Count, Min, Max
+        category = request.query_params.get("category")
+        qs = ParentNotification.objects.values("title", "body", "category")
+        if category:
+            qs = qs.filter(category=category)
+        rows = (
+            qs.annotate(
+                count=Count("id"),
+                first_sent=Min("created_at"),
+                last_sent=Max("created_at"),
+            )
+            .order_by("-last_sent")[:50]
+        )
+        return Response({"results": list(rows)})
+
+
 # ============================================================================
 # Operators / Support tickets (Call center)
 # ============================================================================
