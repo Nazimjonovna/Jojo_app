@@ -27,6 +27,8 @@ from .models import (
     CallCenterTicket,
     GameCategory,
     GameItem,
+    NotificationRule,
+    NotificationRuleLog,
     ParentStoreCategory,
     ParentStoreOrder,
     ParentStoreProduct,
@@ -1493,3 +1495,129 @@ class TelegramWebhookView(APIView):
             import logging
             logging.getLogger(__name__).exception("Telegram update handling failed")
         return Response({"ok": True})
+
+# ============================================================================
+# NotificationRule — avtomatik rejaviy bildirishnomalar
+# ============================================================================
+
+
+def _rule_to_dict(r):
+    return {
+        "id": r.id,
+        "name": r.name,
+        "trigger_type": r.trigger_type,
+        "trigger_params": r.trigger_params or {},
+        "audience": r.audience,
+        "audience_params": r.audience_params or {},
+        "title": r.title,
+        "body": r.body,
+        "category": r.category,
+        "send_push": r.send_push,
+        "send_sms": r.send_sms,
+        "is_active": r.is_active,
+        "last_run_at": r.last_run_at.isoformat() if r.last_run_at else None,
+        "next_run_at": r.next_run_at.isoformat() if r.next_run_at else None,
+        "created_at": r.created_at.isoformat(),
+    }
+
+
+def _rule_apply_payload(rule, data):
+    for f in ("name", "trigger_type", "audience", "title", "body", "category"):
+        if f in data:
+            setattr(rule, f, data[f] or "")
+    if "trigger_params" in data:
+        rule.trigger_params = data["trigger_params"] or {}
+    if "audience_params" in data:
+        rule.audience_params = data["audience_params"] or {}
+    if "send_push" in data:
+        rule.send_push = bool(data["send_push"])
+    if "send_sms" in data:
+        rule.send_sms = bool(data["send_sms"])
+    if "is_active" in data:
+        rule.is_active = bool(data["is_active"])
+
+
+class AdminNotificationRuleListCreate(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = NotificationRule.objects.all().order_by("-updated_at")
+        return Response({"results": [_rule_to_dict(r) for r in qs[:200]]})
+
+    def post(self, request):
+        from .notification_scheduler import compute_next_run
+        data = request.data or {}
+        rule = NotificationRule()
+        _rule_apply_payload(rule, data)
+        if not rule.name or not rule.title or not rule.body:
+            return Response({"detail": "name, title, body majburiy"}, status=400)
+        rule.save()
+        rule.next_run_at = compute_next_run(rule)
+        rule.save(update_fields=["next_run_at"])
+        return Response(_rule_to_dict(rule), status=201)
+
+
+class AdminNotificationRuleDetail(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, rule_id):
+        r = NotificationRule.objects.filter(id=rule_id).first()
+        if not r:
+            return Response({"detail": "Topilmadi"}, status=404)
+        return Response(_rule_to_dict(r))
+
+    def patch(self, request, rule_id):
+        from .notification_scheduler import compute_next_run
+        r = NotificationRule.objects.filter(id=rule_id).first()
+        if not r:
+            return Response({"detail": "Topilmadi"}, status=404)
+        _rule_apply_payload(r, request.data or {})
+        r.save()
+        r.next_run_at = compute_next_run(r)
+        r.save(update_fields=["next_run_at"])
+        return Response(_rule_to_dict(r))
+
+    def delete(self, request, rule_id):
+        r = NotificationRule.objects.filter(id=rule_id).first()
+        if not r:
+            return Response({"detail": "Topilmadi"}, status=404)
+        r.delete()
+        return Response(status=204)
+
+
+class AdminNotificationRuleRunNow(APIView):
+    """Rule'ni darrov sinash uchun manual ishga tushirish."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, rule_id):
+        from .notification_scheduler import fire_rule
+        r = NotificationRule.objects.filter(id=rule_id).first()
+        if not r:
+            return Response({"detail": "Topilmadi"}, status=404)
+        log = fire_rule(r)
+        return Response({
+            "id": log.id,
+            "recipients_count": log.recipients_count,
+            "push_sent": log.push_sent,
+            "sms_sent": log.sms_sent,
+            "success": log.success,
+            "detail": log.detail,
+        })
+
+
+class AdminNotificationRuleLogs(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, rule_id):
+        logs = NotificationRuleLog.objects.filter(rule_id=rule_id).order_by("-fired_at")[:50]
+        return Response({
+            "results": [{
+                "id": l.id,
+                "fired_at": l.fired_at.isoformat(),
+                "recipients_count": l.recipients_count,
+                "push_sent": l.push_sent,
+                "sms_sent": l.sms_sent,
+                "success": l.success,
+                "detail": l.detail,
+            } for l in logs]
+        })

@@ -151,6 +151,8 @@ from .admin_views import (
     AdminGameCategoryListCreate, AdminGameCategoryDetail,
     AdminGameListCreate, AdminGameDetail,
     AdminSmsTestView,
+    AdminNotificationRuleListCreate, AdminNotificationRuleDetail,
+    AdminNotificationRuleRunNow, AdminNotificationRuleLogs,
     TelegramWebhookView,
 )
 
@@ -160,6 +162,11 @@ urlpatterns += [
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
     path("admin/sms/test/", AdminSmsTestView.as_view(), name="admin-sms-test"),
+
+    path("admin/notification-rules/", AdminNotificationRuleListCreate.as_view(), name="admin-notif-rule-list"),
+    path("admin/notification-rules/<int:rule_id>/", AdminNotificationRuleDetail.as_view(), name="admin-notif-rule-detail"),
+    path("admin/notification-rules/<int:rule_id>/run-now/", AdminNotificationRuleRunNow.as_view(), name="admin-notif-rule-run"),
+    path("admin/notification-rules/<int:rule_id>/logs/", AdminNotificationRuleLogs.as_view(), name="admin-notif-rule-logs"),
 
     path("admin/kids/categories/", AdminGameCategoryListCreate.as_view(), name="admin-game-cat-list"),
     path("admin/kids/categories/<int:cat_id>/", AdminGameCategoryDetail.as_view(), name="admin-game-cat-detail"),
