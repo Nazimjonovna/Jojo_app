@@ -252,11 +252,34 @@ class AdminUserListView(generics.ListAPIView):
         page_size = int(request.query_params.get("page_size", 30))
         offset = int(request.query_params.get("offset", 0))
         total = qs.count()
-        items = list(qs[offset:offset + page_size].values(
-            "id", "phone", "username", "first_name", "last_name",
-            "role", "is_active", "is_staff", "date_joined", "age",
-            "gender", "language", "child_status",
+        # last_login va device count'ni ham qaytaramiz — UI'da "Oxirgi faollik"
+        # va "Qurilma" ustunlari ko'rinishi uchun.
+        from .models import DeviceToken
+        from django.db.models import Count
+        page = list(qs[offset:offset + page_size].values(
+            "id", "phone", "username", "first_name", "last_name", "full_name",
+            "role", "is_active", "is_staff", "date_joined", "last_login",
+            "age", "gender", "language", "child_status", "is_premium",
         ))
+        ids = [u["id"] for u in page]
+        # 1 query'da hamma user uchun device sonini olamiz
+        device_counts = dict(
+            DeviceToken.objects.filter(user_id__in=ids, is_active=True)
+            .values_list("user_id")
+            .annotate(c=Count("id"))
+            .values_list("user_id", "c")
+        )
+        last_devices = {}
+        for d in DeviceToken.objects.filter(user_id__in=ids).order_by("-id"):
+            last_devices.setdefault(d.user_id, {
+                "type": getattr(d, "device_type", None) or "android",
+                "id": getattr(d, "device_id", None) or "",
+            })
+        items = []
+        for u in page:
+            u["device_count"] = device_counts.get(u["id"], 0)
+            u["last_device"] = last_devices.get(u["id"])
+            items.append(u)
         return Response({"count": total, "results": items, "offset": offset, "page_size": page_size})
 
 
@@ -386,6 +409,45 @@ class AdminDashboardStatsView(APIView):
         total_banners = ParentStorePromoBanner.objects.filter(is_active=True).count()
         sos_count = SOSAlert.objects.count()
 
+        # 7 kunlik foydalanuvchi ro'yxatdan o'tish grafigi
+        from django.db.models import Count
+        from django.db.models.functions import TruncDate
+        last7 = now - timedelta(days=7)
+        signups_by_day = (
+            User.objects.filter(role=User.ROLE_PARENT, date_joined__gte=last7)
+            .annotate(d=TruncDate("date_joined"))
+            .values("d")
+            .annotate(c=Count("id"))
+            .order_by("d")
+        )
+        signups_map = {row["d"].isoformat(): row["c"] for row in signups_by_day}
+        signups_chart = []
+        for i in range(7, -1, -1):
+            day = (now - timedelta(days=i)).date()
+            signups_chart.append({
+                "date": day.isoformat(),
+                "count": signups_map.get(day.isoformat(), 0),
+            })
+
+        # 7 kunlik daromad
+        revenue_by_day = (
+            SubscriptionPayment.objects.filter(
+                status="paid", created_at__gte=last7
+            )
+            .annotate(d=TruncDate("created_at"))
+            .values("d")
+            .annotate(s=Sum("amount"))
+            .order_by("d")
+        )
+        revenue_map = {row["d"].isoformat(): int(row["s"] or 0) for row in revenue_by_day}
+        revenue_chart = []
+        for i in range(7, -1, -1):
+            day = (now - timedelta(days=i)).date()
+            revenue_chart.append({
+                "date": day.isoformat(),
+                "amount": revenue_map.get(day.isoformat(), 0),
+            })
+
         return Response({
             "parents": total_parents,
             "parents_delta_pct": parent_delta,
@@ -399,6 +461,8 @@ class AdminDashboardStatsView(APIView):
             "blog_posts": total_posts,
             "banners": total_banners,
             "sos_alerts": sos_count,
+            "signups_7d": signups_chart,
+            "revenue_7d": revenue_chart,
         })
 
 
