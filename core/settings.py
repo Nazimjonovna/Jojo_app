@@ -21,6 +21,10 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 SMSFLY_API_KEY = os.getenv("SMSFLY_API_KEY", default="")
 SMSFLY_SEND_URL = os.getenv("SMSFLY_SEND_URL", default="https://api.smsfly.uz/send")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", default="")
+# yoki os.getenv(...) — boshqa env qiymatlaringiz qanday o'qilsa, shunday
 # Application definition
 
 INSTALLED_APPS = [

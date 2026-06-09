@@ -1503,12 +1503,26 @@ class CallCenterTicket(models.Model):
         (STATUS_CLOSED, "Yopilgan"),
         (STATUS_BLOCKED, "Bloklangan"),
     )
+    SOURCE_APP = "app"
+    SOURCE_TELEGRAM = "telegram"
+    SOURCE_MANUAL = "manual"
+    SOURCE_CHOICES = (
+        (SOURCE_APP, "Ilova"),
+        (SOURCE_TELEGRAM, "Telegram"),
+        (SOURCE_MANUAL, "Qo'lda"),
+    )
 
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="call_center_tickets",
+        null=True, blank=True,        # <-- o'zgardi: telegram useri parent bo'lmasligi mumkin
     )
+
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=SOURCE_APP)
+    telegram_chat_id = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+    telegram_username = models.CharField(max_length=150, blank=True, default="")
+    telegram_name = models.CharField(max_length=255, blank=True, default="")
 
     operator = models.ForeignKey(
         User,
@@ -1560,6 +1574,12 @@ class CallCenterTicket(models.Model):
 
 
 class CallCenterComment(models.Model):
+    DIRECTION_IN = "in"     # foydalanuvchidan kelgan
+    DIRECTION_OUT = "out"   # operator javobi
+    DIRECTION_CHOICES = (
+        (DIRECTION_IN, "Kiruvchi"),
+        (DIRECTION_OUT, "Chiquvchi"),
+    )
     ticket = models.ForeignKey(
         CallCenterTicket,
         on_delete=models.CASCADE,
@@ -1587,7 +1607,8 @@ class CallCenterComment(models.Model):
         null=True,
         blank=True,
     )
-
+    direction = models.CharField(max_length=4, choices=DIRECTION_CHOICES, default=DIRECTION_OUT)
+    telegram_message_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
