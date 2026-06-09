@@ -25,6 +25,8 @@ from .models import (
     BlogPost,
     CallCenterComment,
     CallCenterTicket,
+    GameCategory,
+    GameItem,
     ParentStoreCategory,
     ParentStoreOrder,
     ParentStoreProduct,
@@ -1057,6 +1059,58 @@ class AdminOperatorCreateView(APIView):
         }, status=201)
 
 
+class AdminOperatorDetailView(APIView):
+    """Xodimni tahrirlash / o'chirish / parolini reset qilish."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def _ensure_staff(self, user):
+        return user and user.is_staff and not user.is_superuser
+
+    def patch(self, request, user_id):
+        u = User.objects.filter(id=user_id).first()
+        if not self._ensure_staff(u):
+            return Response({"detail": "Xodim topilmadi"}, status=404)
+        update_fields = []
+        full_name = request.data.get("full_name")
+        if full_name is not None:
+            u.first_name = full_name.strip()
+            u.full_name = full_name.strip()
+            update_fields += ["first_name", "full_name"]
+        phone = request.data.get("phone")
+        if phone is not None:
+            phone = phone.strip()
+            if phone != u.phone:
+                if User.objects.filter(phone=phone).exclude(id=u.id).exists():
+                    return Response({"detail": "Bu telefon allaqachon ishlatilgan"}, status=400)
+                u.phone = phone
+                update_fields.append("phone")
+        is_active = request.data.get("is_active")
+        if is_active is not None:
+            u.is_active = bool(is_active)
+            update_fields.append("is_active")
+        new_password = request.data.get("new_password")
+        if new_password:
+            if len(new_password) < 4:
+                return Response({"detail": "Parol kamida 4 belgidan iborat"}, status=400)
+            u.set_password(new_password)
+            update_fields.append("password")
+        if update_fields:
+            u.save(update_fields=update_fields)
+        return Response({
+            "id": u.id, "phone": u.phone, "username": u.username,
+            "first_name": u.first_name, "is_active": u.is_active,
+        })
+
+    def delete(self, request, user_id):
+        u = User.objects.filter(id=user_id).first()
+        if not self._ensure_staff(u):
+            return Response({"detail": "Xodim topilmadi"}, status=404)
+        if u.id == request.user.id:
+            return Response({"detail": "O'zingizni o'chirib bo'lmaydi"}, status=400)
+        u.delete()
+        return Response(status=204)
+
+
 # ============================================================================
 # Settings — admin profilini o'zgartirish (parolni almashtirish)
 # ============================================================================
@@ -1168,3 +1222,190 @@ class AdminMediaUploadView(APIView):
             "name": f.name,
             "size": f.size,
         }, status=status.HTTP_201_CREATED)
+
+
+# ============================================================================
+# Kids kontent — o'yinlar (GameCategory + GameItem) admin CRUD
+# ============================================================================
+
+
+def _game_category_to_dict(c, request=None):
+    icon = None
+    if c.icon and hasattr(c.icon, "url") and c.icon.name:
+        url = c.icon.url
+        icon = request.build_absolute_uri(url) if request and not url.startswith("http") else url
+    return {
+        "id": c.id,
+        "name": c.name,
+        "icon": icon,
+        "is_active": c.is_active,
+        "order": c.order,
+        "games_count": c.games.count(),
+    }
+
+
+def _game_to_dict(g, request=None):
+    def _img(f):
+        if not f or not hasattr(f, "url") or not f.name:
+            return None
+        url = f.url
+        return request.build_absolute_uri(url) if request and not url.startswith("http") else url
+    return {
+        "id": g.id,
+        "category": g.category_id,
+        "category_name": g.category.name if g.category else None,
+        "title": g.title,
+        "description": g.description or "",
+        "thumbnail": _img(g.thumbnail),
+        "banner": _img(g.banner),
+        "game_url": g.game_url or "",
+        "screen_key": g.screen_key or "",
+        "age_min": g.age_min,
+        "age_max": g.age_max,
+        "reward_points": g.reward_points,
+        "is_active": g.is_active,
+        "is_featured": g.is_featured,
+        "order": g.order,
+    }
+
+
+def _resolve_image_path(value):
+    """`https://api.jojoapp.uz/media/foo.jpg` -> `foo.jpg`; relativlarni o'tkazib yuboramiz."""
+    if not value or not isinstance(value, str):
+        return None
+    v = value.strip()
+    if not v:
+        return None
+    if v.startswith("http"):
+        from urllib.parse import urlparse
+        from django.conf import settings
+        path = urlparse(v).path
+        prefix = (settings.MEDIA_URL or "/media/").rstrip("/") + "/"
+        idx = path.find(prefix)
+        if idx == -1:
+            return None
+        return path[idx + len(prefix):]
+    return v[1:] if v.startswith("/") else v
+
+
+class AdminGameCategoryListCreate(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = GameCategory.objects.all().order_by("order", "id")
+        return Response({"results": [_game_category_to_dict(c, request) for c in qs]})
+
+    def post(self, request):
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"detail": "Nom majburiy"}, status=400)
+        c = GameCategory.objects.create(
+            name=name,
+            is_active=bool(request.data.get("is_active", True)),
+            order=int(request.data.get("order") or 0),
+        )
+        icon = _resolve_image_path(request.data.get("icon"))
+        if icon:
+            c.icon.name = icon
+            c.save(update_fields=["icon"])
+        return Response(_game_category_to_dict(c, request), status=201)
+
+
+class AdminGameCategoryDetail(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, cat_id):
+        c = GameCategory.objects.filter(id=cat_id).first()
+        if not c:
+            return Response({"detail": "Topilmadi"}, status=404)
+        for f in ("name", "is_active", "order"):
+            if f in request.data:
+                setattr(c, f, request.data[f])
+        icon = _resolve_image_path(request.data.get("icon"))
+        if icon:
+            c.icon.name = icon
+        c.save()
+        return Response(_game_category_to_dict(c, request))
+
+    def delete(self, request, cat_id):
+        c = GameCategory.objects.filter(id=cat_id).first()
+        if not c:
+            return Response({"detail": "Topilmadi"}, status=404)
+        c.delete()
+        return Response(status=204)
+
+
+class AdminGameListCreate(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = GameItem.objects.all().select_related("category").order_by("order", "-created_at")
+        cat = request.query_params.get("category_id")
+        if cat:
+            qs = qs.filter(category_id=cat)
+        q = request.query_params.get("q")
+        if q:
+            qs = qs.filter(title__icontains=q)
+        return Response({"results": [_game_to_dict(g, request) for g in qs[:200]]})
+
+    def post(self, request):
+        title = (request.data.get("title") or "").strip()
+        if not title:
+            return Response({"detail": "Sarlavha majburiy"}, status=400)
+        category_id = request.data.get("category")
+        category = GameCategory.objects.filter(id=category_id).first() if category_id else None
+        if not category:
+            return Response({"detail": "Kategoriya tanlang"}, status=400)
+        g = GameItem.objects.create(
+            category=category,
+            title=title,
+            description=request.data.get("description") or "",
+            game_url=request.data.get("game_url") or "",
+            screen_key=request.data.get("screen_key") or "",
+            age_min=int(request.data.get("age_min") or 1),
+            age_max=int(request.data.get("age_max") or 18),
+            reward_points=int(request.data.get("reward_points") or 0),
+            is_active=bool(request.data.get("is_active", True)),
+            is_featured=bool(request.data.get("is_featured", False)),
+            order=int(request.data.get("order") or 0),
+        )
+        for attr in ("thumbnail", "banner"):
+            p = _resolve_image_path(request.data.get(attr))
+            if p:
+                getattr(g, attr).name = p
+        g.save()
+        return Response(_game_to_dict(g, request), status=201)
+
+
+class AdminGameDetail(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, game_id):
+        g = GameItem.objects.filter(id=game_id).first()
+        if not g:
+            return Response({"detail": "Topilmadi"}, status=404)
+        for f in (
+            "title", "description", "game_url", "screen_key",
+            "age_min", "age_max", "reward_points",
+            "is_active", "is_featured", "order",
+        ):
+            if f in request.data:
+                setattr(g, f, request.data[f])
+        cat = request.data.get("category")
+        if cat:
+            cat_obj = GameCategory.objects.filter(id=cat).first()
+            if cat_obj:
+                g.category = cat_obj
+        for attr in ("thumbnail", "banner"):
+            p = _resolve_image_path(request.data.get(attr))
+            if p:
+                getattr(g, attr).name = p
+        g.save()
+        return Response(_game_to_dict(g, request))
+
+    def delete(self, request, game_id):
+        g = GameItem.objects.filter(id=game_id).first()
+        if not g:
+            return Response({"detail": "Topilmadi"}, status=404)
+        g.delete()
+        return Response(status=204)

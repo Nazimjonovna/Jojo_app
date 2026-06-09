@@ -144,10 +144,12 @@ from .admin_views import (
     AdminTicketListView, AdminTicketUpdateStatusView,
     AdminLeadBoardView, AdminLeadListCreate, AdminLeadDetailView, AdminLeadCommentsView,
     AdminLeadFullView,
-    AdminOperatorListView, AdminOperatorCreateView,
+    AdminOperatorListView, AdminOperatorCreateView, AdminOperatorDetailView,
     AdminChangePasswordView,
     AdminChildrenListView,
     AdminMediaUploadView,
+    AdminGameCategoryListCreate, AdminGameCategoryDetail,
+    AdminGameListCreate, AdminGameDetail,
 )
 
 urlpatterns += [
@@ -155,6 +157,11 @@ urlpatterns += [
     path("admin/me/", AdminMeView.as_view(), name="admin-me"),
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
+
+    path("admin/kids/categories/", AdminGameCategoryListCreate.as_view(), name="admin-game-cat-list"),
+    path("admin/kids/categories/<int:cat_id>/", AdminGameCategoryDetail.as_view(), name="admin-game-cat-detail"),
+    path("admin/kids/games/", AdminGameListCreate.as_view(), name="admin-game-list"),
+    path("admin/kids/games/<int:game_id>/", AdminGameDetail.as_view(), name="admin-game-detail"),
 
     path("admin/banners/", AdminBannerListCreate.as_view(), name="admin-banner-list-create"),
     path("admin/banners/<int:pk>/", AdminBannerDetail.as_view(), name="admin-banner-detail"),
@@ -196,6 +203,7 @@ urlpatterns += [
 
     path("admin/operators/", AdminOperatorListView.as_view(), name="admin-operator-list"),
     path("admin/operators/create/", AdminOperatorCreateView.as_view(), name="admin-operator-create"),
+    path("admin/operators/<int:user_id>/", AdminOperatorDetailView.as_view(), name="admin-operator-detail"),
 
     path("admin/change-password/", AdminChangePasswordView.as_view(), name="admin-change-password"),
     path("admin/children/", AdminChildrenListView.as_view(), name="admin-children-list"),
