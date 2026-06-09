@@ -2405,3 +2405,118 @@ class ParentNotification(models.Model):
             self.read_at = timezone.now()
             if save:
                 self.save(update_fields=["is_read", "read_at"])
+
+
+# ============================================================================
+# Bildirishnoma rejaviligi (Notification scheduler)
+# ============================================================================
+
+
+class NotificationRule(models.Model):
+    """Avtomatik yuboriladigan bildirishnomalar qoidasi.
+
+    `trigger_type` qaysi turdagi rejasini belgilaydi:
+      - `premium_expiry`  — `params={"days_before": N}` premium tugashidan
+        N kun oldin har bir aktiv premium parentga yuboriladi
+      - `daily`           — `params={"hour": 9, "minute": 0}`
+      - `weekly`          — `params={"weekday": 1, "hour": 9, "minute": 0}`
+        (0=dushanba, 6=yakshanba)
+      - `monthly`         — `params={"day": 1, "hour": 9, "minute": 0}`
+      - `one_off`         — `params={"run_at": "ISO datetime"}`
+
+    `audience`:
+      - `all_parents`        — barcha aktiv ota-onalar
+      - `premium_active`     — `is_premium=True` va muddati o'tmagan
+      - `premium_expiring`   — `params={"days": N}` ichida tugayotganlar
+      - `free_users`         — `is_premium=False`
+      - `no_active_child`    — bola hali pair qilinmaganlar
+    """
+
+    TRIGGER_PREMIUM = "premium_expiry"
+    TRIGGER_DAILY = "daily"
+    TRIGGER_WEEKLY = "weekly"
+    TRIGGER_MONTHLY = "monthly"
+    TRIGGER_ONE_OFF = "one_off"
+
+    TRIGGER_CHOICES = (
+        (TRIGGER_PREMIUM, "Premium tugashidan oldin"),
+        (TRIGGER_DAILY, "Har kuni"),
+        (TRIGGER_WEEKLY, "Har hafta"),
+        (TRIGGER_MONTHLY, "Har oy"),
+        (TRIGGER_ONE_OFF, "Bir martalik"),
+    )
+
+    AUDIENCE_ALL = "all_parents"
+    AUDIENCE_PREMIUM = "premium_active"
+    AUDIENCE_EXPIRING = "premium_expiring"
+    AUDIENCE_FREE = "free_users"
+    AUDIENCE_NO_CHILD = "no_active_child"
+
+    AUDIENCE_CHOICES = (
+        (AUDIENCE_ALL, "Hamma ota-onalar"),
+        (AUDIENCE_PREMIUM, "Premium aktiv"),
+        (AUDIENCE_EXPIRING, "Premium tugashga yaqin"),
+        (AUDIENCE_FREE, "Bepul foydalanuvchilar"),
+        (AUDIENCE_NO_CHILD, "Bolasi ulanmagan"),
+    )
+
+    name = models.CharField(max_length=180, help_text="Admin uchun yorliq")
+
+    trigger_type = models.CharField(
+        max_length=30,
+        choices=TRIGGER_CHOICES,
+        default=TRIGGER_ONE_OFF,
+    )
+    trigger_params = models.JSONField(default=dict, blank=True)
+
+    audience = models.CharField(
+        max_length=30,
+        choices=AUDIENCE_CHOICES,
+        default=AUDIENCE_ALL,
+    )
+    audience_params = models.JSONField(default=dict, blank=True)
+
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    category = models.CharField(max_length=40, default="system")
+
+    send_push = models.BooleanField(default=True)
+    send_sms = models.BooleanField(default=False)
+
+    is_active = models.BooleanField(default=True)
+
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["is_active", "next_run_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.trigger_type})"
+
+
+class NotificationRuleLog(models.Model):
+    """Har bir rule ishga tushganidagi natija."""
+    rule = models.ForeignKey(
+        NotificationRule,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    fired_at = models.DateTimeField(auto_now_add=True)
+    recipients_count = models.PositiveIntegerField(default=0)
+    push_sent = models.PositiveIntegerField(default=0)
+    sms_sent = models.PositiveIntegerField(default=0)
+    success = models.BooleanField(default=True)
+    detail = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-fired_at"]
+
+    def __str__(self):
+        return f"{self.rule_id} @ {self.fired_at:%Y-%m-%d %H:%M}"
