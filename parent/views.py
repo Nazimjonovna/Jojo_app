@@ -129,8 +129,11 @@ def get_tokens_for_user(user):
 
 
 def send_sms_code(phone, code):
-    print(f"SMS CODE for {phone}: {code}")
-    return True
+    """Tasdiqlash kodini SMSFLY orqali yuboradi. SMSFLY kalit yo'q bo'lsa
+    `sms_client` log'ga `[SMS DEV]` deb yozib True qaytaradi — lokal
+    test uchun qulay."""
+    from .sms_service import sms_client
+    return sms_client.send_otp(phone, code)
 
 
 def save_user_device(user, device_id, token, device_type="android"):

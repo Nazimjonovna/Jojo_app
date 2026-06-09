@@ -138,6 +138,11 @@ DATABASES = {
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
+# SMSFLY (https://api.smsfly.uz) — verifikatsiya SMS va massa xabarnomalari.
+# Provider yo'q yoki kalit bo'sh bo'lsa, sms_client logga "DEV" deb yozadi va
+# True qaytaradi (development uchun OTP test qilish uchun).
+SMSFLY_KEY = os.getenv("SMSFLY_KEY", "")
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",

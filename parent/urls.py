@@ -150,6 +150,7 @@ from .admin_views import (
     AdminMediaUploadView,
     AdminGameCategoryListCreate, AdminGameCategoryDetail,
     AdminGameListCreate, AdminGameDetail,
+    AdminSmsTestView,
 )
 
 urlpatterns += [
@@ -157,6 +158,7 @@ urlpatterns += [
     path("admin/me/", AdminMeView.as_view(), name="admin-me"),
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
+    path("admin/sms/test/", AdminSmsTestView.as_view(), name="admin-sms-test"),
 
     path("admin/kids/categories/", AdminGameCategoryListCreate.as_view(), name="admin-game-cat-list"),
     path("admin/kids/categories/<int:cat_id>/", AdminGameCategoryDetail.as_view(), name="admin-game-cat-detail"),

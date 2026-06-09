@@ -339,12 +339,15 @@ class AdminBroadcastNotificationView(APIView):
         title = (request.data.get("title") or "").strip()
         body = (request.data.get("body") or "").strip()
         category = request.data.get("category", "system")
+        # Yangi opsiya — `send_sms=true` bo'lsa SMSFLY orqali SMS ham yuboriladi.
+        send_sms = bool(request.data.get("send_sms"))
         if not title or not body:
             return Response({"detail": "title va body majburiy"}, status=400)
         # Broadcast: barcha parentlarga inbox yozuvi.
         from .services import record_parent_notification
         parents = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
         created = 0
+        phones = []
         for parent in parents:
             try:
                 record_parent_notification(
@@ -356,9 +359,25 @@ class AdminBroadcastNotificationView(APIView):
                     data={"announcement": True},
                 )
                 created += 1
+                if send_sms and parent.phone:
+                    phones.append(parent.phone)
             except Exception:
                 continue
-        return Response({"status": True, "sent_to": created})
+
+        sms_sent = 0
+        if send_sms and phones:
+            # SMS matni: title + body (160 belgi tavsiya). Bitta xabar limiti
+            # tashqarisida bo'lsa, SMSFLY o'zi bo'lishadi.
+            sms_text = f"{title}\n{body}"[:500]
+            from .sms_service import sms_client
+            ok = sms_client.send_bulk(phones, sms_text)
+            sms_sent = len(phones) if ok else 0
+
+        return Response({
+            "status": True,
+            "sent_to": created,
+            "sms_sent": sms_sent,
+        })
 
 
 # ============================================================================
@@ -1222,6 +1241,37 @@ class AdminMediaUploadView(APIView):
             "name": f.name,
             "size": f.size,
         }, status=status.HTTP_201_CREATED)
+
+
+# ============================================================================
+# SMS test va status — SMSFLY integratsiyasini tekshirish
+# ============================================================================
+
+
+class AdminSmsTestView(APIView):
+    """Adminga SMSFLY kalitining ishlashini va test SMS yuborishni tekshirib
+    ko'rish imkonini beradi.
+
+    GET  — SMSFLY check-key chaqirib `enabled` qaytaradi.
+    POST — body {"phone": "+998...", "message": "..."} bilan bitta SMS.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from .sms_service import sms_client
+        return Response({
+            "enabled": sms_client.enabled,
+            "key_valid": sms_client.check_key() if sms_client.enabled else False,
+        })
+
+    def post(self, request):
+        from .sms_service import sms_client
+        phone = (request.data.get("phone") or "").strip()
+        message = (request.data.get("message") or "JoJo: test xabar").strip()
+        if not phone:
+            return Response({"detail": "phone majburiy"}, status=400)
+        ok = sms_client.send(phone, message)
+        return Response({"success": ok, "phone": phone})
 
 
 # ============================================================================
