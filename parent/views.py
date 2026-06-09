@@ -121,6 +121,10 @@ from .subscription import (
     activate_paid_subscription,
     get_paid_plans,
 )
+import logging
+import requests
+from django.conf import settings
+logger = logging.getLogger(__name__)
 
 
 def get_tokens_for_user(user):
@@ -128,9 +132,68 @@ def get_tokens_for_user(user):
     return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
+# resultCode ma'nolari (SMSFLY doc bo'yicha)
+SMSFLY_RESULT_MESSAGES = {
+    0: "Muvaffaqiyatli yuborildi",
+    2: "Mijoz akkaunti bloklangan",
+    3: "Limit tugagan",
+    4: "Hamma maydonlar to'ldirilmagan",
+    100: "Juda ko'p raqam yuborildi",
+    101: "Juda ko'p raqam yuborildi",
+}
+
+
+def normalize_phone(phone):
+    """+998901234567 -> 998901234567 (SMSFLY '+' ni qabul qilmaydi)."""
+    if not phone:
+        return phone
+    return phone.replace("+", "").replace(" ", "").strip()
+
+
+def send_sms(phone, message):
+    api_key = getattr(settings, "SMSFLY_API_KEY", "")
+    api_url = getattr(settings, "SMSFLY_SEND_URL", "https://api.smsfly.uz/send")
+
+    if not api_key:
+        # Dev rejim — key yo'q bo'lsa konsolga chiqaramiz, ilova qotib qolmaydi
+        logger.warning("SMSFLY_API_KEY topilmadi. SMS yuborilmadi.")
+        print(f"[DEV SMS] {phone}: {message}")
+        return False
+
+    payload = {
+        "key": api_key,
+        "phone": normalize_phone(phone),
+        "message": message,
+    }
+
+    try:
+        resp = requests.post(api_url, json=payload, timeout=10)
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.error("SMSFLY ulanish xatosi: %s", e)
+        return False
+    except ValueError:
+        logger.error("SMSFLY javobi JSON emas: %s", resp.text[:300])
+        return False
+
+    result_code = data.get("resultCode")
+    if data.get("success") and result_code == 0:
+        logger.info("SMS yuborildi: %s", phone)
+        return True
+
+    logger.error(
+        "SMSFLY xato: phone=%s reason=%s resultCode=%s (%s)",
+        phone,
+        data.get("reason"),
+        result_code,
+        SMSFLY_RESULT_MESSAGES.get(result_code, "noma'lum"),
+    )
+    return False
+
+
 def send_sms_code(phone, code):
-    print(f"SMS CODE for {phone}: {code}")
-    return True
+    message = f"JoJo tasdiqlash kodi: {code}. Kodni hech kimga bermang."
+    return send_sms(phone, message)
 
 
 def save_user_device(user, device_id, token, device_type="android"):

@@ -19,7 +19,8 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-
+SMSFLY_API_KEY = os.getenv("SMSFLY_API_KEY", default="")
+SMSFLY_SEND_URL = os.getenv("SMSFLY_SEND_URL", default="https://api.smsfly.uz/send")
 # Application definition
 
 INSTALLED_APPS = [
