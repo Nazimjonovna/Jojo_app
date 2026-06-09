@@ -1503,12 +1503,26 @@ class CallCenterTicket(models.Model):
         (STATUS_CLOSED, "Yopilgan"),
         (STATUS_BLOCKED, "Bloklangan"),
     )
+    SOURCE_APP = "app"
+    SOURCE_TELEGRAM = "telegram"
+    SOURCE_MANUAL = "manual"
+    SOURCE_CHOICES = (
+        (SOURCE_APP, "Ilova"),
+        (SOURCE_TELEGRAM, "Telegram"),
+        (SOURCE_MANUAL, "Qo'lda"),
+    )
 
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name="call_center_tickets",
+        null=True, blank=True,        # <-- o'zgardi: telegram useri parent bo'lmasligi mumkin
     )
+
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=SOURCE_APP)
+    telegram_chat_id = models.CharField(max_length=64, null=True, blank=True, db_index=True)
+    telegram_username = models.CharField(max_length=150, blank=True, default="")
+    telegram_name = models.CharField(max_length=255, blank=True, default="")
 
     operator = models.ForeignKey(
         User,
@@ -1560,6 +1574,12 @@ class CallCenterTicket(models.Model):
 
 
 class CallCenterComment(models.Model):
+    DIRECTION_IN = "in"     # foydalanuvchidan kelgan
+    DIRECTION_OUT = "out"   # operator javobi
+    DIRECTION_CHOICES = (
+        (DIRECTION_IN, "Kiruvchi"),
+        (DIRECTION_OUT, "Chiquvchi"),
+    )
     ticket = models.ForeignKey(
         CallCenterTicket,
         on_delete=models.CASCADE,
@@ -1587,7 +1607,8 @@ class CallCenterComment(models.Model):
         null=True,
         blank=True,
     )
-
+    direction = models.CharField(max_length=4, choices=DIRECTION_CHOICES, default=DIRECTION_OUT)
+    telegram_message_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1821,6 +1842,23 @@ class ParentStoreProduct(models.Model):
     )
 
     name = models.CharField(max_length=255)
+    name_ru = models.CharField(max_length=255, blank=True, default="")
+    name_en = models.CharField(max_length=255, blank=True, default="")
+
+    short_description_ru = models.CharField(max_length=500, blank=True, default="")
+    short_description_en = models.CharField(max_length=500, blank=True, default="")
+
+    description_ru = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
+
+    category_label_ru = models.CharField(max_length=120, blank=True, default="")
+    category_label_en = models.CharField(max_length=120, blank=True, default="")
+
+    hashtags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ro'yxat, masalan: [#stem, #lego, #6yosh]",
+    )
     slug = models.SlugField(max_length=255, unique=True)
 
     category_label = models.CharField(
@@ -1903,6 +1941,26 @@ class ParentStoreProduct(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def _tr(self, uz_value, ru_value, en_value, lang):
+        lang = (lang or "").lower()
+        if lang.startswith("ru"):
+            return ru_value or uz_value
+        if lang.startswith("en"):
+            return en_value or uz_value
+        return uz_value  # uz_latn / uz_cyrl / default
+
+    def tr_name(self, lang):
+        return self._tr(self.name, self.name_ru, self.name_en, lang)
+
+    def tr_short_description(self, lang):
+        return self._tr(self.short_description, self.short_description_ru, self.short_description_en, lang)
+
+    def tr_description(self, lang):
+        return self._tr(self.description, self.description_ru, self.description_en, lang)
+
+    def tr_category_label(self, lang):
+        return self._tr(self.category_label, self.category_label_ru, self.category_label_en, lang)
 
     @property
     def has_video(self):

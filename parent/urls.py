@@ -151,6 +151,7 @@ from .admin_views import (
     AdminGameCategoryListCreate, AdminGameCategoryDetail,
     AdminGameListCreate, AdminGameDetail,
     AdminSmsTestView,
+    TelegramWebhookView,
 )
 
 urlpatterns += [
@@ -209,4 +210,5 @@ urlpatterns += [
 
     path("admin/change-password/", AdminChangePasswordView.as_view(), name="admin-change-password"),
     path("admin/children/", AdminChildrenListView.as_view(), name="admin-children-list"),
+    path("telegram/webhook/", TelegramWebhookView.as_view()),
 ]

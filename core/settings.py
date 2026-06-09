@@ -19,7 +19,12 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+SMSFLY_API_KEY = os.getenv("SMSFLY_API_KEY", default="")
+SMSFLY_SEND_URL = os.getenv("SMSFLY_SEND_URL", default="https://api.smsfly.uz/send")
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", default="")
+# yoki os.getenv(...) — boshqa env qiymatlaringiz qanday o'qilsa, shunday
 # Application definition
 
 INSTALLED_APPS = [
@@ -137,11 +142,6 @@ DATABASES = {
 
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-
-# SMSFLY (https://api.smsfly.uz) — verifikatsiya SMS va massa xabarnomalari.
-# Provider yo'q yoki kalit bo'sh bo'lsa, sms_client logga "DEV" deb yozadi va
-# True qaytaradi (development uchun OTP test qilish uchun).
-SMSFLY_KEY = os.getenv("SMSFLY_KEY", "")
 
 CHANNEL_LAYERS = {
     "default": {

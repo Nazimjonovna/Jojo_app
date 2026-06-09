@@ -71,7 +71,14 @@ class SmsFlyClient:
     RESULT_TOO_MANY_NUMBERS_2 = 101
 
     def __init__(self, key: str | None = None):
-        self._key = key or getattr(settings, "SMSFLY_KEY", "") or ""
+        # Loyihada `SMSFLY_API_KEY` env, eski commit'larda `SMSFLY_KEY` —
+        # ikkalasini ham qo'llab-quvvatlaymiz.
+        self._key = (
+            key
+            or getattr(settings, "SMSFLY_API_KEY", "")
+            or getattr(settings, "SMSFLY_KEY", "")
+            or ""
+        )
 
     @property
     def enabled(self) -> bool:

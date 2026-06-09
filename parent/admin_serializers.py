@@ -146,21 +146,26 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "name_ru", "name_en",                                  # <-- qo'shildi
             "slug",
             "category",
             "category_label",
+            "category_label_ru", "category_label_en",              # <-- qo'shildi
             "age_label",
             "price",
             "old_price",
             "badge",
             "features",
+            "hashtags",                                            # <-- qo'shildi
             "short_description",
+            "short_description_ru", "short_description_en",        # <-- qo'shildi
             "description",
+            "description_ru", "description_en",                    # <-- qo'shildi
             "thumbnail",
-            "cover_image",   # read-only alias
-            "product_type",  # read-only alias (returns badge or category_label)
-            "brand",         # always "" — model has no brand
-            "stock_count",   # always 0 — model has no stock
+            "cover_image",
+            "product_type",
+            "brand",
+            "stock_count",
             "video_url",
             "is_featured",
             "is_active",

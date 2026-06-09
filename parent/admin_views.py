@@ -7,7 +7,7 @@ Endpoint'lar `/api/admin/` ostida joylashgan. Auth: JWT + foydalanuvchi
 
 import os
 import uuid
-
+from rest_framework import serializers as drf_serializers
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
@@ -238,6 +238,7 @@ class AdminBlogPostDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AdminUserListView(generics.ListAPIView):
+    serializer_class = drf_serializers.Serializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def list(self, request, *args, **kwargs):
@@ -303,6 +304,7 @@ class AdminUserToggleActiveView(APIView):
 
 
 class AdminSOSAlertListView(generics.ListAPIView):
+    serializer_class = drf_serializers.Serializer
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def list(self, request, *args, **kwargs):
@@ -689,6 +691,12 @@ def _lead_to_dict(t, *, request=None):
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "comments_count": t.comments.count(),
+        "source": getattr(t, "source", "app"),                      
+        "telegram": {                                               
+            "chat_id": t.telegram_chat_id,
+            "username": t.telegram_username,
+            "name": t.telegram_name,
+        } if getattr(t, "telegram_chat_id", None) else None,
     }
 
 
@@ -698,6 +706,8 @@ def _comment_to_dict(c):
         "id": c.id,
         "ticket_id": c.ticket_id,
         "text": c.comment,
+        "direction": getattr(c, "direction", "out"),  
+        "is_operator": bool(op),  
         "old_status": c.old_status or "",
         "new_status": c.new_status or "",
         "operator": {
@@ -1020,18 +1030,24 @@ class AdminLeadCommentsView(APIView):
             ticket=ticket,
             operator=request.user,
             comment=text,
+            direction=CallCenterComment.DIRECTION_OUT,   # <-- qo'shildi
             old_status=ticket.status,
             new_status=ticket.status,
         )
-        # last_contact_at'ni yangilaymiz
         ticket.last_contact_at = timezone.now()
         ticket.save(update_fields=["last_contact_at", "updated_at"])
+
+        # Telegram'dan kelgan murojaat bo'lsa, javobni botga yuboramiz
+        if ticket.telegram_chat_id:
+            from .telegram_bot import tg_send_message
+            mid = tg_send_message(ticket.telegram_chat_id, text)
+            if mid:
+                c.telegram_message_id = str(mid)
+                c.save(update_fields=["telegram_message_id"])
+
         payload = _comment_to_dict(c)
         try:
-            broadcast_lead_comment({
-                "ticket_id": ticket.id,
-                "comment": payload,
-            })
+            broadcast_lead_comment({"ticket_id": ticket.id, "comment": payload})
         except Exception:
             pass
         return Response(payload, status=201)
@@ -1459,3 +1475,21 @@ class AdminGameDetail(APIView):
             return Response({"detail": "Topilmadi"}, status=404)
         g.delete()
         return Response(status=204)
+
+
+class TelegramWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        expected = getattr(settings, "TELEGRAM_WEBHOOK_SECRET", "")
+        header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if expected and header_secret != expected:
+            return Response({"detail": "forbidden"}, status=403)
+        from .telegram_bot import handle_telegram_update
+        try:
+            handle_telegram_update(request.data)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Telegram update handling failed")
+        return Response({"ok": True})
