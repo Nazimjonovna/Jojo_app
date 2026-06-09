@@ -211,12 +211,23 @@ def fire_rule(rule: NotificationRule) -> NotificationRuleLog:
             if rule.trigger_type == NotificationRule.TRIGGER_PREMIUM and parent.premium_expires_at:
                 delta = parent.premium_expires_at - timezone.now()
                 days_left = max(0, delta.days)
-            title = _format_text(rule.title, parent, days_left=days_left)
-            body = _format_text(rule.body, parent, days_left=days_left)
+            # Parent tili bo'yicha tegishli matnni tanlaymiz; bo'sh bo'lsa uz.
+            parent_lang = (getattr(parent, "language", "") or "uz").lower()
+            if parent_lang.startswith("ru"):
+                base_title = rule.title_ru or rule.title
+                base_body = rule.body_ru or rule.body
+            elif parent_lang.startswith("en"):
+                base_title = rule.title_en or rule.title
+                base_body = rule.body_en or rule.body
+            else:
+                base_title = rule.title
+                base_body = rule.body
+            title = _format_text(base_title, parent, days_left=days_left)
+            body = _format_text(base_body, parent, days_left=days_left)
 
             if rule.send_push:
                 try:
-                    record_parent_notification(
+                    notif = record_parent_notification(
                         parent=parent,
                         child=None,
                         category=rule.category or "system",
@@ -224,6 +235,32 @@ def fire_rule(rule: NotificationRule) -> NotificationRuleLog:
                         body=body,
                         data={"rule_id": rule.id},
                     )
+                    # Boshqa tillarni ham yozib qo'yamiz — parent tilni o'zgartirsa
+                    # tarixdagi xabar ham mos tilda ko'rinadi.
+                    if notif:
+                        changed = False
+                        if rule.title_ru:
+                            tr = _format_text(rule.title_ru, parent, days_left=days_left)
+                            if tr != notif.title_ru:
+                                notif.title_ru = tr
+                                changed = True
+                        if rule.title_en:
+                            tr = _format_text(rule.title_en, parent, days_left=days_left)
+                            if tr != notif.title_en:
+                                notif.title_en = tr
+                                changed = True
+                        if rule.body_ru:
+                            tr = _format_text(rule.body_ru, parent, days_left=days_left)
+                            if tr != notif.body_ru:
+                                notif.body_ru = tr
+                                changed = True
+                        if rule.body_en:
+                            tr = _format_text(rule.body_en, parent, days_left=days_left)
+                            if tr != notif.body_en:
+                                notif.body_en = tr
+                                changed = True
+                        if changed:
+                            notif.save(update_fields=["title_ru", "title_en", "body_ru", "body_en"])
                     push_sent += 1
                 except Exception as e:
                     logger.warning("rule %s push failed for %s: %s", rule.id, parent.id, e)

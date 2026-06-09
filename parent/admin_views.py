@@ -1563,7 +1563,11 @@ def _rule_to_dict(r):
         "audience": r.audience,
         "audience_params": r.audience_params or {},
         "title": r.title,
+        "title_ru": r.title_ru,
+        "title_en": r.title_en,
         "body": r.body,
+        "body_ru": r.body_ru,
+        "body_en": r.body_en,
         "category": r.category,
         "send_push": r.send_push,
         "send_sms": r.send_sms,
@@ -1575,7 +1579,8 @@ def _rule_to_dict(r):
 
 
 def _rule_apply_payload(rule, data):
-    for f in ("name", "trigger_type", "audience", "title", "body", "category"):
+    for f in ("name", "trigger_type", "audience", "title", "title_ru", "title_en",
+              "body", "body_ru", "body_en", "category"):
         if f in data:
             setattr(rule, f, data[f] or "")
     if "trigger_params" in data:
