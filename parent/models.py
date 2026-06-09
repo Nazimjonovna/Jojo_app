@@ -141,6 +141,15 @@ class User(AbstractUser):
         null=True,
         blank=True
     )
+    # Admin paneli foydalanuvchilari (is_staff=True) uchun rol.
+    # Boshqa foydalanuvchilarda doim NULL.
+    admin_role = models.ForeignKey(
+        "AdminRole",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+    )
 
     def has_active_premium(self):
         if not self.is_premium:
@@ -625,6 +634,8 @@ class SavedLocation(models.Model):
     
 class GameCategory(models.Model):
     name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="games/categories/",
         null=True,
@@ -650,11 +661,15 @@ class GameItem(models.Model):
     )
 
     title = models.CharField(max_length=150)
+    title_ru = models.CharField(max_length=150, blank=True, default="")
+    title_en = models.CharField(max_length=150, blank=True, default="")
 
     description = models.TextField(
         null=True,
         blank=True
     )
+    description_ru = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
 
     thumbnail = models.ImageField(
         upload_to="games/thumbnails/",
@@ -703,6 +718,8 @@ class GameItem(models.Model):
 
 class ShopCategory(models.Model):
     name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
 
     icon = models.ImageField(
         upload_to="shop/categories/",
@@ -730,11 +747,15 @@ class ShopItem(models.Model):
     )
 
     title = models.CharField(max_length=150)
+    title_ru = models.CharField(max_length=150, blank=True, default="")
+    title_en = models.CharField(max_length=150, blank=True, default="")
 
     description = models.TextField(
         null=True,
         blank=True
     )
+    description_ru = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
 
     image = models.ImageField(
         upload_to="shop/items/",
@@ -1294,7 +1315,11 @@ class SubscriptionPlan(models.Model):
     )
 
     name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
     description = models.TextField(null=True, blank=True)
+    description_ru = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
 
     price = models.PositiveIntegerField(default=0)
     currency = models.CharField(max_length=10, default="UZS")
@@ -1620,6 +1645,8 @@ class CallCenterComment(models.Model):
 
 class BlogCategory(models.Model):
     name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="blog/categories/",
         null=True,
@@ -1656,17 +1683,23 @@ class BlogPost(models.Model):
     )
 
     title = models.CharField(max_length=255)
+    title_ru = models.CharField(max_length=255, blank=True, default="")
+    title_en = models.CharField(max_length=255, blank=True, default="")
 
     short_description = models.CharField(
         max_length=500,
         null=True,
         blank=True,
     )
+    short_description_ru = models.CharField(max_length=500, blank=True, default="")
+    short_description_en = models.CharField(max_length=500, blank=True, default="")
 
     content = models.TextField(
         null=True,
         blank=True,
     )
+    content_ru = models.TextField(blank=True, default="")
+    content_en = models.TextField(blank=True, default="")
 
     post_type = models.CharField(
         max_length=20,
@@ -1798,6 +1831,8 @@ class ParentStoreCategory(models.Model):
     )
 
     name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
     slug = models.SlugField(max_length=160, unique=True)
     product_type = models.CharField(
         max_length=20,
@@ -2002,8 +2037,14 @@ class ParentStorePromoBanner(models.Model):
     )
 
     kicker = models.CharField(max_length=80)
+    kicker_ru = models.CharField(max_length=80, blank=True, default="")
+    kicker_en = models.CharField(max_length=80, blank=True, default="")
     title = models.CharField(max_length=160)
+    title_ru = models.CharField(max_length=160, blank=True, default="")
+    title_en = models.CharField(max_length=160, blank=True, default="")
     subtitle = models.CharField(max_length=255, blank=True, default="")
+    subtitle_ru = models.CharField(max_length=255, blank=True, default="")
+    subtitle_en = models.CharField(max_length=255, blank=True, default="")
     theme = models.CharField(
         max_length=10,
         choices=THEME_CHOICES,
@@ -2370,7 +2411,11 @@ class ParentNotification(models.Model):
     )
 
     title = models.CharField(max_length=150)
+    title_ru = models.CharField(max_length=150, blank=True, default="")
+    title_en = models.CharField(max_length=150, blank=True, default="")
     body = models.CharField(max_length=500, blank=True, default="")
+    body_ru = models.CharField(max_length=500, blank=True, default="")
+    body_en = models.CharField(max_length=500, blank=True, default="")
 
     data = models.JSONField(
         blank=True,
@@ -2477,7 +2522,11 @@ class NotificationRule(models.Model):
     audience_params = models.JSONField(default=dict, blank=True)
 
     title = models.CharField(max_length=200)
+    title_ru = models.CharField(max_length=200, blank=True, default="")
+    title_en = models.CharField(max_length=200, blank=True, default="")
     body = models.TextField()
+    body_ru = models.TextField(blank=True, default="")
+    body_en = models.TextField(blank=True, default="")
     category = models.CharField(max_length=40, default="system")
 
     send_push = models.BooleanField(default=True)
@@ -2591,3 +2640,33 @@ class AreaBlockRule(models.Model):
             return self.active_from <= now <= self.active_to
         # Tunda ham ishlasin: masalan 22:00 - 06:00
         return now >= self.active_from or now <= self.active_to
+
+
+class AdminRole(models.Model):
+    """Admin panel rollari — har bir xodim (operator) shu rolga ega bo'ladi.
+
+    Har bir rol ruxsat berilgan sahifa kalitlarini (`permissions`) saqlaydi.
+    Permission kalitlari frontendning sidebar navigation key'lariga mos
+    keladi (masalan: `users`, `children`, `premium`, `payments`,
+    `notifications`, `sms`, `ads`, `settings`, `roles`, `kids_content`,
+    `leads`, `requests`, `orders`, `products`, `advice`, `banners`,
+    `categories`).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    permissions = models.JSONField(default=list, blank=True)
+    is_system = models.BooleanField(
+        default=False,
+        help_text="Tizim rollari — o'chirib bo'lmaydi (masalan: superadmin)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Admin Role"
+        verbose_name_plural = "Admin Roles"
+
+    def __str__(self):
+        return self.name

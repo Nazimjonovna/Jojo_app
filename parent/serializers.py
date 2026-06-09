@@ -1,6 +1,7 @@
 import re
 from django.utils import timezone
 from rest_framework import serializers
+from .language import LocalizedSerializerMixin
 from .models import (
     User,
     PairingCode,
@@ -683,7 +684,7 @@ class SavedLocationSerializer(serializers.ModelSerializer):
         return value
     
     
-class GameCategorySerializer(serializers.ModelSerializer):
+class GameCategorySerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = GameCategory
         fields = [
@@ -694,9 +695,10 @@ class GameCategorySerializer(serializers.ModelSerializer):
             "order",
             "created_at",
         ]
+        localized_fields = ["name"]
 
 
-class GameItemSerializer(serializers.ModelSerializer):
+class GameItemSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     category = GameCategorySerializer(read_only=True)
 
     class Meta:
@@ -719,9 +721,10 @@ class GameItemSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        localized_fields = ["title", "description"]
 
 
-class ShopCategorySerializer(serializers.ModelSerializer):
+class ShopCategorySerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = ShopCategory
         fields = [
@@ -732,9 +735,10 @@ class ShopCategorySerializer(serializers.ModelSerializer):
             "order",
             "created_at",
         ]
+        localized_fields = ["name"]
 
 
-class ShopItemSerializer(serializers.ModelSerializer):
+class ShopItemSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     category = ShopCategorySerializer(read_only=True)
     has_discount = serializers.SerializerMethodField()
     discount_percent = serializers.SerializerMethodField()
@@ -760,6 +764,7 @@ class ShopItemSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        localized_fields = ["title", "description"]
 
     def get_has_discount(self, obj):
         return obj.has_discount()
@@ -1314,7 +1319,7 @@ class ChildSavedLocationEventSerializer(serializers.ModelSerializer):
         ]
         
         
-class SubscriptionPlanSerializer(serializers.ModelSerializer):
+class SubscriptionPlanSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan
         fields = [
@@ -1333,6 +1338,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        localized_fields = ["name", "description"]
 
 
 class UserSubscriptionSerializer(serializers.ModelSerializer):
@@ -1393,7 +1399,7 @@ class AdminGiveSubscriptionSerializer(serializers.Serializer):
     days = serializers.IntegerField(min_value=1, max_value=365)
 
 
-class BlogCategorySerializer(serializers.ModelSerializer):
+class BlogCategorySerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = BlogCategory
         fields = [
@@ -1404,9 +1410,10 @@ class BlogCategorySerializer(serializers.ModelSerializer):
             "order",
             "created_at",
         ]
+        localized_fields = ["name"]
 
 
-class BlogPostListSerializer(serializers.ModelSerializer):
+class BlogPostListSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     category = BlogCategorySerializer(read_only=True)
     is_saved = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
@@ -1434,6 +1441,7 @@ class BlogPostListSerializer(serializers.ModelSerializer):
             "is_liked",
             "created_at",
         ]
+        localized_fields = ["title", "short_description"]
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
@@ -1448,7 +1456,7 @@ class BlogPostListSerializer(serializers.ModelSerializer):
         return BlogPostLike.objects.filter(user=request.user, post=obj).exists()
 
 
-class BlogPostDetailSerializer(serializers.ModelSerializer):
+class BlogPostDetailSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     category = BlogCategorySerializer(read_only=True)
     is_saved = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
@@ -1478,6 +1486,7 @@ class BlogPostDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+        localized_fields = ["title", "short_description", "content"]
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
@@ -1496,7 +1505,7 @@ class BlogPostDetailSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 
-class ParentStoreCategorySerializer(serializers.ModelSerializer):
+class ParentStoreCategorySerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = ParentStoreCategory
         fields = [
@@ -1508,6 +1517,7 @@ class ParentStoreCategorySerializer(serializers.ModelSerializer):
             "is_active",
             "order",
         ]
+        localized_fields = ["name"]
 
 
 class ParentStoreProductImageSerializer(serializers.ModelSerializer):
@@ -1516,7 +1526,7 @@ class ParentStoreProductImageSerializer(serializers.ModelSerializer):
         fields = ["id", "image", "order"]
 
 
-class ParentStoreProductListSerializer(serializers.ModelSerializer):
+class ParentStoreProductListSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     category = ParentStoreCategorySerializer(read_only=True)
     images = ParentStoreProductImageSerializer(many=True, read_only=True)
     is_saved = serializers.SerializerMethodField()
@@ -1548,6 +1558,7 @@ class ParentStoreProductListSerializer(serializers.ModelSerializer):
             "placeholder_tint",
             "deal_ends_at",
         ]
+        localized_fields = ["name", "short_description", "category_label"]
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
@@ -1566,9 +1577,10 @@ class ParentStoreProductDetailSerializer(ParentStoreProductListSerializer):
             "created_at",
             "updated_at",
         ]
+        localized_fields = ParentStoreProductListSerializer.Meta.localized_fields + ["description"]
 
 
-class ParentStorePromoBannerSerializer(serializers.ModelSerializer):
+class ParentStorePromoBannerSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     link_product_slug = serializers.SerializerMethodField()
 
     class Meta:
@@ -1588,6 +1600,7 @@ class ParentStorePromoBannerSerializer(serializers.ModelSerializer):
             "placeholder_tint",
             "order",
         ]
+        localized_fields = ["kicker", "title", "subtitle"]
 
     def get_link_product_slug(self, obj):
         return obj.link_product.slug if obj.link_product else None
@@ -1664,7 +1677,7 @@ class ParentStoreOrderCreateSerializer(serializers.Serializer):
 # ============================================================================
 
 
-class ParentNotificationSerializer(serializers.ModelSerializer):
+class ParentNotificationSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = ParentNotification
         fields = [
@@ -1679,6 +1692,7 @@ class ParentNotificationSerializer(serializers.ModelSerializer):
             "read_at",
         ]
         read_only_fields = fields
+        localized_fields = ["title", "body"]
 
 
 # Hudud bloklash qoidasi (Premium-only) ------------------------------------

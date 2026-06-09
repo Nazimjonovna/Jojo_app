@@ -342,19 +342,24 @@ class AdminBroadcastNotificationView(APIView):
     def post(self, request):
         title = (request.data.get("title") or "").strip()
         body = (request.data.get("body") or "").strip()
+        title_ru = (request.data.get("title_ru") or "").strip()
+        title_en = (request.data.get("title_en") or "").strip()
+        body_ru = (request.data.get("body_ru") or "").strip()
+        body_en = (request.data.get("body_en") or "").strip()
         category = request.data.get("category", "system")
         # Yangi opsiya — `send_sms=true` bo'lsa SMSFLY orqali SMS ham yuboriladi.
         send_sms = bool(request.data.get("send_sms"))
         if not title or not body:
             return Response({"detail": "title va body majburiy"}, status=400)
-        # Broadcast: barcha parentlarga inbox yozuvi.
+        # Agar admin _ru/_en yuborgan bo'lsa — sub-til maydonlarga yozamiz,
+        # aks holda model bo'sh string default holatda qoladi.
         from .services import record_parent_notification
         parents = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
         created = 0
         phones = []
         for parent in parents:
             try:
-                record_parent_notification(
+                notif = record_parent_notification(
                     parent=parent,
                     child=None,
                     category=category,
@@ -362,6 +367,22 @@ class AdminBroadcastNotificationView(APIView):
                     body=body,
                     data={"announcement": True},
                 )
+                # Ko'p tilli maydonlarni qo'shamiz.
+                changed = False
+                if title_ru and notif and notif.title_ru != title_ru:
+                    notif.title_ru = title_ru
+                    changed = True
+                if title_en and notif and notif.title_en != title_en:
+                    notif.title_en = title_en
+                    changed = True
+                if body_ru and notif and notif.body_ru != body_ru:
+                    notif.body_ru = body_ru
+                    changed = True
+                if body_en and notif and notif.body_en != body_en:
+                    notif.body_en = body_en
+                    changed = True
+                if changed:
+                    notif.save(update_fields=["title_ru", "title_en", "body_ru", "body_en"])
                 created += 1
                 if send_sms and parent.phone:
                     phones.append(parent.phone)
@@ -1068,11 +1089,20 @@ class AdminOperatorListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        qs = User.objects.filter(is_staff=True, is_superuser=False).order_by("-date_joined")
-        items = list(qs.values(
-            "id", "phone", "username", "first_name", "last_name",
-            "is_active", "date_joined",
-        ))
+        qs = User.objects.filter(is_staff=True, is_superuser=False).select_related("admin_role").order_by("-date_joined")
+        items = []
+        for u in qs:
+            items.append({
+                "id": u.id,
+                "phone": u.phone,
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "is_active": u.is_active,
+                "date_joined": u.date_joined,
+                "role_id": u.admin_role_id,
+                "role_name": u.admin_role.name if u.admin_role else None,
+            })
         return Response({"count": qs.count(), "results": items})
 
 
@@ -1087,12 +1117,22 @@ class AdminOperatorCreateView(APIView):
             return Response({"detail": "phone va password majburiy"}, status=400)
         if User.objects.filter(phone=phone).exists():
             return Response({"detail": "Bunday telefon bilan foydalanuvchi mavjud"}, status=400)
+        role_id = request.data.get("role_id")
+        role = None
+        if role_id:
+            from .models import AdminRole
+            role = AdminRole.objects.filter(id=role_id).first()
+            if not role:
+                return Response({"detail": "Rol topilmadi."}, status=400)
         u = User(phone=phone, username=phone, first_name=full_name, is_staff=True, role=getattr(User, "ROLE_PARENT", "parent"))
+        u.admin_role = role
         u.set_password(password)
         u.save()
         return Response({
             "id": u.id, "phone": u.phone, "username": u.username,
             "first_name": u.first_name, "is_active": u.is_active,
+            "role_id": u.admin_role_id,
+            "role_name": u.admin_role.name if u.admin_role else None,
         }, status=201)
 
 
@@ -1125,6 +1165,17 @@ class AdminOperatorDetailView(APIView):
         if is_active is not None:
             u.is_active = bool(is_active)
             update_fields.append("is_active")
+        if "role_id" in request.data:
+            role_id = request.data.get("role_id")
+            if role_id is None or role_id == "":
+                u.admin_role = None
+            else:
+                from .models import AdminRole
+                role = AdminRole.objects.filter(id=role_id).first()
+                if not role:
+                    return Response({"detail": "Rol topilmadi."}, status=400)
+                u.admin_role = role
+            update_fields.append("admin_role")
         new_password = request.data.get("new_password")
         if new_password:
             if len(new_password) < 4:
@@ -1136,6 +1187,8 @@ class AdminOperatorDetailView(APIView):
         return Response({
             "id": u.id, "phone": u.phone, "username": u.username,
             "first_name": u.first_name, "is_active": u.is_active,
+            "role_id": u.admin_role_id,
+            "role_name": u.admin_role.name if u.admin_role else None,
         })
 
     def delete(self, request, user_id):
@@ -1621,3 +1674,134 @@ class AdminNotificationRuleLogs(APIView):
                 "detail": l.detail,
             } for l in logs]
         })
+
+
+# ============================================================================
+# Admin Roles (xodimga rol berish)
+# ============================================================================
+
+from .models import AdminRole as _AdminRole
+
+# Sidebar permission kalitlari — frontend bilan bir xil bo'lishi kerak.
+ADMIN_PERMISSION_KEYS = [
+    "dashboard", "leads", "users", "children", "premium", "payments",
+    "requests", "notifications", "notification_rules", "sms", "ads",
+    "settings", "operators", "roles", "blocked",
+    "products", "categories", "banners", "orders",
+    "advice", "kids_content",
+]
+
+
+def _role_to_dict(r):
+    return {
+        "id": r.id,
+        "name": r.name,
+        "description": r.description,
+        "permissions": list(r.permissions or []),
+        "is_system": r.is_system,
+        "users_count": r.users.count(),
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+    }
+
+
+class AdminRoleListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = _AdminRole.objects.all().order_by("name")
+        return Response({
+            "count": qs.count(),
+            "results": [_role_to_dict(r) for r in qs],
+            "available_permissions": ADMIN_PERMISSION_KEYS,
+        })
+
+    def post(self, request):
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"detail": "Rol nomi majburiy."}, status=400)
+        if _AdminRole.objects.filter(name=name).exists():
+            return Response({"detail": "Bu nomli rol allaqachon mavjud."}, status=400)
+        perms = request.data.get("permissions") or []
+        if not isinstance(perms, list):
+            return Response({"detail": "permissions ro'yxat (list) bo'lishi kerak."}, status=400)
+        # Faqat ma'lum kalitlarni qabul qilamiz — adash qilingan kalitlarni tashlab yuboramiz.
+        perms = [p for p in perms if p in ADMIN_PERMISSION_KEYS]
+        r = _AdminRole.objects.create(
+            name=name,
+            description=request.data.get("description") or "",
+            permissions=perms,
+        )
+        return Response(_role_to_dict(r), status=201)
+
+
+class AdminRoleDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def _get(self, role_id):
+        return _AdminRole.objects.filter(id=role_id).first()
+
+    def get(self, request, role_id):
+        r = self._get(role_id)
+        if not r:
+            return Response({"detail": "Rol topilmadi."}, status=404)
+        return Response(_role_to_dict(r))
+
+    def patch(self, request, role_id):
+        r = self._get(role_id)
+        if not r:
+            return Response({"detail": "Rol topilmadi."}, status=404)
+        if r.is_system:
+            return Response({"detail": "Tizim rolini o'zgartirib bo'lmaydi."}, status=403)
+        name = request.data.get("name")
+        if name is not None:
+            name = name.strip()
+            if not name:
+                return Response({"detail": "Nom bo'sh bo'lishi mumkin emas."}, status=400)
+            if _AdminRole.objects.filter(name=name).exclude(id=r.id).exists():
+                return Response({"detail": "Bu nomli rol allaqachon mavjud."}, status=400)
+            r.name = name
+        if "description" in request.data:
+            r.description = request.data.get("description") or ""
+        if "permissions" in request.data:
+            perms = request.data.get("permissions") or []
+            if not isinstance(perms, list):
+                return Response({"detail": "permissions ro'yxat bo'lishi kerak."}, status=400)
+            r.permissions = [p for p in perms if p in ADMIN_PERMISSION_KEYS]
+        r.save()
+        return Response(_role_to_dict(r))
+
+    def delete(self, request, role_id):
+        r = self._get(role_id)
+        if not r:
+            return Response({"detail": "Rol topilmadi."}, status=404)
+        if r.is_system:
+            return Response({"detail": "Tizim rolini o'chirib bo'lmaydi."}, status=403)
+        r.delete()
+        return Response(status=204)
+
+
+# ============================================================================
+# Auto-translate (Admin paneldagi "Auto" tugmasi uchun)
+# ============================================================================
+
+from .translation import (
+    translate as _do_translate,
+    translate_to_all as _do_translate_all,
+)
+
+
+class AdminAutoTranslateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        text = (request.data.get("text") or "").strip()
+        source = request.data.get("source") or "uz"
+        target = request.data.get("target")
+        # `target` bo'lsa — bittasiga, bo'lmasa — uchchalasiga.
+        if not text:
+            return Response({"detail": "text bo'sh bo'lishi mumkin emas."}, status=400)
+        if target:
+            result = _do_translate(text, source, target)
+            return Response({"text": result, "source": source, "target": target})
+        return Response({"translations": _do_translate_all(text, source), "source": source})

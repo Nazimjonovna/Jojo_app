@@ -151,6 +151,8 @@ from .admin_views import (
     AdminLeadBoardView, AdminLeadListCreate, AdminLeadDetailView, AdminLeadCommentsView,
     AdminLeadFullView,
     AdminOperatorListView, AdminOperatorCreateView, AdminOperatorDetailView,
+    AdminRoleListCreateView, AdminRoleDetailView,
+    AdminAutoTranslateView,
     AdminChangePasswordView,
     AdminChildrenListView,
     AdminMediaUploadView,
@@ -220,6 +222,9 @@ urlpatterns += [
     path("admin/operators/", AdminOperatorListView.as_view(), name="admin-operator-list"),
     path("admin/operators/create/", AdminOperatorCreateView.as_view(), name="admin-operator-create"),
     path("admin/operators/<int:user_id>/", AdminOperatorDetailView.as_view(), name="admin-operator-detail"),
+    path("admin/roles/", AdminRoleListCreateView.as_view(), name="admin-role-list-create"),
+    path("admin/roles/<int:role_id>/", AdminRoleDetailView.as_view(), name="admin-role-detail"),
+    path("admin/translate/", AdminAutoTranslateView.as_view(), name="admin-translate"),
 
     path("admin/change-password/", AdminChangePasswordView.as_view(), name="admin-change-password"),
     path("admin/children/", AdminChildrenListView.as_view(), name="admin-children-list"),
