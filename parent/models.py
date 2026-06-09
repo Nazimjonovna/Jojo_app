@@ -2520,3 +2520,74 @@ class NotificationRuleLog(models.Model):
 
     def __str__(self):
         return f"{self.rule_id} @ {self.fired_at:%Y-%m-%d %H:%M}"
+
+
+class AreaBlockRule(models.Model):
+    """Hudud bloklash qoidasi.
+
+    Bola saqlangan joyga (SavedLocation) kirsa, ChildInstalledApp ro'yxatidagi
+    ilovalar avtomatik bloklanadi. Joydan chiqsa — qayta ochiladi.
+    Faqat Premium tarif uchun yaratiladi va o'qiladi.
+    """
+
+    TRIGGER_ENTER = "enter"
+    TRIGGER_EXIT = "exit"
+    TRIGGER_CHOICES = (
+        (TRIGGER_ENTER, "Hududga kirganda"),
+        (TRIGGER_EXIT, "Hududdan chiqqanda"),
+    )
+
+    parent = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="area_block_rules",
+    )
+    child = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="child_area_block_rules",
+    )
+    saved_location = models.ForeignKey(
+        "SavedLocation",
+        on_delete=models.CASCADE,
+        related_name="area_block_rules",
+    )
+
+    name = models.CharField(max_length=150, blank=True, default="")
+    trigger = models.CharField(
+        max_length=10,
+        choices=TRIGGER_CHOICES,
+        default=TRIGGER_ENTER,
+    )
+
+    # Bloklanadigan ilovalar (package_name ro'yxati).
+    # Bo'sh -> hamma ilovalar (block_all_apps).
+    blocked_packages = models.JSONField(default=list, blank=True)
+    block_all_apps = models.BooleanField(default=False)
+
+    is_active = models.BooleanField(default=True)
+
+    # Vaqtga qarab cheklash (masalan: 08:00-15:00 maktab vaqti).
+    active_from = models.TimeField(null=True, blank=True)
+    active_to = models.TimeField(null=True, blank=True)
+
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Hudud bloklash qoidasi"
+        verbose_name_plural = "Hudud bloklash qoidalari"
+
+    def __str__(self):
+        return f"{self.name or self.saved_location_id} → child {self.child_id}"
+
+    def is_currently_in_time_window(self):
+        if not (self.active_from and self.active_to):
+            return True
+        now = timezone.localtime().time()
+        if self.active_from <= self.active_to:
+            return self.active_from <= now <= self.active_to
+        # Tunda ham ishlasin: masalan 22:00 - 06:00
+        return now >= self.active_from or now <= self.active_to

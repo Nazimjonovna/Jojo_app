@@ -600,6 +600,15 @@ class CreatePairingCodeView(APIView):
                 code = generate_numeric_code(6)
             pairing = PairingCode.objects.create(parent=request.user, child=child, code=code, expires_at=timezone.now() + timedelta(days=3), child_name=child.full_name or child.first_name, child_gender=child.gender, child_age=child.age, child_avatar=child.avatar)
             return Response({"status": True, "already_exists": False, "detail": f"{child.full_name or child.first_name} uchun pairing code yaratildi.", "child": ChildSerializer(child).data, "pairing": PairingCodeSerializer(pairing).data, "qr_payload": {"type": "jojo_child_pairing", "code": pairing.code, "child_id": child.id}}, status=status.HTTP_201_CREATED)
+        # Free tarifda yangi bola qo'shish limiti
+        from .feature_gates import can_add_more_children, FREE_CHILD_LIMIT
+        if not can_add_more_children(request.user):
+            return Response({
+                "status": False,
+                "code": "premium_required",
+                "feature": "add_extra_child",
+                "detail": f"Free tarifda eng ko'pi {FREE_CHILD_LIMIT} ta bola qo'shish mumkin. Premium oling.",
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
         serializer = CreateChildPairingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         # `child_avatar` ImageField (multipart) yoki `child_avatar_url` URL
@@ -967,12 +976,21 @@ class ChildLocationHistoryView(APIView):
 
     @swagger_auto_schema(tags=["location"])
     def get(self, request, child_id):
+        from .feature_gates import is_premium, FREE_LOCATION_HISTORY_HOURS
         date = request.query_params.get("date")
         date_from = request.query_params.get("date_from")
         date_to = request.query_params.get("date_to")
         locations = ChildLocation.objects.filter(
             child_id=child_id
         )
+        # Free tarifda faqat oxirgi 24 soat. Premium da chegara yo'q.
+        if not is_premium(request.user):
+            cutoff = timezone.now() - timedelta(hours=FREE_LOCATION_HISTORY_HOURS)
+            locations = locations.filter(created_at__gte=cutoff)
+            # Sana filtrlari ham faqat o'sha oraliqda ishlasin
+            date = None
+            date_from = None
+            date_to = None
         if date:
             parsed_date = parse_date(date)
             if parsed_date:
@@ -1055,6 +1073,14 @@ class SavedLocationListCreateView(APIView):
         )
     @swagger_auto_schema(request_body=SavedLocationSerializer, tags=["saved-location"])
     def post(self, request):
+        from .feature_gates import can_add_more_saved_locations, FREE_SAVED_LOCATIONS_LIMIT
+        if not can_add_more_saved_locations(request.user):
+            return Response({
+                "status": False,
+                "code": "premium_required",
+                "feature": "saved_locations_extra",
+                "detail": f"Free tarifda eng ko'pi {FREE_SAVED_LOCATIONS_LIMIT} ta saqlangan joy. Premium oling.",
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
         serializer = SavedLocationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         saved_location = serializer.save(parent=request.user)
@@ -1470,6 +1496,8 @@ class ParentSetChildAppLimitView(APIView):
     permission_classes = [IsParentOfChild]
     @swagger_auto_schema(request_body=SetChildAppLimitSerializer, tags=["app-control"])
     def post(self, request, child_id, app_id):
+        from .feature_gates import require_premium
+        require_premium(request.user, feature_key="app_limits_write")
         app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
             return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
@@ -1479,6 +1507,8 @@ class ParentSetChildAppLimitView(APIView):
         _build_and_push_child_policies(child_id)
         return Response({"status": True, "detail": "App limit saqlandi.", "limit": ChildAppLimitSerializer(limit).data}, status=status.HTTP_200_OK)
     def delete(self, request, child_id, app_id):
+        from .feature_gates import require_premium
+        require_premium(request.user, feature_key="app_limits_write")
         app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
             return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
@@ -1491,6 +1521,8 @@ class ParentBlockChildAppView(APIView):
     permission_classes = [IsParentOfChild]
     @swagger_auto_schema(request_body=BlockChildAppSerializer, tags=["app-control"])
     def post(self, request, child_id, app_id):
+        from .feature_gates import require_premium
+        require_premium(request.user, feature_key="app_blocks_write")
         app = ChildInstalledApp.objects.filter(id=app_id, child_id=child_id).first()
         if not app:
             return Response({"status": False, "detail": "App topilmadi."}, status=status.HTTP_404_NOT_FOUND)
@@ -2968,3 +3000,97 @@ class ParentMediaUploadView(APIView):
     # multipart parser uchun klassdarajada belgilab qo'yamiz
     from rest_framework.parsers import MultiPartParser as _MP, FormParser as _FP
     parser_classes = [_MP, _FP]
+
+
+# ==========================================================================
+# Hudud bloklash (AreaBlockRule) — Premium only
+# ==========================================================================
+from .feature_gates import (
+    require_premium as _require_premium,
+    gates_for as _gates_for,
+)
+from .models import AreaBlockRule as _AreaBlockRule
+from .serializers import AreaBlockRuleSerializer as _AreaBlockRuleSerializer
+
+
+class ParentFeatureGatesView(APIView):
+    """Client-side render uchun gate kartasini qaytaradi."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["premium"])
+    def get(self, request):
+        gates = _gates_for(request.user)
+        # Joriy hisoblanma sonlar
+        from .models import ParentChild, SavedLocation
+        if request.user.is_authenticated and request.user.role == User.ROLE_PARENT:
+            gates["usage"] = {
+                "children": ParentChild.objects.filter(parent=request.user).count(),
+                "saved_locations": SavedLocation.objects.filter(parent=request.user).count(),
+                "area_block_rules": _AreaBlockRule.objects.filter(parent=request.user).count(),
+            }
+        return Response({"status": True, **gates}, status=status.HTTP_200_OK)
+
+
+class AreaBlockRuleListCreateView(APIView):
+    permission_classes = [IsParent]
+
+    @swagger_auto_schema(tags=["area-block"])
+    def get(self, request):
+        # Free user lar bo'sh ro'yxat ko'radi (lock badge UI tomonda)
+        qs = _AreaBlockRule.objects.filter(parent=request.user).select_related(
+            "saved_location", "child"
+        )
+        child_id = request.query_params.get("child_id")
+        if child_id:
+            qs = qs.filter(child_id=child_id)
+        return paginate_queryset(
+            request=request,
+            queryset=qs.order_by("-created_at"),
+            serializer_class=_AreaBlockRuleSerializer,
+            page_size=20,
+        )
+
+    @swagger_auto_schema(request_body=_AreaBlockRuleSerializer, tags=["area-block"])
+    def post(self, request):
+        _require_premium(request.user, feature_key="area_block_rules")
+        serializer = _AreaBlockRuleSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        rule = serializer.save(parent=request.user)
+        return Response({
+            "status": True,
+            "detail": "Hudud bloklash qoidasi yaratildi.",
+            "rule": _AreaBlockRuleSerializer(rule, context={"request": request}).data,
+        }, status=status.HTTP_201_CREATED)
+
+
+class AreaBlockRuleDetailView(APIView):
+    permission_classes = [IsParent]
+
+    def _get(self, request, rule_id):
+        return _AreaBlockRule.objects.filter(id=rule_id, parent=request.user).first()
+
+    @swagger_auto_schema(tags=["area-block"])
+    def get(self, request, rule_id):
+        rule = self._get(request, rule_id)
+        if not rule:
+            return Response({"status": False, "detail": "Qoida topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": True, "rule": _AreaBlockRuleSerializer(rule, context={"request": request}).data}, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(request_body=_AreaBlockRuleSerializer, tags=["area-block"])
+    def patch(self, request, rule_id):
+        _require_premium(request.user, feature_key="area_block_rules")
+        rule = self._get(request, rule_id)
+        if not rule:
+            return Response({"status": False, "detail": "Qoida topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = _AreaBlockRuleSerializer(rule, data=request.data, partial=True, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        rule = serializer.save()
+        return Response({"status": True, "detail": "Qoida yangilandi.", "rule": _AreaBlockRuleSerializer(rule, context={"request": request}).data}, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(tags=["area-block"])
+    def delete(self, request, rule_id):
+        rule = self._get(request, rule_id)
+        if not rule:
+            return Response({"status": False, "detail": "Qoida topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        rule.delete()
+        return Response({"status": True, "detail": "Qoida o'chirildi."}, status=status.HTTP_200_OK)

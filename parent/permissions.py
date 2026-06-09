@@ -44,3 +44,16 @@ class IsParentOfChild(BasePermission):
             parent=request.user,
             child_id=child_id
         ).exists()
+
+
+class IsPremiumParent(BasePermission):
+    """Faqat aktiv premium tarifli parent uchun."""
+    message = "Bu funksiya faqat Premium foydalanuvchilar uchun. Tarifni yangilang."
+    code = "premium_required"
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.role != User.ROLE_PARENT:
+            return False
+        return bool(request.user.has_active_premium())

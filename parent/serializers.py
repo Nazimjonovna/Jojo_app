@@ -1679,3 +1679,59 @@ class ParentNotificationSerializer(serializers.ModelSerializer):
             "read_at",
         ]
         read_only_fields = fields
+
+
+# Hudud bloklash qoidasi (Premium-only) ------------------------------------
+from .models import AreaBlockRule  # noqa: E402
+
+
+class AreaBlockRuleSerializer(serializers.ModelSerializer):
+    saved_location_name = serializers.CharField(source="saved_location.name", read_only=True)
+    saved_location_address = serializers.CharField(source="saved_location.address", read_only=True)
+    child_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AreaBlockRule
+        fields = [
+            "id",
+            "child",
+            "child_name",
+            "saved_location",
+            "saved_location_name",
+            "saved_location_address",
+            "name",
+            "trigger",
+            "blocked_packages",
+            "block_all_apps",
+            "is_active",
+            "active_from",
+            "active_to",
+            "last_triggered_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "saved_location_name",
+            "saved_location_address",
+            "child_name",
+            "last_triggered_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_child_name(self, obj):
+        return obj.child.full_name or obj.child.first_name or ""
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        parent = request.user if request else None
+        child = attrs.get("child") or getattr(self.instance, "child", None)
+        saved = attrs.get("saved_location") or getattr(self.instance, "saved_location", None)
+        if parent and child:
+            from .models import ParentChild
+            if not ParentChild.objects.filter(parent=parent, child=child).exists():
+                raise serializers.ValidationError({"child": "Bu child sizga tegishli emas."})
+        if parent and saved and saved.parent_id != parent.id:
+            raise serializers.ValidationError({"saved_location": "Saqlangan joy sizniki emas."})
+        return attrs

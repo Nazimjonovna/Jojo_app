@@ -37,6 +37,9 @@ from .views import (
     ParentNotificationMarkAllReadView,
     ChildJourneyView,
     ParentMediaUploadView,
+    ParentFeatureGatesView,
+    AreaBlockRuleListCreateView,
+    AreaBlockRuleDetailView,
 )
 
 
@@ -64,6 +67,9 @@ urlpatterns = [
     path("device-token/logout/", DeviceLogoutView.as_view(), name="device-token-logout"),
     path("parent/saved-locations/", SavedLocationListCreateView.as_view(), name="saved-location-list-create"),
     path("parent/saved-locations/<int:location_id>/", SavedLocationDetailView.as_view(), name="saved-location-detail"),
+    path("parent/feature-gates/", ParentFeatureGatesView.as_view(), name="parent-feature-gates"),
+    path("parent/area-block-rules/", AreaBlockRuleListCreateView.as_view(), name="area-block-rule-list-create"),
+    path("parent/area-block-rules/<int:rule_id>/", AreaBlockRuleDetailView.as_view(), name="area-block-rule-detail"),
     path("parent/routes/", ParentRouteListCreateView.as_view(), name="parent-routes"),
     path("parent/routes/<int:route_id>/", ParentRouteDetailView.as_view(), name="parent-route-detail"),
     path("parent/routes/assign/", AssignRouteToChildView.as_view(), name="assign-route-to-child"),
