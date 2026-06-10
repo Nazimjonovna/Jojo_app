@@ -792,6 +792,17 @@ def process_saved_location_events(child, location):
         ]
     )
 
+    # Hudud bo'yicha ilova bloklash qoidalari effective bo'lishi mumkin —
+    # bola hududga kirsa/chiqsa, kid qurilmasiga yangi policy ro'yxati
+    # WS orqali darrov yuboriladi. Importni tsiklik bog'liqlikdan saqlash
+    # uchun lazy chaqiramiz.
+    if created_events:
+        try:
+            from .views import _build_and_push_child_policies
+            _build_and_push_child_policies(child.id)
+        except Exception:
+            pass
+
     return created_events
 
 

@@ -1390,12 +1390,19 @@ class ChildAppPolicyView(APIView):
     def get(self, request):
         today = timezone.localdate()
         apps = ChildInstalledApp.objects.filter(child=request.user, is_active=True).order_by("app_name")
+        # Hudud bo'yicha effective blok ro'yxati — bola hozir kirgan
+        # saqlangan joyga tegishli AreaBlockRule qoidasi bor bo'lsa.
+        area_blocked, area_block_all = _compute_area_block_packages(request.user.id)
         policies = []
         for app in apps:
             try:
                 is_blocked = app.block.is_blocked
             except ChildBlockedApp.DoesNotExist:
                 is_blocked = False
+            # Hudud bloklash — block_all yoki package list bo'yicha
+            if not is_blocked and not app.is_system_app:
+                if area_block_all or app.package_name in area_blocked:
+                    is_blocked = True
             try:
                 limit = app.limit
                 daily_limit_seconds = limit.daily_limit_seconds
@@ -1461,10 +1468,52 @@ class ParentChildAppListView(APIView):
         return response
 
 
+def _compute_area_block_packages(child_id):
+    """Bola hozir kirgan saqlangan joy(lar) bo'yicha hozir faol bo'lishi
+    kerak bo'lgan ilova bloklarini hisoblaydi.
+
+    Qaytaradi: ({package_name, ...}, block_all_apps_bool)
+    """
+    from .models import AreaBlockRule, ChildSavedLocationState
+
+    blocked_packages = set()
+    block_all = False
+
+    state = ChildSavedLocationState.objects.filter(child_id=child_id).first()
+    current_id = state.current_location_id if state else None
+
+    if not current_id:
+        # Joyda emas — faqat trigger=exit bo'lgan qoidalar ham tekshirilishi
+        # mumkin, lekin uning konseptsiyasi murakkab — hozircha "qachon
+        # chiqsa eslatish" sifatida ishlatamiz, blok emas.
+        return blocked_packages, block_all
+
+    rules = AreaBlockRule.objects.filter(
+        child_id=child_id,
+        is_active=True,
+        trigger=AreaBlockRule.TRIGGER_ENTER,
+        saved_location_id=current_id,
+    )
+    for rule in rules:
+        if not rule.is_currently_in_time_window():
+            continue
+        if rule.block_all_apps:
+            block_all = True
+            continue
+        for pkg in (rule.blocked_packages or []):
+            if isinstance(pkg, str) and pkg.strip():
+                blocked_packages.add(pkg.strip())
+    return blocked_packages, block_all
+
+
 def _build_and_push_child_policies(child_id):
     """Bola uchun joriy policy ro'yxatini yig'ib WS push qiladi.
     Block + limit ikkalasini ham birgalikda yuboradi — kids tomondagi
     `JojoAccessibilityService` shu format'da kutadi.
+
+    Hudud bloklash qoidalari ham (AreaBlockRule) shu yerda effective
+    holatga aylanadi — bola saqlangan joyga kirgan bo'lsa, qoidadagi
+    paketlar avtomatik blok bo'ladi.
     """
     from .realtime import broadcast_child_app_policy
 
@@ -1473,11 +1522,21 @@ def _build_and_push_child_policies(child_id):
         .filter(child_id=child_id, is_active=True)
         .select_related("limit", "block")
     )
+    area_blocked, area_block_all = _compute_area_block_packages(child_id)
+
     policies = []
     for app in apps:
         limit = getattr(app, "limit", None)
         block = getattr(app, "block", None)
         is_blocked = bool(block and block.is_blocked)
+
+        # Hudud bloklash: package shu joydagi qoidaga tushsa yoki
+        # qoidada block_all_apps yoqilgan bo'lsa — tizim ilovasi
+        # bo'lmasa — blok qilamiz.
+        if not is_blocked and (area_block_all or app.package_name in area_blocked):
+            if not app.is_system_app:
+                is_blocked = True
+
         if not is_blocked and (not limit or not limit.is_enabled):
             continue
         policies.append({
@@ -3056,6 +3115,8 @@ class AreaBlockRuleListCreateView(APIView):
         serializer = _AreaBlockRuleSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         rule = serializer.save(parent=request.user)
+        # Bola hozir shu hududda bo'lsa darrov policy push qilamiz
+        _build_and_push_child_policies(rule.child_id)
         return Response({
             "status": True,
             "detail": "Hudud bloklash qoidasi yaratildi.",
@@ -3085,6 +3146,7 @@ class AreaBlockRuleDetailView(APIView):
         serializer = _AreaBlockRuleSerializer(rule, data=request.data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         rule = serializer.save()
+        _build_and_push_child_policies(rule.child_id)
         return Response({"status": True, "detail": "Qoida yangilandi.", "rule": _AreaBlockRuleSerializer(rule, context={"request": request}).data}, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(tags=["area-block"])
@@ -3092,5 +3154,7 @@ class AreaBlockRuleDetailView(APIView):
         rule = self._get(request, rule_id)
         if not rule:
             return Response({"status": False, "detail": "Qoida topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        child_id = rule.child_id
         rule.delete()
+        _build_and_push_child_policies(child_id)
         return Response({"status": True, "detail": "Qoida o'chirildi."}, status=status.HTTP_200_OK)
