@@ -336,7 +336,16 @@ class AdminSOSAlertListView(generics.ListAPIView):
 
 
 class AdminBroadcastNotificationView(APIView):
-    """Hamma parentlarga umumiy bildirishnoma yuborish (announcement / elon)."""
+    """Parentlarga bildirishnoma yuborish (hammaga yoki tanlangan ro'yxatga).
+
+    POST body:
+      title, body            — uz (asosiy) matn — majburiy
+      title_ru, body_ru      — ru tarjima (ixtiyoriy)
+      title_en, body_en      — en tarjima (ixtiyoriy)
+      category               — ParentNotification.category (default: "system")
+      send_sms               — true bo'lsa SMSFLY orqali ham yuboriladi
+      parent_ids             — int ro'yxati; bo'sh/yo'q bo'lsa hamma aktiv parent
+    """
 
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -348,61 +357,89 @@ class AdminBroadcastNotificationView(APIView):
         body_ru = (request.data.get("body_ru") or "").strip()
         body_en = (request.data.get("body_en") or "").strip()
         category = request.data.get("category", "system")
-        # Yangi opsiya — `send_sms=true` bo'lsa SMSFLY orqali SMS ham yuboriladi.
         send_sms = bool(request.data.get("send_sms"))
+        raw_ids = request.data.get("parent_ids") or []
+        if not isinstance(raw_ids, (list, tuple)):
+            return Response({"detail": "parent_ids ro'yxat bo'lishi kerak"}, status=400)
+        try:
+            parent_ids = [int(x) for x in raw_ids if x is not None and str(x).strip() != ""]
+        except (TypeError, ValueError):
+            return Response({"detail": "parent_ids noto'g'ri formatda"}, status=400)
+
         if not title or not body:
             return Response({"detail": "title va body majburiy"}, status=400)
-        # Agar admin _ru/_en yuborgan bo'lsa — sub-til maydonlarga yozamiz,
-        # aks holda model bo'sh string default holatda qoladi.
-        from .services import record_parent_notification
-        parents = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
+
+        from .services import record_parent_notification, pick_for_lang
+
+        title_translations = {"uz": title}
+        if title_ru:
+            title_translations["ru"] = title_ru
+        if title_en:
+            title_translations["en"] = title_en
+        body_translations = {"uz": body}
+        if body_ru:
+            body_translations["ru"] = body_ru
+        if body_en:
+            body_translations["en"] = body_en
+
+        parents_qs = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
+        targeted = bool(parent_ids)
+        if targeted:
+            parents_qs = parents_qs.filter(id__in=parent_ids)
+
+        announcement_data = {
+            "announcement": True,
+            "audience": "selected" if targeted else "all",
+        }
+        if targeted:
+            announcement_data["audience_count"] = parents_qs.count()
+
         created = 0
-        phones = []
-        for parent in parents:
+        # Parent tili bo'yicha SMSlarni guruhlash — har bir tilga o'z matnida yuborish.
+        sms_by_lang = {"uz": [], "ru": [], "en": []}
+        for parent in parents_qs.iterator():
             try:
-                notif = record_parent_notification(
+                record_parent_notification(
                     parent=parent,
                     child=None,
                     category=category,
                     title=title,
                     body=body,
-                    data={"announcement": True},
+                    data=announcement_data,
+                    title_translations=title_translations,
+                    body_translations=body_translations,
                 )
-                # Ko'p tilli maydonlarni qo'shamiz.
-                changed = False
-                if title_ru and notif and notif.title_ru != title_ru:
-                    notif.title_ru = title_ru
-                    changed = True
-                if title_en and notif and notif.title_en != title_en:
-                    notif.title_en = title_en
-                    changed = True
-                if body_ru and notif and notif.body_ru != body_ru:
-                    notif.body_ru = body_ru
-                    changed = True
-                if body_en and notif and notif.body_en != body_en:
-                    notif.body_en = body_en
-                    changed = True
-                if changed:
-                    notif.save(update_fields=["title_ru", "title_en", "body_ru", "body_en"])
                 created += 1
                 if send_sms and parent.phone:
-                    phones.append(parent.phone)
+                    plang = (getattr(parent, "language", "uz") or "uz").lower()
+                    if plang.startswith("ru"):
+                        bucket = "ru"
+                    elif plang.startswith("en"):
+                        bucket = "en"
+                    else:
+                        bucket = "uz"
+                    sms_by_lang[bucket].append(parent.phone)
             except Exception:
                 continue
 
         sms_sent = 0
-        if send_sms and phones:
-            # SMS matni: title + body (160 belgi tavsiya). Bitta xabar limiti
-            # tashqarisida bo'lsa, SMSFLY o'zi bo'lishadi.
-            sms_text = f"{title}\n{body}"[:500]
+        if send_sms:
             from .sms_service import sms_client
-            ok = sms_client.send_bulk(phones, sms_text)
-            sms_sent = len(phones) if ok else 0
+            for lang_code, phones in sms_by_lang.items():
+                if not phones:
+                    continue
+                lang_title = pick_for_lang(title_translations, lang_code, fallback=title)
+                lang_body = pick_for_lang(body_translations, lang_code, fallback=body)
+                sms_text = f"{lang_title}\n{lang_body}"[:500]
+                ok = sms_client.send_bulk(phones, sms_text)
+                if ok:
+                    sms_sent += len(phones)
 
         return Response({
             "status": True,
             "sent_to": created,
             "sms_sent": sms_sent,
+            "audience": "selected" if targeted else "all",
         })
 
 
@@ -633,18 +670,33 @@ class AdminBroadcastHistoryView(APIView):
     def get(self, request):
         from django.db.models import Count, Min, Max
         category = request.query_params.get("category")
-        qs = ParentNotification.objects.values("title", "body", "category")
+        qs = ParentNotification.objects.all()
         if category:
             qs = qs.filter(category=category)
         rows = (
-            qs.annotate(
+            qs.values("title", "body", "title_ru", "title_en", "body_ru", "body_en", "category")
+            .annotate(
                 count=Count("id"),
                 first_sent=Min("created_at"),
                 last_sent=Max("created_at"),
             )
-            .order_by("-last_sent")[:50]
+            .order_by("-last_sent")[:100]
         )
-        return Response({"results": list(rows)})
+        results = []
+        for row in rows:
+            # Audience metadatasini eng oxirgi yozuvdan o'qiymiz.
+            last = (
+                ParentNotification.objects.filter(
+                    title=row["title"], body=row["body"], category=row["category"]
+                )
+                .order_by("-created_at")
+                .values("data")
+                .first()
+            )
+            data = (last or {}).get("data") or {}
+            row["audience"] = data.get("audience") or "all"
+            results.append(row)
+        return Response({"results": results})
 
 
 # ============================================================================
@@ -697,56 +749,8 @@ def _parent_brief(p, *, request=None):
     }
 
 
-def _apply_ticket_status(ticket, new_status):
-    """Statusni o'rnatadi, kerakli sana maydonlarini to'ldiradi va
-    `resolved` bo'lsa botga baho so'rovini yuboradi."""
-    ticket.status = new_status
-    fields = ["status", "updated_at"]
-
-    if new_status == CallCenterTicket.STATUS_RESOLVED and not ticket.resolved_at:
-        ticket.resolved_at = timezone.now()
-        fields.append("resolved_at")
-    if new_status == CallCenterTicket.STATUS_CLOSED and not ticket.closed_at:
-        ticket.closed_at = timezone.now()
-        fields.append("closed_at")
-    ticket.save(update_fields=fields)
-
-    # Telegram orqali murojaat — resolved bo'lsa baho so'raymiz.
-    if (
-        new_status == CallCenterTicket.STATUS_RESOLVED
-        and ticket.telegram_chat_id
-        and ticket.bot_state != CallCenterTicket.BOT_STATE_AWAITING_RATING
-    ):
-        try:
-            from .telegram_bot import request_rating
-            request_rating(ticket)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("request_rating xato")
-    return ticket
-
-
-def _qr_to_dict(q):
-    return {
-        "id": q.id,
-        "code": q.code,
-        "title": q.title,
-        "scope": q.scope,
-        "owner_id": q.owner_id,
-        "text_uz_latn": q.text_uz_latn or "",
-        "text_uz_cyrl": q.text_uz_cyrl or "",
-        "text_ru": q.text_ru or "",
-        "text_en": q.text_en or "",
-        "order": q.order,
-        "is_active": q.is_active,
-        "created_at": q.created_at.isoformat(),
-    }
-
-
 def _lead_to_dict(t, *, request=None):
     op = t.operator
-    last_in = t.comments.filter(direction=CallCenterComment.DIRECTION_IN).order_by("-created_at").first()
-    last_msg = t.comments.order_by("-created_at").first()
     return {
         "id": t.id,
         "title": t.title,
@@ -760,23 +764,11 @@ def _lead_to_dict(t, *, request=None):
         } if op else None,
         "last_contact_at": t.last_contact_at.isoformat() if t.last_contact_at else None,
         "closed_at": t.closed_at.isoformat() if t.closed_at else None,
-        "resolved_at": t.resolved_at.isoformat() if getattr(t, "resolved_at", None) else None,
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "comments_count": t.comments.count(),
-        "source": getattr(t, "source", "app"),
-        "language": getattr(t, "language", "") or "",
-        "bot_state": getattr(t, "bot_state", "") or "",
-        "rating": getattr(t, "rating", None),
-        "rating_comment": getattr(t, "rating_comment", "") or "",
-        "rated_at": t.rated_at.isoformat() if getattr(t, "rated_at", None) else None,
-        "last_message": {
-            "text": last_msg.comment,
-            "direction": last_msg.direction,
-            "at": last_msg.created_at.isoformat(),
-        } if last_msg else None,
-        "last_user_message_at": last_in.created_at.isoformat() if last_in else None,
-        "telegram": {
+        "source": getattr(t, "source", "app"),                      
+        "telegram": {                                               
             "chat_id": t.telegram_chat_id,
             "username": t.telegram_username,
             "name": t.telegram_name,
@@ -845,7 +837,8 @@ class AdminTicketUpdateStatusView(APIView):
         new_status = request.data.get("status")
         if new_status and new_status in dict(CallCenterTicket.STATUS_CHOICES):
             old = ticket.status
-            _apply_ticket_status(ticket, new_status)
+            ticket.status = new_status
+            ticket.save(update_fields=["status", "updated_at"])
             try:
                 broadcast_lead_changed({
                     "type": "status_changed",
@@ -961,11 +954,14 @@ class AdminLeadDetailView(APIView):
             if f in request.data:
                 setattr(t, f, request.data.get(f) or "")
                 update_fields.append(f)
-        new_status_val = None
         if "status" in request.data:
             s = request.data["status"]
             if s in dict(CallCenterTicket.STATUS_CHOICES):
-                new_status_val = s
+                t.status = s
+                update_fields.append("status")
+                if s == CallCenterTicket.STATUS_CLOSED and not t.closed_at:
+                    t.closed_at = timezone.now()
+                    update_fields.append("closed_at")
         if "operator_id" in request.data:
             op_id = request.data["operator_id"]
             if op_id:
@@ -977,8 +973,6 @@ class AdminLeadDetailView(APIView):
         if update_fields:
             update_fields.append("updated_at")
             t.save(update_fields=update_fields)
-        if new_status_val and new_status_val != old_status:
-            _apply_ticket_status(t, new_status_val)
         data = _lead_to_dict(t, request=request)
         try:
             broadcast_lead_changed({
@@ -1105,37 +1099,19 @@ class AdminLeadCommentsView(APIView):
         ticket = CallCenterTicket.objects.filter(id=ticket_id).first()
         if not ticket:
             return Response({"detail": "Lead topilmadi"}, status=404)
-
         text = (request.data.get("text") or "").strip()
-        qr_id = request.data.get("quick_reply_id")
-        # Quick reply tanlangan bo'lsa, foydalanuvchi tilida matn olamiz
-        if qr_id and not text:
-            qr = SupportQuickReply.objects.filter(
-                id=qr_id, is_active=True
-            ).first()
-            if qr:
-                text = qr.text_for(ticket.language)
         if not text:
             return Response({"detail": "text majburiy"}, status=400)
-
         c = CallCenterComment.objects.create(
             ticket=ticket,
             operator=request.user,
             comment=text,
-            direction=CallCenterComment.DIRECTION_OUT,
+            direction=CallCenterComment.DIRECTION_OUT,   # <-- qo'shildi
             old_status=ticket.status,
             new_status=ticket.status,
         )
         ticket.last_contact_at = timezone.now()
-        # Operator javob berdi — agar yangi bo'lsa "jarayonda" ga olib o'tamiz
-        upd = ["last_contact_at", "updated_at"]
-        if ticket.status == CallCenterTicket.STATUS_NEW:
-            ticket.status = CallCenterTicket.STATUS_IN_PROGRESS
-            upd.append("status")
-        if ticket.operator_id is None and request.user.is_authenticated:
-            ticket.operator = request.user
-            upd.append("operator")
-        ticket.save(update_fields=upd)
+        ticket.save(update_fields=["last_contact_at", "updated_at"])
 
         # Telegram'dan kelgan murojaat bo'lsa, javobni botga yuboramiz
         if ticket.telegram_chat_id:
@@ -1647,97 +1623,201 @@ class AdminGameDetail(APIView):
 
 
 # ============================================================================
-# Support quick replies — operator shortcuts (canned responses)
+# Kids video kontent — KidsVideoCategory + KidsVideo admin CRUD
+# Play tab (kids ilovasi 2-navbar) uchun YouTube video kontenti.
 # ============================================================================
 
 
-class AdminQuickReplyListCreateView(APIView):
-    """Tezkor javob shablonlari ro'yxati & yangi yaratish.
+def _kids_video_category_to_dict(c, request=None):
+    icon = None
+    if c.icon and hasattr(c.icon, "url") and c.icon.name:
+        url = c.icon.url
+        icon = request.build_absolute_uri(url) if request and not url.startswith("http") else url
+    return {
+        "id": c.id,
+        "name": c.name,
+        "name_ru": c.name_ru,
+        "name_en": c.name_en,
+        "icon": icon,
+        "is_active": c.is_active,
+        "order": c.order,
+        "videos_count": c.videos.count(),
+    }
 
-    `scope=global` — barcha operatorlarga ko'rinadi.
-    `scope=personal` — faqat egasiga (owner) ko'rinadi.
-    """
 
+def _kids_video_to_dict(v, request=None):
+    def _img(f):
+        if not f or not hasattr(f, "url") or not f.name:
+            return None
+        url = f.url
+        return request.build_absolute_uri(url) if request and not url.startswith("http") else url
+
+    thumb = _img(v.thumbnail)
+    if not thumb and v.youtube_id:
+        thumb = f"https://img.youtube.com/vi/{v.youtube_id}/hqdefault.jpg"
+
+    return {
+        "id": v.id,
+        "category": v.category_id,
+        "category_name": v.category.name if v.category else None,
+        "title": v.title,
+        "title_ru": v.title_ru,
+        "title_en": v.title_en,
+        "description": v.description or "",
+        "description_ru": v.description_ru,
+        "description_en": v.description_en,
+        "youtube_url": v.youtube_url,
+        "youtube_id": v.youtube_id,
+        "thumbnail": _img(v.thumbnail),
+        "thumbnail_url": thumb,
+        "duration_label": v.duration_label,
+        "age_min": v.age_min,
+        "age_max": v.age_max,
+        "views_count": v.views_count,
+        "is_active": v.is_active,
+        "is_featured": v.is_featured,
+        "order": v.order,
+    }
+
+
+class AdminKidsVideoCategoryListCreate(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        from django.db.models import Q
-        user = request.user
-        qs = SupportQuickReply.objects.filter(is_active=True).filter(
-            Q(scope=SupportQuickReply.SCOPE_GLOBAL) | Q(owner=user)
-        ).order_by("order", "title")
-        return Response({"results": [_qr_to_dict(q) for q in qs]})
+        qs = KidsVideoCategory.objects.all().order_by("order", "id")
+        return Response({"results": [_kids_video_category_to_dict(c, request) for c in qs]})
 
     def post(self, request):
-        d = request.data
-        code = (d.get("code") or "").strip().lower().replace(" ", "_")
-        title = (d.get("title") or "").strip()
-        if not code or not title:
-            return Response({"detail": "code va title majburiy"}, status=400)
-        scope = d.get("scope") or SupportQuickReply.SCOPE_GLOBAL
-        if scope not in dict(SupportQuickReply.SCOPE_CHOICES):
-            scope = SupportQuickReply.SCOPE_GLOBAL
-        q = SupportQuickReply.objects.create(
-            owner=request.user if scope == SupportQuickReply.SCOPE_PERSONAL else None,
-            scope=scope,
-            code=code,
-            title=title,
-            text_uz_latn=(d.get("text_uz_latn") or "").strip(),
-            text_uz_cyrl=(d.get("text_uz_cyrl") or "").strip(),
-            text_ru=(d.get("text_ru") or "").strip(),
-            text_en=(d.get("text_en") or "").strip(),
-            order=int(d.get("order") or 0),
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"detail": "Nom majburiy"}, status=400)
+        c = KidsVideoCategory.objects.create(
+            name=name,
+            name_ru=(request.data.get("name_ru") or "").strip(),
+            name_en=(request.data.get("name_en") or "").strip(),
+            is_active=bool(request.data.get("is_active", True)),
+            order=int(request.data.get("order") or 0),
         )
-        return Response(_qr_to_dict(q), status=201)
+        icon = _resolve_image_path(request.data.get("icon"))
+        if icon:
+            c.icon.name = icon
+            c.save(update_fields=["icon"])
+        return Response(_kids_video_category_to_dict(c, request), status=201)
 
 
-class AdminQuickReplyDetailView(APIView):
+class AdminKidsVideoCategoryDetail(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
-    def _get(self, request, qr_id):
-        qr = SupportQuickReply.objects.filter(id=qr_id).first()
-        if not qr:
-            return None
-        # personal scope — boshqa odamniki bo'lsa ko'rsatmaymiz
-        if qr.scope == SupportQuickReply.SCOPE_PERSONAL and qr.owner_id != request.user.id:
-            return None
-        return qr
-
-    def patch(self, request, qr_id):
-        qr = self._get(request, qr_id)
-        if not qr:
+    def patch(self, request, cat_id):
+        c = KidsVideoCategory.objects.filter(id=cat_id).first()
+        if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        d = request.data
-        fields = []
-        for f in ("code", "title", "text_uz_latn", "text_uz_cyrl", "text_ru", "text_en"):
-            if f in d:
-                setattr(qr, f, (d.get(f) or "").strip())
-                fields.append(f)
-        if "order" in d:
-            try:
-                qr.order = int(d.get("order") or 0)
-                fields.append("order")
-            except (ValueError, TypeError):
-                pass
-        if "is_active" in d:
-            qr.is_active = bool(d.get("is_active"))
-            fields.append("is_active")
-        if "scope" in d:
-            s = d.get("scope")
-            if s in dict(SupportQuickReply.SCOPE_CHOICES):
-                qr.scope = s
-                qr.owner = request.user if s == SupportQuickReply.SCOPE_PERSONAL else None
-                fields.extend(["scope", "owner"])
-        if fields:
-            fields.append("updated_at")
-            qr.save(update_fields=fields)
-        return Response(_qr_to_dict(qr))
+        for f in ("name", "name_ru", "name_en", "is_active", "order"):
+            if f in request.data:
+                setattr(c, f, request.data[f])
+        icon = _resolve_image_path(request.data.get("icon"))
+        if icon:
+            c.icon.name = icon
+        c.save()
+        return Response(_kids_video_category_to_dict(c, request))
 
-    def delete(self, request, qr_id):
-        qr = self._get(request, qr_id)
-        if not qr:
+    def delete(self, request, cat_id):
+        c = KidsVideoCategory.objects.filter(id=cat_id).first()
+        if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        qr.delete()
+        c.delete()
+        return Response(status=204)
+
+
+class AdminKidsVideoListCreate(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        qs = (
+            KidsVideo.objects.all()
+            .select_related("category")
+            .order_by("order", "-created_at")
+        )
+        cat = request.query_params.get("category_id")
+        if cat:
+            qs = qs.filter(category_id=cat)
+        q = request.query_params.get("q")
+        if q:
+            qs = qs.filter(title__icontains=q)
+        return Response({"results": [_kids_video_to_dict(v, request) for v in qs[:200]]})
+
+    def post(self, request):
+        title = (request.data.get("title") or "").strip()
+        if not title:
+            return Response({"detail": "Sarlavha majburiy"}, status=400)
+        youtube_url = (request.data.get("youtube_url") or "").strip()
+        if not youtube_url:
+            return Response({"detail": "YouTube havola majburiy"}, status=400)
+        category_id = request.data.get("category")
+        category = KidsVideoCategory.objects.filter(id=category_id).first() if category_id else None
+        if not category:
+            return Response({"detail": "Kategoriya tanlang"}, status=400)
+        v = KidsVideo.objects.create(
+            category=category,
+            title=title,
+            title_ru=(request.data.get("title_ru") or "").strip(),
+            title_en=(request.data.get("title_en") or "").strip(),
+            description=request.data.get("description") or "",
+            description_ru=request.data.get("description_ru") or "",
+            description_en=request.data.get("description_en") or "",
+            youtube_url=youtube_url,
+            duration_label=(request.data.get("duration_label") or "").strip(),
+            age_min=int(request.data.get("age_min") or 3),
+            age_max=int(request.data.get("age_max") or 12),
+            is_active=bool(request.data.get("is_active", True)),
+            is_featured=bool(request.data.get("is_featured", False)),
+            order=int(request.data.get("order") or 0),
+        )
+        thumb = _resolve_image_path(request.data.get("thumbnail"))
+        if thumb:
+            v.thumbnail.name = thumb
+            v.save(update_fields=["thumbnail"])
+        return Response(_kids_video_to_dict(v, request), status=201)
+
+
+class AdminKidsVideoDetail(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, video_id):
+        v = KidsVideo.objects.filter(id=video_id).first()
+        if not v:
+            return Response({"detail": "Topilmadi"}, status=404)
+        text_fields = (
+            "title", "title_ru", "title_en",
+            "description", "description_ru", "description_en",
+            "youtube_url", "duration_label",
+        )
+        for f in text_fields:
+            if f in request.data:
+                setattr(v, f, request.data[f] or "")
+        int_fields = ("age_min", "age_max", "order")
+        for f in int_fields:
+            if f in request.data:
+                setattr(v, f, int(request.data[f] or 0))
+        for f in ("is_active", "is_featured"):
+            if f in request.data:
+                setattr(v, f, bool(request.data[f]))
+        cat = request.data.get("category")
+        if cat:
+            cat_obj = KidsVideoCategory.objects.filter(id=cat).first()
+            if cat_obj:
+                v.category = cat_obj
+        thumb = _resolve_image_path(request.data.get("thumbnail"))
+        if thumb:
+            v.thumbnail.name = thumb
+        v.save()
+        return Response(_kids_video_to_dict(v, request))
+
+    def delete(self, request, video_id):
+        v = KidsVideo.objects.filter(id=video_id).first()
+        if not v:
+            return Response({"detail": "Topilmadi"}, status=404)
+        v.delete()
         return Response(status=204)
 
 

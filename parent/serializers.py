@@ -34,6 +34,8 @@ from .models import (
     BlogPost,
     BlogPostSave,
     BlogPostLike,
+    KidsVideoCategory,
+    KidsVideo,
     ParentStoreCategory,
     ParentStoreProduct,
     ParentStoreProductImage,
@@ -1505,6 +1507,58 @@ class BlogPostDetailSerializer(LocalizedSerializerMixin, serializers.ModelSerial
         return BlogPostLike.objects.filter(user=request.user, post=obj).exists()
 
 # ============================================================================
+# Kids Video Content — Play tab (kids app 2-navbar) uchun.
+# ============================================================================
+
+
+class KidsVideoCategorySerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
+    class Meta:
+        model = KidsVideoCategory
+        fields = [
+            "id",
+            "name",
+            "icon",
+            "is_active",
+            "order",
+        ]
+        localized_fields = ["name"]
+
+
+class KidsVideoSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
+    category = KidsVideoCategorySerializer(read_only=True)
+    youtube_id = serializers.CharField(read_only=True)
+    thumbnail_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KidsVideo
+        fields = [
+            "id",
+            "category",
+            "title",
+            "description",
+            "youtube_url",
+            "youtube_id",
+            "thumbnail_url",
+            "duration_label",
+            "age_min",
+            "age_max",
+            "views_count",
+            "is_featured",
+            "created_at",
+        ]
+        localized_fields = ["title", "description"]
+
+    def get_thumbnail_url(self, obj):
+        url = obj.effective_thumbnail_url
+        if not url:
+            return None
+        if url.startswith("http"):
+            return url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
+
+# ============================================================================
 # Parent Store (Do‘kon) serializers
 # ============================================================================
 
@@ -1536,6 +1590,7 @@ class ParentStoreProductListSerializer(LocalizedSerializerMixin, serializers.Mod
     is_saved = serializers.SerializerMethodField()
     has_video = serializers.BooleanField(read_only=True)
     discount_percent = serializers.IntegerField(read_only=True)
+    tags = serializers.SerializerMethodField()
 
     class Meta:
         model = ParentStoreProduct
@@ -1551,6 +1606,7 @@ class ParentStoreProductListSerializer(LocalizedSerializerMixin, serializers.Mod
             "discount_percent",
             "badge",
             "features",
+            "tags",
             "short_description",
             "thumbnail",
             "images",
@@ -1563,6 +1619,18 @@ class ParentStoreProductListSerializer(LocalizedSerializerMixin, serializers.Mod
             "deal_ends_at",
         ]
         localized_fields = ["name", "short_description", "category_label"]
+
+    def get_tags(self, obj):
+        request = self.context.get("request")
+        lang = getattr(request, "language", "uz") if request is not None else "uz"
+        out = []
+        for tag in obj.tags.all():
+            out.append({
+                "id": tag.id,
+                "slug": tag.slug,
+                "name": tag.tr_name(lang),
+            })
+        return out
 
     def get_is_saved(self, obj):
         request = self.context.get("request")

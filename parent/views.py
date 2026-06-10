@@ -46,6 +46,8 @@ from .models import (
     BlogPost,
     BlogPostSave,
     BlogPostLike,
+    KidsVideoCategory,
+    KidsVideo,
     ParentStoreCategory,
     ParentStoreProduct,
     ParentStorePromoBanner,
@@ -75,6 +77,8 @@ from .serializers import (
     SavedLocationSerializer,
     GameCategorySerializer,
     GameItemSerializer,
+    KidsVideoCategorySerializer,
+    KidsVideoSerializer,
     ShopCategorySerializer,
     ShopItemSerializer,
     ChildWalletSerializer,
@@ -1269,6 +1273,76 @@ class KidsGameDetailView(APIView):
         return Response({"status": True, "game": GameItemSerializer(game).data}, status=status.HTTP_200_OK)
 
 
+# ============================================================================
+# Kids Video Content — Play tab (kids ilovasidagi 2-navbar) uchun.
+# Bolaning yoshiga qarab filter qilinadi (age_min <= child_age <= age_max).
+# ============================================================================
+
+
+class KidsVideoCategoryListView(APIView):
+    permission_classes = [IsChild]
+
+    def get(self, request):
+        categories = KidsVideoCategory.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+        return paginate_queryset(
+            request=request,
+            queryset=categories,
+            serializer_class=KidsVideoCategorySerializer,
+            page_size=20,
+        )
+
+
+class KidsVideoListView(APIView):
+    permission_classes = [IsChild]
+
+    def get(self, request):
+        category_id = request.query_params.get("category_id")
+        featured = request.query_params.get("featured")
+        child_age = request.user.age or 18
+        videos = KidsVideo.objects.filter(
+            is_active=True,
+            age_min__lte=child_age,
+            age_max__gte=child_age,
+        ).select_related("category")
+        if category_id:
+            videos = videos.filter(category_id=category_id)
+        if featured == "true":
+            videos = videos.filter(is_featured=True)
+        videos = videos.order_by("-is_featured", "order", "-created_at")
+        return paginate_queryset(
+            request=request,
+            queryset=videos,
+            serializer_class=KidsVideoSerializer,
+            page_size=20,
+        )
+
+
+class KidsVideoDetailView(APIView):
+    permission_classes = [IsChild]
+
+    def get(self, request, video_id):
+        video = (
+            KidsVideo.objects.select_related("category")
+            .filter(id=video_id, is_active=True)
+            .first()
+        )
+        if not video:
+            return Response(
+                {"status": False, "detail": "Video topilmadi."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        KidsVideo.objects.filter(pk=video.pk).update(views_count=F("views_count") + 1)
+        return Response(
+            {
+                "status": True,
+                "video": KidsVideoSerializer(video, context={"request": request}).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class KidsShopCategoryListView(APIView):
     permission_classes = [IsChild]
 
@@ -2448,6 +2522,31 @@ class ParentStorePromoBannerListView(APIView):
         )
 
 
+class ParentStoreTagListView(APIView):
+    """Mahsulot teglari ro'yxati — tanlangan tilda nom qaytaradi.
+
+    Foydalanish: do'kon sahifasidagi tag chiplari va search autocomplete uchun.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["parent-store"])
+    def get(self, request):
+        from .models import ProductTag
+        lang = getattr(request, "language", "uz")
+        qs = ProductTag.objects.filter(is_active=True, usage_count__gt=0).order_by(
+            "-usage_count", "name"
+        )[:50]
+        results = []
+        for tag in qs:
+            results.append({
+                "id": tag.id,
+                "slug": tag.slug,
+                "name": tag.tr_name(lang),
+                "usage_count": tag.usage_count,
+            })
+        return Response({"results": results}, status=status.HTTP_200_OK)
+
+
 class ParentStoreProductListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -2458,10 +2557,11 @@ class ParentStoreProductListView(APIView):
         featured = request.query_params.get("featured")
         deal = request.query_params.get("deal")
         search = request.query_params.get("q")
+        tag = request.query_params.get("tag")
 
         products = ParentStoreProduct.objects.filter(
             is_active=True
-        ).select_related("category").prefetch_related("images")
+        ).select_related("category").prefetch_related("images", "tags")
 
         if product_type:
             products = products.filter(category__product_type=product_type)
@@ -2478,12 +2578,28 @@ class ParentStoreProductListView(APIView):
                 old_price__gt=F("price"),
             )
 
+        if tag:
+            # `tag` slug yoki nomi bo'lishi mumkin — ikkalasini ham qo'llab quvvatlaymiz.
+            products = products.filter(
+                Q(tags__slug=tag)
+                | Q(tags__name__iexact=tag)
+                | Q(tags__name_ru__iexact=tag)
+                | Q(tags__name_en__iexact=tag)
+            ).distinct()
+
         if search:
             products = products.filter(
                 Q(name__icontains=search)
+                | Q(name_ru__icontains=search)
+                | Q(name_en__icontains=search)
                 | Q(category_label__icontains=search)
                 | Q(short_description__icontains=search)
-            )
+                | Q(short_description_ru__icontains=search)
+                | Q(short_description_en__icontains=search)
+                | Q(tags__name__icontains=search)
+                | Q(tags__name_ru__icontains=search)
+                | Q(tags__name_en__icontains=search)
+            ).distinct()
 
         products = products.order_by("order", "-created_at")
 
@@ -2505,7 +2621,7 @@ class ParentStoreProductDetailView(APIView):
             ParentStoreProduct.objects
             .filter(id=product_id, is_active=True)
             .select_related("category")
-            .prefetch_related("images")
+            .prefetch_related("images", "tags")
             .first()
         )
 
