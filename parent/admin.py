@@ -53,6 +53,7 @@ from .models import (
     ParentStoreCategory,
     ParentStoreProduct,
     ParentStoreProductImage,
+    ProductTag,
     ParentStorePromoBanner,
     ParentStoreSavedProduct,
     ParentStoreOrder,
@@ -1922,6 +1923,16 @@ class ParentStoreCategoryAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     ordering = ("order", "id")
 
 
+@admin.register(ProductTag)
+class ProductTagAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
+    list_display = ("id", "name", "name_ru", "name_en", "slug", "usage_count", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("name", "name_ru", "name_en", "slug")
+    prepopulated_fields = {"slug": ("name",)}
+    readonly_fields = ("usage_count", "created_at")
+    ordering = ("-usage_count", "name")
+
+
 @admin.register(ParentStoreProduct)
 class ParentStoreProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
     list_display = (
@@ -1941,11 +1952,13 @@ class ParentStoreProductAdmin(RoleBasedAdminMixin, admin.ModelAdmin):
         "badge",
         "is_featured",
         "is_active",
+        "tags",
         "created_at",
     )
-    search_fields = ("name", "slug", "category_label", "short_description")
+    search_fields = ("name", "name_ru", "name_en", "slug", "category_label", "short_description")
     readonly_fields = ("created_at", "updated_at")
     prepopulated_fields = {"slug": ("name",)}
+    filter_horizontal = ("tags",)
     inlines = [ParentStoreProductImageInline]
     ordering = ("order", "-created_at")
 

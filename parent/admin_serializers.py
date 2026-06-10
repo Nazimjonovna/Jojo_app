@@ -18,7 +18,127 @@ from .models import (
     ParentStoreCategory,
     ParentStorePromoBanner,
     ParentStoreProduct,
+    ProductTag,
 )
+from .translation import fill_missing, translate as _translate, SUPPORTED as _LANGS
+
+# Mahsulot va Blog uchun "uz" tildagi qiymatni avtomatik
+# qolgan tillarga tarjima qilishda ishtirok etadigan maydonlar.
+_PRODUCT_I18N_FIELDS = (
+    "name",
+    "short_description",
+    "description",
+    "category_label",
+)
+_BLOG_I18N_FIELDS = (
+    "title",
+    "short_description",
+    "content",
+)
+
+
+def _autotranslate_payload(data, fields, source="uz"):
+    """`data` ichidagi bo'sh `_ru/_en` maydonlarni `source` tilidagi
+    qiymatdan tarjima qilib to'ldiradi.
+
+    `data` — dict-like (validated_data yoki request payload). In-place
+    o'zgartiriladi va shu o'zi qaytariladi.
+    """
+    for f in fields:
+        base = (data.get(f) or "").strip()
+        if not base:
+            continue
+        values = {
+            "uz": base,
+            "ru": (data.get(f"{f}_ru") or "").strip(),
+            "en": (data.get(f"{f}_en") or "").strip(),
+        }
+        if source != "uz":
+            values[source] = base
+        filled = fill_missing(values, source=source)
+        for lang_code, value in filled.items():
+            if lang_code == source:
+                continue
+            field_name = f if lang_code == "uz" else f"{f}_{lang_code}"
+            if not (data.get(field_name) or "").strip():
+                data[field_name] = value
+    return data
+
+
+def _normalize_tag_name(value):
+    if value is None:
+        return ""
+    s = str(value).strip().lstrip("#").strip()
+    return s
+
+
+def _ensure_tag(name):
+    """Tag nomi bo'yicha mavjud bo'lsa qaytaradi, yo'q bo'lsa
+    yaratadi va boshqa tillarga tarjima qiladi."""
+    base = _normalize_tag_name(name)
+    if not base:
+        return None
+    # Avval mavjudni topishga harakat
+    existing = ProductTag.objects.filter(name__iexact=base).first()
+    if existing:
+        return existing
+    existing = ProductTag.objects.filter(name_ru__iexact=base).first()
+    if existing:
+        return existing
+    existing = ProductTag.objects.filter(name_en__iexact=base).first()
+    if existing:
+        return existing
+
+    # Yangi yaratamiz
+    translated = {"uz": base, "ru": "", "en": ""}
+    try:
+        translated = fill_missing(translated, source="uz")
+    except Exception:
+        pass
+    slug_base = slugify(base) or f"tag-{ProductTag.objects.count() + 1}"
+    slug = slug_base
+    i = 1
+    while ProductTag.objects.filter(slug=slug).exists():
+        i += 1
+        slug = f"{slug_base}-{i}"
+    tag = ProductTag.objects.create(
+        name=base,
+        name_ru=translated.get("ru") or "",
+        name_en=translated.get("en") or "",
+        slug=slug,
+    )
+    return tag
+
+
+def _resolve_tags(values):
+    """`values` — string list yoki aralash list/string. Har bir element
+    uchun `_ensure_tag` chaqirib, ProductTag obyektlari ro'yxatini qaytaradi.
+    """
+    if values is None:
+        return []
+    if isinstance(values, str):
+        # CSV bo'lsa parse qilamiz
+        raw_list = [p.strip() for p in values.split(",")]
+    elif isinstance(values, (list, tuple)):
+        raw_list = values
+    else:
+        raw_list = [values]
+    seen = set()
+    result = []
+    for item in raw_list:
+        # element ID (int yoki digit-string) bo'lishi mumkin
+        if isinstance(item, int):
+            tag = ProductTag.objects.filter(id=item).first()
+        elif isinstance(item, str) and item.strip().isdigit():
+            tag = ProductTag.objects.filter(id=int(item.strip())).first()
+        elif isinstance(item, dict):
+            tag = _ensure_tag(item.get("name") or item.get("name_uz") or "")
+        else:
+            tag = _ensure_tag(item)
+        if tag and tag.id not in seen:
+            seen.add(tag.id)
+            result.append(tag)
+    return result
 
 
 def _url_or_path_to_field_value(value):
@@ -135,35 +255,74 @@ class AdminStoreCategorySerializer(serializers.ModelSerializer):
 # ============================================================================
 
 
+class AdminProductTagMiniSerializer(serializers.ModelSerializer):
+    """Tag o'qish uchun yengillashtirilgan ko'rinish."""
+
+    class Meta:
+        model = ProductTag
+        fields = ["id", "name", "name_ru", "name_en", "slug"]
+
+
 class AdminStoreProductSerializer(serializers.ModelSerializer):
     """Frontend `cover_image`, `product_type`, `brand`, `stock_count` yuboradi.
-    Bizning modelda bu fieldlar yo'q yoki boshqa nomda — sukunatda tashlab yuboramiz."""
+    Bizning modelda bu fieldlar yo'q yoki boshqa nomda — sukunatda tashlab yuboramiz.
+
+    Tags: frontend `tags` ni string list yoki id list sifatida yuboradi.
+    Yangi tag bo'lsa avtomatik yaratamiz va uch tilga tarjima qilib qo'yamiz.
+
+    `auto_translate=true` yuborilsa, bo'sh _ru/_en maydonlar `uz`dan
+    tarjima qilinadi (uzun matnlar chunklarga bo'linadi).
+    """
 
     cover_image = serializers.SerializerMethodField()
     product_type = serializers.SerializerMethodField()
     brand = serializers.SerializerMethodField()
     stock_count = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    tags_input = serializers.ListField(
+        child=serializers.JSONField(),
+        write_only=True,
+        required=False,
+        help_text="Tag nomlari ro'yxati. Yangisi bo'lsa avtomatik yaratiladi.",
+    )
+    auto_translate = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        default=False,
+        help_text="True bo'lsa, bo'sh _ru/_en maydonlar uz'dan tarjima qilinadi.",
+    )
+    translate_source = serializers.ChoiceField(
+        write_only=True,
+        required=False,
+        default="uz",
+        choices=[("uz", "uz"), ("ru", "ru"), ("en", "en")],
+        help_text="Auto-translate qaysi tildan ish ko'rsin.",
+    )
 
     class Meta:
         model = ParentStoreProduct
         fields = [
             "id",
             "name",
-            "name_ru", "name_en",                                  # <-- qo'shildi
+            "name_ru", "name_en",
             "slug",
             "category",
             "category_label",
-            "category_label_ru", "category_label_en",              # <-- qo'shildi
+            "category_label_ru", "category_label_en",
             "age_label",
             "price",
             "old_price",
             "badge",
             "features",
-            "hashtags",                                            # <-- qo'shildi
+            "hashtags",
+            "tags",
+            "tags_input",
+            "auto_translate",
+            "translate_source",
             "short_description",
-            "short_description_ru", "short_description_en",        # <-- qo'shildi
+            "short_description_ru", "short_description_en",
             "description",
-            "description_ru", "description_en",                    # <-- qo'shildi
+            "description_ru", "description_en",
             "thumbnail",
             "cover_image",
             "product_type",
@@ -179,6 +338,16 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "slug": {"required": False, "allow_blank": True},
             "name": {"required": True},
+            "name_ru": {"required": False, "allow_blank": True},
+            "name_en": {"required": False, "allow_blank": True},
+            "category_label_ru": {"required": False, "allow_blank": True},
+            "category_label_en": {"required": False, "allow_blank": True},
+            "short_description": {"required": False, "allow_blank": True},
+            "short_description_ru": {"required": False, "allow_blank": True},
+            "short_description_en": {"required": False, "allow_blank": True},
+            "description": {"required": False, "allow_blank": True},
+            "description_ru": {"required": False, "allow_blank": True},
+            "description_en": {"required": False, "allow_blank": True},
             "price": {"required": False, "default": 0},
             "category": {"required": False, "allow_null": True},
         }
@@ -199,6 +368,11 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
     def get_stock_count(self, obj):
         return 0
 
+    def get_tags(self, obj):
+        if obj.pk is None:
+            return []
+        return AdminProductTagMiniSerializer(obj.tags.all(), many=True).data
+
     def to_internal_value(self, data):
         data = data.copy() if hasattr(data, "copy") else dict(data)
         # cover_image va thumbnail URL string bo'lsa — relativ path'ga aylantirib saqlaymiz
@@ -213,24 +387,57 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
         # ignore fields not in model
         data.pop("brand", None)
         data.pop("stock_count", None)
+        # `tags` field nomi backend uchun M2M (read-only `tags` SerializerMethodField),
+        # write uchun esa `tags_input` qabul qilamiz. Frontend osonlik uchun
+        # ikkalasini ham yuborishi mumkin — `tags`ni `tags_input`ga o'tkazamiz.
+        if "tags" in data and "tags_input" not in data:
+            data["tags_input"] = data.pop("tags")
         return super().to_internal_value(data)
 
+    def _maybe_autotranslate(self, validated_data):
+        if not validated_data.pop("auto_translate", False):
+            validated_data.pop("translate_source", None)
+            return validated_data
+        source = validated_data.pop("translate_source", "uz") or "uz"
+        try:
+            _autotranslate_payload(validated_data, _PRODUCT_I18N_FIELDS, source=source)
+        except Exception:
+            # Tarjima xizmati tushib qolsa ham saqlash davom etsin.
+            pass
+        return validated_data
+
+    def _apply_tags(self, obj, tag_values):
+        if tag_values is None:
+            return
+        tags = _resolve_tags(tag_values)
+        obj.tags.set(tags)
+        # usage_count statistikasi
+        for tag in tags:
+            ProductTag.objects.filter(id=tag.id).update(usage_count=tag.products.count())
+
     def create(self, validated_data):
+        tag_values = validated_data.pop("tags_input", None)
+        validated_data = self._maybe_autotranslate(validated_data)
         if not validated_data.get("slug"):
             validated_data["slug"] = _uniq_slug(ParentStoreProduct, validated_data.get("name", ""))
         obj = super().create(validated_data)
         if getattr(self, "_thumb_path", None):
             obj.thumbnail.name = self._thumb_path
             obj.save(update_fields=["thumbnail"])
+        self._apply_tags(obj, tag_values)
         return obj
 
     def update(self, instance, validated_data):
+        tag_values = validated_data.pop("tags_input", None)
+        validated_data = self._maybe_autotranslate(validated_data)
         if validated_data.get("slug") == "":
             validated_data.pop("slug", None)
         obj = super().update(instance, validated_data)
         if getattr(self, "_thumb_path", None):
             obj.thumbnail.name = self._thumb_path
             obj.save(update_fields=["thumbnail"])
+        if tag_values is not None:
+            self._apply_tags(obj, tag_values)
         return obj
 
 
