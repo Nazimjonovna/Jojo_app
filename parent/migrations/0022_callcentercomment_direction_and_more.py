@@ -11,85 +11,94 @@ class Migration(migrations.Migration):
         ('parent', '0021_i18n_roles_areablock'),
     ]
 
+    # Maydonlar 0018 da serverda allaqachon DB ga qo'shilgan, lekin
+    # 0018 fayli git'da yo'q. Bu yerda state_operations bilan Django
+    # model state'iga shu maydonlarni "qo'shilgan" deb belgilaymiz,
+    # database_operations esa bo'sh — DB ga tegmaymiz.
     operations = [
-        migrations.AddField(
-            model_name='callcentercomment',
-            name='direction',
-            field=models.CharField(choices=[('in', 'Kiruvchi'), ('out', 'Chiquvchi')], default='out', max_length=4),
-        ),
-        migrations.AddField(
-            model_name='callcentercomment',
-            name='telegram_message_id',
-            field=models.CharField(blank=True, default='', max_length=64),
-        ),
-        migrations.AddField(
-            model_name='callcenterticket',
-            name='source',
-            field=models.CharField(choices=[('app', 'Ilova'), ('telegram', 'Telegram'), ('manual', "Qo'lda")], default='app', max_length=20),
-        ),
-        migrations.AddField(
-            model_name='callcenterticket',
-            name='telegram_chat_id',
-            field=models.CharField(blank=True, db_index=True, max_length=64, null=True),
-        ),
-        migrations.AddField(
-            model_name='callcenterticket',
-            name='telegram_name',
-            field=models.CharField(blank=True, default='', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='callcenterticket',
-            name='telegram_username',
-            field=models.CharField(blank=True, default='', max_length=150),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='category_label_en',
-            field=models.CharField(blank=True, default='', max_length=120),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='category_label_ru',
-            field=models.CharField(blank=True, default='', max_length=120),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='description_en',
-            field=models.TextField(blank=True, default=''),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='description_ru',
-            field=models.TextField(blank=True, default=''),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='hashtags',
-            field=models.JSONField(blank=True, default=list, help_text="Ro'yxat, masalan: [#stem, #lego, #6yosh]"),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='name_en',
-            field=models.CharField(blank=True, default='', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='name_ru',
-            field=models.CharField(blank=True, default='', max_length=255),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='short_description_en',
-            field=models.CharField(blank=True, default='', max_length=500),
-        ),
-        migrations.AddField(
-            model_name='parentstoreproduct',
-            name='short_description_ru',
-            field=models.CharField(blank=True, default='', max_length=500),
-        ),
-        migrations.AlterField(
-            model_name='callcenterticket',
-            name='parent',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='call_center_tickets', to=settings.AUTH_USER_MODEL),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AddField(
+                    model_name='callcentercomment',
+                    name='direction',
+                    field=models.CharField(choices=[('in', 'Kiruvchi'), ('out', 'Chiquvchi')], default='out', max_length=4),
+                ),
+                migrations.AddField(
+                    model_name='callcentercomment',
+                    name='telegram_message_id',
+                    field=models.CharField(blank=True, default='', max_length=64),
+                ),
+                migrations.AddField(
+                    model_name='callcenterticket',
+                    name='source',
+                    field=models.CharField(choices=[('app', 'Ilova'), ('telegram', 'Telegram'), ('manual', "Qo'lda")], default='app', max_length=20),
+                ),
+                migrations.AddField(
+                    model_name='callcenterticket',
+                    name='telegram_chat_id',
+                    field=models.CharField(blank=True, db_index=True, max_length=64, null=True),
+                ),
+                migrations.AddField(
+                    model_name='callcenterticket',
+                    name='telegram_name',
+                    field=models.CharField(blank=True, default='', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='callcenterticket',
+                    name='telegram_username',
+                    field=models.CharField(blank=True, default='', max_length=150),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='category_label_en',
+                    field=models.CharField(blank=True, default='', max_length=120),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='category_label_ru',
+                    field=models.CharField(blank=True, default='', max_length=120),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='description_en',
+                    field=models.TextField(blank=True, default=''),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='description_ru',
+                    field=models.TextField(blank=True, default=''),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='hashtags',
+                    field=models.JSONField(blank=True, default=list, help_text="Ro'yxat, masalan: [#stem, #lego, #6yosh]"),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='name_en',
+                    field=models.CharField(blank=True, default='', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='name_ru',
+                    field=models.CharField(blank=True, default='', max_length=255),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='short_description_en',
+                    field=models.CharField(blank=True, default='', max_length=500),
+                ),
+                migrations.AddField(
+                    model_name='parentstoreproduct',
+                    name='short_description_ru',
+                    field=models.CharField(blank=True, default='', max_length=500),
+                ),
+                migrations.AlterField(
+                    model_name='callcenterticket',
+                    name='parent',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='call_center_tickets', to=settings.AUTH_USER_MODEL),
+                ),
+            ],
         ),
     ]
