@@ -2099,3 +2099,55 @@ class AdminAutoTranslateView(APIView):
             result = _do_translate(text, source, target)
             return Response({"text": result, "source": source, "target": target})
         return Response({"translations": _do_translate_all(text, source), "source": source})
+
+
+# ============================================================================
+# Support quick-replies (operator shortcut shablonlari)
+#
+# Eslatma: bu view'lar `parent/urls.py` ichida 2026-06 da yangi qo'shilgan
+# `admin/support/quick-replies/` yo'llari uchun zarur. Boshqa agent commitida
+# urls qo'shilgan, lekin views unutilgan — bu erda minimal CRUD beriladi.
+# ============================================================================
+
+
+class _SupportQuickReplySerializer(drf_serializers.ModelSerializer):
+    class Meta:
+        model = SupportQuickReply
+        fields = [
+            "id",
+            "owner",
+            "scope",
+            "code",
+            "title",
+            "text_uz_latn",
+            "text_uz_cyrl",
+            "text_ru",
+            "text_en",
+            "order",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class AdminQuickReplyListCreateView(generics.ListCreateAPIView):
+    serializer_class = _SupportQuickReplySerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get_queryset(self):
+        qs = SupportQuickReply.objects.all()
+        scope = self.request.query_params.get("scope")
+        if scope:
+            qs = qs.filter(scope=scope)
+        active = self.request.query_params.get("is_active")
+        if active is not None:
+            qs = qs.filter(is_active=str(active).lower() in ("1", "true", "yes"))
+        return qs
+
+
+class AdminQuickReplyDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = _SupportQuickReplySerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    queryset = SupportQuickReply.objects.all()
+    lookup_url_kwarg = "qr_id"
