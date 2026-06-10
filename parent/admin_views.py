@@ -1231,15 +1231,52 @@ class AdminChildrenListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        from .models import ParentChild
         qs = User.objects.filter(role=User.ROLE_CHILD).order_by("-date_joined")
         page_size = int(request.query_params.get("page_size", 50))
         offset = int(request.query_params.get("offset", 0))
         total = qs.count()
-        items = list(qs[offset:offset + page_size].values(
-            "id", "phone", "username", "first_name", "child_status",
-            "age", "gender", "language", "is_active", "date_joined",
-        ))
-        return Response({"count": total, "results": items, "offset": offset, "page_size": page_size})
+        page = list(qs[offset:offset + page_size])
+
+        # Bir requestda barcha ParentChild bog'lanishlarini olib kelamiz —
+        # har bir bolaga N+1 query ishlamasin.
+        child_ids = [c.id for c in page]
+        links = ParentChild.objects.filter(
+            child_id__in=child_ids
+        ).select_related("parent")
+        parent_map = {}
+        for link in links:
+            p = link.parent
+            parent_map[link.child_id] = {
+                "id": p.id,
+                "phone": p.phone or "",
+                "first_name": p.first_name or "",
+                "last_name": p.last_name or "",
+                "full_name": (p.full_name or "").strip()
+                    or " ".join([p.first_name or "", p.last_name or ""]).strip(),
+            }
+
+        items = []
+        for c in page:
+            items.append({
+                "id": c.id,
+                "phone": c.phone,
+                "username": c.username,
+                "first_name": c.first_name,
+                "child_status": c.child_status,
+                "age": c.age,
+                "gender": c.gender,
+                "language": c.language,
+                "is_active": c.is_active,
+                "date_joined": c.date_joined,
+                "parent": parent_map.get(c.id),
+            })
+        return Response({
+            "count": total,
+            "results": items,
+            "offset": offset,
+            "page_size": page_size,
+        })
 
 
 # ============================================================================
