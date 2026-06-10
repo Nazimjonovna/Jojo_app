@@ -1537,6 +1537,29 @@ class CallCenterTicket(models.Model):
         (SOURCE_MANUAL, "Qo'lda"),
     )
 
+    # Bot FSM holatlari — telegram chat orqali user qaysi bosqichda
+    BOT_STATE_AWAITING_LANGUAGE = "awaiting_language"
+    BOT_STATE_CHATTING = "chatting"
+    BOT_STATE_AWAITING_RATING = "awaiting_rating"
+    BOT_STATE_DONE = "done"
+    BOT_STATE_CHOICES = (
+        (BOT_STATE_AWAITING_LANGUAGE, "Tilni tanlash"),
+        (BOT_STATE_CHATTING, "Suhbatda"),
+        (BOT_STATE_AWAITING_RATING, "Baho kutilmoqda"),
+        (BOT_STATE_DONE, "Yakunlangan"),
+    )
+
+    LANGUAGE_UZ_LATN = "uz_latn"
+    LANGUAGE_UZ_CYRL = "uz_cyrl"
+    LANGUAGE_RU = "ru"
+    LANGUAGE_EN = "en"
+    LANGUAGE_CHOICES = (
+        (LANGUAGE_UZ_LATN, "O‘zbek lotin"),
+        (LANGUAGE_UZ_CYRL, "Ўзбек кирилл"),
+        (LANGUAGE_RU, "Русский"),
+        (LANGUAGE_EN, "English"),
+    )
+
     parent = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -1588,6 +1611,28 @@ class CallCenterTicket(models.Model):
         blank=True,
     )
 
+    # Foydalanuvchi tanlagan til (bot orqali murojaat bo'lsa).
+    # Bo'sh — hali tanlanmagan; operator shu yerdan qaysi tilda yozishni biladi.
+    language = models.CharField(
+        max_length=20,
+        choices=LANGUAGE_CHOICES,
+        blank=True,
+        default="",
+    )
+
+    # Telegram bot FSM holati
+    bot_state = models.CharField(
+        max_length=30,
+        choices=BOT_STATE_CHOICES,
+        default=BOT_STATE_CHATTING,
+    )
+
+    # Baholash (resolved → user 1..5 yulduz beradi)
+    rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    rating_comment = models.TextField(blank=True, default="")
+    rated_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1596,6 +1641,68 @@ class CallCenterTicket(models.Model):
 
     def __str__(self):
         return f"{self.parent_id} - {self.status}"
+
+
+class SupportQuickReply(models.Model):
+    """Operatorlar uchun tezkor javob shablonlari (shortcut).
+
+    `code` — short alias (masalan "salom") — operator chatda `/salom` deb
+    yozsa, tegishli matn tushadi. Til bo'yicha versiyalari saqlanadi —
+    ticket'ning `language` qiymatiga qarab tegishli matn tanlanadi.
+    """
+
+    SCOPE_GLOBAL = "global"
+    SCOPE_PERSONAL = "personal"
+    SCOPE_CHOICES = (
+        (SCOPE_GLOBAL, "Hammaga"),
+        (SCOPE_PERSONAL, "Faqat menga"),
+    )
+
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="support_quick_replies",
+    )
+    scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, default=SCOPE_GLOBAL)
+    code = models.CharField(max_length=40, db_index=True)
+    title = models.CharField(max_length=120)
+
+    text_uz_latn = models.TextField(blank=True, default="")
+    text_uz_cyrl = models.TextField(blank=True, default="")
+    text_ru = models.TextField(blank=True, default="")
+    text_en = models.TextField(blank=True, default="")
+
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "title"]
+        verbose_name = "Support quick reply"
+        verbose_name_plural = "Support quick replies"
+
+    def __str__(self):
+        return f"/{self.code} — {self.title}"
+
+    def text_for(self, language):
+        """Til bo'yicha mos matnni qaytaradi, bo'lmasa fallback."""
+        mapping = {
+            "uz_latn": self.text_uz_latn,
+            "uz_cyrl": self.text_uz_cyrl,
+            "ru": self.text_ru,
+            "en": self.text_en,
+        }
+        return (
+            mapping.get(language or "")
+            or self.text_uz_latn
+            or self.text_ru
+            or self.text_en
+            or self.text_uz_cyrl
+            or ""
+        )
 
 
 class CallCenterComment(models.Model):
@@ -1857,6 +1964,42 @@ class ParentStoreCategory(models.Model):
         return self.name
 
 
+class ProductTag(models.Model):
+    """Mahsulot teglari — uchchala tilda saqlanadi.
+
+    Adminda foydalanuvchi tag nomini yozadi; agar tag yo'q bo'lsa
+    avtomatik yaratiladi va boshqa tillariga tarjima qilinib qo'yiladi.
+    Bir tag bir nechta mahsulotda qayta ishlatilishi mumkin.
+    """
+
+    name = models.CharField(max_length=80, unique=True)
+    name_ru = models.CharField(max_length=80, blank=True, default="")
+    name_en = models.CharField(max_length=80, blank=True, default="")
+    slug = models.SlugField(max_length=90, unique=True)
+    is_active = models.BooleanField(default=True)
+    usage_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-usage_count", "name"]
+        indexes = [
+            models.Index(fields=["slug"], name="product_tag_slug_idx"),
+        ]
+        verbose_name = "Mahsulot tegi"
+        verbose_name_plural = "Mahsulot teglari"
+
+    def __str__(self):
+        return self.name
+
+    def tr_name(self, lang):
+        lang = (lang or "").lower()
+        if lang.startswith("ru") and self.name_ru:
+            return self.name_ru
+        if lang.startswith("en") and self.name_en:
+            return self.name_en
+        return self.name
+
+
 class ParentStoreProduct(models.Model):
     BADGE_NONE = "none"
     BADGE_TOP = "top"
@@ -1888,6 +2031,13 @@ class ParentStoreProduct(models.Model):
 
     category_label_ru = models.CharField(max_length=120, blank=True, default="")
     category_label_en = models.CharField(max_length=120, blank=True, default="")
+
+    tags = models.ManyToManyField(
+        ProductTag,
+        blank=True,
+        related_name="products",
+        help_text="Mahsulot teglari. Adminda yangi tag yozilsa uch tilga tarjima qilinadi.",
+    )
 
     hashtags = models.JSONField(
         default=list,
@@ -2670,3 +2820,117 @@ class AdminRole(models.Model):
 
     def __str__(self):
         return self.name
+
+
+# ============================================================================
+# Kids Video Content — Play tab (kids ilovasidagi 2-navbar) uchun video
+# kontent. YouTube link orqali oynatiladi, multi-language sarlavha/tavsif,
+# bolaning yoshiga qarab recommend qilinadi.
+# ============================================================================
+
+
+class KidsVideoCategory(models.Model):
+    name = models.CharField(max_length=150)
+    name_ru = models.CharField(max_length=150, blank=True, default="")
+    name_en = models.CharField(max_length=150, blank=True, default="")
+    icon = models.ImageField(
+        upload_to="kids_videos/categories/",
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        verbose_name = "Kids Video Category"
+        verbose_name_plural = "Kids Video Categories"
+
+    def __str__(self):
+        return self.name
+
+
+class KidsVideo(models.Model):
+    category = models.ForeignKey(
+        KidsVideoCategory,
+        on_delete=models.CASCADE,
+        related_name="videos",
+    )
+
+    title = models.CharField(max_length=200)
+    title_ru = models.CharField(max_length=200, blank=True, default="")
+    title_en = models.CharField(max_length=200, blank=True, default="")
+
+    description = models.TextField(blank=True, default="")
+    description_ru = models.TextField(blank=True, default="")
+    description_en = models.TextField(blank=True, default="")
+
+    youtube_url = models.URLField(
+        help_text="Toʻliq YouTube havola, masalan https://www.youtube.com/watch?v=XXXX",
+    )
+
+    thumbnail = models.ImageField(
+        upload_to="kids_videos/thumbnails/",
+        null=True,
+        blank=True,
+        help_text="Ixtiyoriy. Boʻsh boʻlsa YouTube avto-thumbnail ishlatiladi.",
+    )
+
+    duration_label = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="Davomiyligi, masalan '30 Min' yoki '5:42'.",
+    )
+
+    age_min = models.PositiveSmallIntegerField(default=3)
+    age_max = models.PositiveSmallIntegerField(default=12)
+
+    views_count = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+        indexes = [
+            models.Index(fields=["age_min", "age_max"], name="kidsvideo_age_idx"),
+            models.Index(fields=["is_active", "is_featured"], name="kidsvideo_flags_idx"),
+        ]
+        verbose_name = "Kids Video"
+        verbose_name_plural = "Kids Videos"
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def youtube_id(self):
+        """Extracts YouTube video id from common URL formats."""
+        url = (self.youtube_url or "").strip()
+        if not url:
+            return ""
+        import re
+
+        patterns = [
+            r"(?:v=|/embed/|/shorts/|youtu\.be/)([A-Za-z0-9_-]{11})",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return ""
+
+    @property
+    def effective_thumbnail_url(self):
+        """Returns the thumbnail URL, falling back to YouTube auto-thumbnail."""
+        if self.thumbnail:
+            return self.thumbnail.url
+        vid = self.youtube_id
+        if vid:
+            return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
+        return ""

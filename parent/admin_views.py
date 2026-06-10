@@ -38,6 +38,7 @@ from .models import (
     SOSAlert,
     SubscriptionPayment,
     SubscriptionPlan,
+    SupportQuickReply,
 )
 from .realtime import broadcast_lead_changed, broadcast_lead_comment
 from .serializers import (
@@ -696,8 +697,56 @@ def _parent_brief(p, *, request=None):
     }
 
 
+def _apply_ticket_status(ticket, new_status):
+    """Statusni o'rnatadi, kerakli sana maydonlarini to'ldiradi va
+    `resolved` bo'lsa botga baho so'rovini yuboradi."""
+    ticket.status = new_status
+    fields = ["status", "updated_at"]
+
+    if new_status == CallCenterTicket.STATUS_RESOLVED and not ticket.resolved_at:
+        ticket.resolved_at = timezone.now()
+        fields.append("resolved_at")
+    if new_status == CallCenterTicket.STATUS_CLOSED and not ticket.closed_at:
+        ticket.closed_at = timezone.now()
+        fields.append("closed_at")
+    ticket.save(update_fields=fields)
+
+    # Telegram orqali murojaat — resolved bo'lsa baho so'raymiz.
+    if (
+        new_status == CallCenterTicket.STATUS_RESOLVED
+        and ticket.telegram_chat_id
+        and ticket.bot_state != CallCenterTicket.BOT_STATE_AWAITING_RATING
+    ):
+        try:
+            from .telegram_bot import request_rating
+            request_rating(ticket)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("request_rating xato")
+    return ticket
+
+
+def _qr_to_dict(q):
+    return {
+        "id": q.id,
+        "code": q.code,
+        "title": q.title,
+        "scope": q.scope,
+        "owner_id": q.owner_id,
+        "text_uz_latn": q.text_uz_latn or "",
+        "text_uz_cyrl": q.text_uz_cyrl or "",
+        "text_ru": q.text_ru or "",
+        "text_en": q.text_en or "",
+        "order": q.order,
+        "is_active": q.is_active,
+        "created_at": q.created_at.isoformat(),
+    }
+
+
 def _lead_to_dict(t, *, request=None):
     op = t.operator
+    last_in = t.comments.filter(direction=CallCenterComment.DIRECTION_IN).order_by("-created_at").first()
+    last_msg = t.comments.order_by("-created_at").first()
     return {
         "id": t.id,
         "title": t.title,
@@ -711,11 +760,23 @@ def _lead_to_dict(t, *, request=None):
         } if op else None,
         "last_contact_at": t.last_contact_at.isoformat() if t.last_contact_at else None,
         "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+        "resolved_at": t.resolved_at.isoformat() if getattr(t, "resolved_at", None) else None,
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "comments_count": t.comments.count(),
-        "source": getattr(t, "source", "app"),                      
-        "telegram": {                                               
+        "source": getattr(t, "source", "app"),
+        "language": getattr(t, "language", "") or "",
+        "bot_state": getattr(t, "bot_state", "") or "",
+        "rating": getattr(t, "rating", None),
+        "rating_comment": getattr(t, "rating_comment", "") or "",
+        "rated_at": t.rated_at.isoformat() if getattr(t, "rated_at", None) else None,
+        "last_message": {
+            "text": last_msg.comment,
+            "direction": last_msg.direction,
+            "at": last_msg.created_at.isoformat(),
+        } if last_msg else None,
+        "last_user_message_at": last_in.created_at.isoformat() if last_in else None,
+        "telegram": {
             "chat_id": t.telegram_chat_id,
             "username": t.telegram_username,
             "name": t.telegram_name,
@@ -784,8 +845,7 @@ class AdminTicketUpdateStatusView(APIView):
         new_status = request.data.get("status")
         if new_status and new_status in dict(CallCenterTicket.STATUS_CHOICES):
             old = ticket.status
-            ticket.status = new_status
-            ticket.save(update_fields=["status", "updated_at"])
+            _apply_ticket_status(ticket, new_status)
             try:
                 broadcast_lead_changed({
                     "type": "status_changed",
@@ -901,14 +961,11 @@ class AdminLeadDetailView(APIView):
             if f in request.data:
                 setattr(t, f, request.data.get(f) or "")
                 update_fields.append(f)
+        new_status_val = None
         if "status" in request.data:
             s = request.data["status"]
             if s in dict(CallCenterTicket.STATUS_CHOICES):
-                t.status = s
-                update_fields.append("status")
-                if s == CallCenterTicket.STATUS_CLOSED and not t.closed_at:
-                    t.closed_at = timezone.now()
-                    update_fields.append("closed_at")
+                new_status_val = s
         if "operator_id" in request.data:
             op_id = request.data["operator_id"]
             if op_id:
@@ -920,6 +977,8 @@ class AdminLeadDetailView(APIView):
         if update_fields:
             update_fields.append("updated_at")
             t.save(update_fields=update_fields)
+        if new_status_val and new_status_val != old_status:
+            _apply_ticket_status(t, new_status_val)
         data = _lead_to_dict(t, request=request)
         try:
             broadcast_lead_changed({
@@ -1046,19 +1105,37 @@ class AdminLeadCommentsView(APIView):
         ticket = CallCenterTicket.objects.filter(id=ticket_id).first()
         if not ticket:
             return Response({"detail": "Lead topilmadi"}, status=404)
+
         text = (request.data.get("text") or "").strip()
+        qr_id = request.data.get("quick_reply_id")
+        # Quick reply tanlangan bo'lsa, foydalanuvchi tilida matn olamiz
+        if qr_id and not text:
+            qr = SupportQuickReply.objects.filter(
+                id=qr_id, is_active=True
+            ).first()
+            if qr:
+                text = qr.text_for(ticket.language)
         if not text:
             return Response({"detail": "text majburiy"}, status=400)
+
         c = CallCenterComment.objects.create(
             ticket=ticket,
             operator=request.user,
             comment=text,
-            direction=CallCenterComment.DIRECTION_OUT,   # <-- qo'shildi
+            direction=CallCenterComment.DIRECTION_OUT,
             old_status=ticket.status,
             new_status=ticket.status,
         )
         ticket.last_contact_at = timezone.now()
-        ticket.save(update_fields=["last_contact_at", "updated_at"])
+        # Operator javob berdi — agar yangi bo'lsa "jarayonda" ga olib o'tamiz
+        upd = ["last_contact_at", "updated_at"]
+        if ticket.status == CallCenterTicket.STATUS_NEW:
+            ticket.status = CallCenterTicket.STATUS_IN_PROGRESS
+            upd.append("status")
+        if ticket.operator_id is None and request.user.is_authenticated:
+            ticket.operator = request.user
+            upd.append("operator")
+        ticket.save(update_fields=upd)
 
         # Telegram'dan kelgan murojaat bo'lsa, javobni botga yuboramiz
         if ticket.telegram_chat_id:
@@ -1566,6 +1643,101 @@ class AdminGameDetail(APIView):
         if not g:
             return Response({"detail": "Topilmadi"}, status=404)
         g.delete()
+        return Response(status=204)
+
+
+# ============================================================================
+# Support quick replies — operator shortcuts (canned responses)
+# ============================================================================
+
+
+class AdminQuickReplyListCreateView(APIView):
+    """Tezkor javob shablonlari ro'yxati & yangi yaratish.
+
+    `scope=global` — barcha operatorlarga ko'rinadi.
+    `scope=personal` — faqat egasiga (owner) ko'rinadi.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from django.db.models import Q
+        user = request.user
+        qs = SupportQuickReply.objects.filter(is_active=True).filter(
+            Q(scope=SupportQuickReply.SCOPE_GLOBAL) | Q(owner=user)
+        ).order_by("order", "title")
+        return Response({"results": [_qr_to_dict(q) for q in qs]})
+
+    def post(self, request):
+        d = request.data
+        code = (d.get("code") or "").strip().lower().replace(" ", "_")
+        title = (d.get("title") or "").strip()
+        if not code or not title:
+            return Response({"detail": "code va title majburiy"}, status=400)
+        scope = d.get("scope") or SupportQuickReply.SCOPE_GLOBAL
+        if scope not in dict(SupportQuickReply.SCOPE_CHOICES):
+            scope = SupportQuickReply.SCOPE_GLOBAL
+        q = SupportQuickReply.objects.create(
+            owner=request.user if scope == SupportQuickReply.SCOPE_PERSONAL else None,
+            scope=scope,
+            code=code,
+            title=title,
+            text_uz_latn=(d.get("text_uz_latn") or "").strip(),
+            text_uz_cyrl=(d.get("text_uz_cyrl") or "").strip(),
+            text_ru=(d.get("text_ru") or "").strip(),
+            text_en=(d.get("text_en") or "").strip(),
+            order=int(d.get("order") or 0),
+        )
+        return Response(_qr_to_dict(q), status=201)
+
+
+class AdminQuickReplyDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def _get(self, request, qr_id):
+        qr = SupportQuickReply.objects.filter(id=qr_id).first()
+        if not qr:
+            return None
+        # personal scope — boshqa odamniki bo'lsa ko'rsatmaymiz
+        if qr.scope == SupportQuickReply.SCOPE_PERSONAL and qr.owner_id != request.user.id:
+            return None
+        return qr
+
+    def patch(self, request, qr_id):
+        qr = self._get(request, qr_id)
+        if not qr:
+            return Response({"detail": "Topilmadi"}, status=404)
+        d = request.data
+        fields = []
+        for f in ("code", "title", "text_uz_latn", "text_uz_cyrl", "text_ru", "text_en"):
+            if f in d:
+                setattr(qr, f, (d.get(f) or "").strip())
+                fields.append(f)
+        if "order" in d:
+            try:
+                qr.order = int(d.get("order") or 0)
+                fields.append("order")
+            except (ValueError, TypeError):
+                pass
+        if "is_active" in d:
+            qr.is_active = bool(d.get("is_active"))
+            fields.append("is_active")
+        if "scope" in d:
+            s = d.get("scope")
+            if s in dict(SupportQuickReply.SCOPE_CHOICES):
+                qr.scope = s
+                qr.owner = request.user if s == SupportQuickReply.SCOPE_PERSONAL else None
+                fields.extend(["scope", "owner"])
+        if fields:
+            fields.append("updated_at")
+            qr.save(update_fields=fields)
+        return Response(_qr_to_dict(qr))
+
+    def delete(self, request, qr_id):
+        qr = self._get(request, qr_id)
+        if not qr:
+            return Response({"detail": "Topilmadi"}, status=404)
+        qr.delete()
         return Response(status=204)
 
 

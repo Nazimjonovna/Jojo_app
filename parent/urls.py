@@ -164,6 +164,7 @@ from .admin_views import (
     AdminSmsTestView,
     AdminNotificationRuleListCreate, AdminNotificationRuleDetail,
     AdminNotificationRuleRunNow, AdminNotificationRuleLogs,
+    AdminQuickReplyListCreateView, AdminQuickReplyDetailView,
     TelegramWebhookView,
 )
 
@@ -221,6 +222,9 @@ urlpatterns += [
     path("admin/leads/<int:ticket_id>/", AdminLeadDetailView.as_view(), name="admin-lead-detail"),
     path("admin/leads/<int:ticket_id>/full/", AdminLeadFullView.as_view(), name="admin-lead-full"),
     path("admin/leads/<int:ticket_id>/comments/", AdminLeadCommentsView.as_view(), name="admin-lead-comments"),
+
+    path("admin/support/quick-replies/", AdminQuickReplyListCreateView.as_view(), name="admin-quick-reply-list"),
+    path("admin/support/quick-replies/<int:qr_id>/", AdminQuickReplyDetailView.as_view(), name="admin-quick-reply-detail"),
 
     path("admin/operators/", AdminOperatorListView.as_view(), name="admin-operator-list"),
     path("admin/operators/create/", AdminOperatorCreateView.as_view(), name="admin-operator-create"),
