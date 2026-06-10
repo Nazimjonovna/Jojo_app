@@ -1916,6 +1916,13 @@ class ActivateSubscriptionView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Provider opsiyalari: "manual" (admin/Telegram orqali tasdiqlangan),
+        # "click", "payme" — keyingi bosqichlarda webhook bilan keladi.
+        provider = (request.data.get("provider") or "manual").strip()
+        raw_payload = request.data.get("raw_payload") or {}
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+
         subscription = activate_paid_subscription(
             user=request.user,
             plan=plan,
@@ -1928,12 +1935,10 @@ class ActivateSubscriptionView(APIView):
             subscription=subscription,
             amount=plan.price,
             currency=plan.currency,
-            provider="manual_test",
+            provider=provider,
             status=SubscriptionPayment.STATUS_PAID,
             paid_at=timezone.now(),
-            raw_payload={
-                "source": "manual_test_activate_endpoint"
-            },
+            raw_payload=raw_payload or {"source": "subscription_activate_endpoint"},
         )
 
         return Response(
@@ -1946,6 +1951,50 @@ class ActivateSubscriptionView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+class ClaimTrialSubscriptionView(APIView):
+    """30-kunlik free trial obunani so'rov bilan faollashtirish.
+
+    Foydalanuvchi avval trial olmagan bo'lsa va aktiv obunasi yo'q bo'lsa
+    — `is_trial=True` rejasi bo'yicha trial yaratiladi.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(tags=["subscription"])
+    def post(self, request):
+        from .subscription import (
+            get_active_subscription, give_free_trial_if_new_user,
+        )
+        user = request.user
+
+        if user.role != user.ROLE_PARENT:
+            return Response({
+                "status": False,
+                "detail": "Faqat parent foydalanuvchi trial olishi mumkin.",
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        existing = get_active_subscription(user)
+        if existing:
+            return Response({
+                "status": True,
+                "detail": "Sizda allaqachon aktiv obuna mavjud.",
+                "subscription": UserSubscriptionSerializer(existing).data,
+            }, status=status.HTTP_200_OK)
+
+        subscription = give_free_trial_if_new_user(user)
+        if not subscription:
+            return Response({
+                "status": False,
+                "detail": "Trial avval ishlatilgan. Pullik tarifni tanlang.",
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "status": True,
+            "detail": "30 kunlik bepul obuna faollashtirildi!",
+            "subscription": UserSubscriptionSerializer(subscription).data,
+            "user": UserSerializer(user).data,
+        }, status=status.HTTP_201_CREATED)
 
 
 class AdminGiveSubscriptionView(APIView):
