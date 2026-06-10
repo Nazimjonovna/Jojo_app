@@ -961,6 +961,107 @@ class SendChildLocationView(APIView):
         return Response({"status": True, "detail": "Location saqlandi va real-time yuborildi.", "location": ChildLocationSerializer(location).data, "realtime_payload": realtime_payload}, status=status.HTTP_201_CREATED)
 
 
+class SendChildLocationBatchView(APIView):
+    """REST fallback — Socket.IO uzilgan bo'lsa kids ilovasi disk
+    buffer'dagi nuqtalarni shu yerga 100 tagacha bir requestda jo'natadi.
+
+    Har bir element bilan `process_child_location` chaqirilmaydi — bu og'ir
+    bo'ladi. Buning o'rniga `ChildLocation.objects.bulk_create` ishlatamiz
+    va eng so'nggisini `ChildLastLocation`'ga yozamiz + WS broadcast qilamiz.
+    """
+    permission_classes = [IsChild]
+
+    @swagger_auto_schema(tags=["location"])
+    def post(self, request):
+        items = request.data.get("items")
+        if not isinstance(items, list) or not items:
+            return Response({"status": False, "detail": "items bo'sh."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(items) > 200:
+            items = items[:200]
+
+        child = request.user
+        objects = []
+        latest_payload = None
+        latest_for_processing = None
+        skipped = 0
+
+        for raw in items:
+            if not isinstance(raw, dict):
+                skipped += 1
+                continue
+            try:
+                lat = float(raw.get("latitude"))
+                lon = float(raw.get("longitude"))
+            except (TypeError, ValueError):
+                skipped += 1
+                continue
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                skipped += 1
+                continue
+
+            obj = ChildLocation(
+                child=child,
+                latitude=lat,
+                longitude=lon,
+                accuracy=_safe_float(raw.get("accuracy")),
+                battery_level=_safe_int(raw.get("battery_level")),
+                is_charging=raw.get("is_charging"),
+                speed=_safe_float(raw.get("speed")),
+                heading=_safe_float(raw.get("heading")),
+                network_type=str(raw.get("network_type") or "")[:20],
+                activity_type=str(raw.get("activity_type") or "")[:20],
+                source=ChildLocation.SOURCE_REST,
+            )
+            objects.append(obj)
+            latest_for_processing = raw
+
+        if objects:
+            ChildLocation.objects.bulk_create(objects, batch_size=200)
+
+            # Eng so'nggi nuqtani to'liq pipeline orqali o'tkazamiz —
+            # saved-location event'lari, route alert, va WS broadcast
+            # uchun. Shu bilan parent app real-time'da real harakatni
+            # ko'radi va bola "online" ko'rinadi.
+            try:
+                location, latest_payload = process_child_location(
+                    child=child,
+                    latitude=float(latest_for_processing["latitude"]),
+                    longitude=float(latest_for_processing["longitude"]),
+                    accuracy=_safe_float(latest_for_processing.get("accuracy")),
+                    battery_level=_safe_int(latest_for_processing.get("battery_level")),
+                    speed=_safe_float(latest_for_processing.get("speed")),
+                    heading=_safe_float(latest_for_processing.get("heading")),
+                    source=ChildLocation.SOURCE_REST,
+                )
+            except Exception:
+                latest_payload = None
+
+        return Response({
+            "status": True,
+            "accepted": len(objects),
+            "skipped": skipped,
+            "realtime_payload": latest_payload,
+        }, status=status.HTTP_201_CREATED)
+
+
+def _safe_float(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class ChildLastLocationView(APIView):
     permission_classes = [IsParentOfChild]
     @swagger_auto_schema(tags=["location"])
