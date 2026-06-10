@@ -1325,7 +1325,11 @@ class SubscriptionPlanSerializer(LocalizedSerializerMixin, serializers.ModelSeri
         fields = [
             "id",
             "name",
+            "name_ru",
+            "name_en",
             "description",
+            "description_ru",
+            "description_en",
             "price",
             "currency",
             "duration_value",
@@ -1614,7 +1618,7 @@ class ParentStoreSavedProductSerializer(serializers.ModelSerializer):
         fields = ["id", "product", "created_at"]
 
 
-class ParentStoreOrderProductSnippetSerializer(serializers.ModelSerializer):
+class ParentStoreOrderProductSnippetSerializer(LocalizedSerializerMixin, serializers.ModelSerializer):
     """Buyurtma ro‘yxati uchun mahsulotning yengillashtirilgan ko‘rinishi."""
 
     class Meta:
@@ -1629,6 +1633,7 @@ class ParentStoreOrderProductSnippetSerializer(serializers.ModelSerializer):
             "placeholder_tint",
             "price",
         ]
+        localized_fields = ["name", "category_label"]
 
 
 class ParentStoreOrderSerializer(serializers.ModelSerializer):

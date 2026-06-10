@@ -82,6 +82,7 @@ class AdminStoreCategorySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "name_ru", "name_en",
             "slug",
             "product_type",
             "category_type",
@@ -92,6 +93,8 @@ class AdminStoreCategorySerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "slug": {"required": False, "allow_blank": True},
             "product_type": {"required": False, "allow_blank": True},
+            "name_ru": {"required": False, "allow_blank": True},
+            "name_en": {"required": False, "allow_blank": True},
         }
 
     def to_internal_value(self, data):
@@ -242,8 +245,11 @@ class AdminBannerSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "kicker",
+            "kicker_ru", "kicker_en",
             "title",
+            "title_ru", "title_en",
             "subtitle",
+            "subtitle_ru", "subtitle_en",
             "theme",
             "image",
             "link_product",
@@ -256,8 +262,14 @@ class AdminBannerSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "kicker": {"required": False, "allow_blank": True, "default": ""},
+            "kicker_ru": {"required": False, "allow_blank": True, "default": ""},
+            "kicker_en": {"required": False, "allow_blank": True, "default": ""},
             "title": {"required": True},
+            "title_ru": {"required": False, "allow_blank": True, "default": ""},
+            "title_en": {"required": False, "allow_blank": True, "default": ""},
             "subtitle": {"required": False, "allow_blank": True, "default": ""},
+            "subtitle_ru": {"required": False, "allow_blank": True, "default": ""},
+            "subtitle_en": {"required": False, "allow_blank": True, "default": ""},
             "theme": {"required": False, "default": ParentStorePromoBanner.THEME_CREAM},
             "link_product": {"required": False, "allow_null": True},
             "link_category_type": {"required": False, "allow_blank": True, "default": ""},
@@ -298,12 +310,15 @@ class AdminBlogCategorySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "name_ru", "name_en",
             "icon",
             "is_active",
             "order",
         ]
         extra_kwargs = {
             "name": {"required": True},
+            "name_ru": {"required": False, "allow_blank": True},
+            "name_en": {"required": False, "allow_blank": True},
             "order": {"required": False, "default": 0},
         }
 
@@ -347,10 +362,13 @@ class AdminBlogPostSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
+            "title_ru", "title_en",
             "excerpt",
             "short_description",
+            "short_description_ru", "short_description_en",
             "body",
             "content",
+            "content_ru", "content_en",
             "category",
             "post_type",
             "read_minutes",
@@ -364,10 +382,16 @@ class AdminBlogPostSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "title": {"required": True},
+            "title_ru": {"required": False, "allow_blank": True},
+            "title_en": {"required": False, "allow_blank": True},
             "post_type": {"required": False, "default": BlogPost.TYPE_BLOG},
             "category": {"required": False, "allow_null": True},
             "short_description": {"required": False, "allow_blank": True, "allow_null": True},
+            "short_description_ru": {"required": False, "allow_blank": True, "default": ""},
+            "short_description_en": {"required": False, "allow_blank": True, "default": ""},
             "content": {"required": False, "allow_blank": True, "allow_null": True},
+            "content_ru": {"required": False, "allow_blank": True, "default": ""},
+            "content_en": {"required": False, "allow_blank": True, "default": ""},
         }
 
     def get_cover_image(self, obj):

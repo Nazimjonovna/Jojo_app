@@ -50,21 +50,41 @@ def to_int(value):
         return None
 
 
-def record_parent_notification(parent, child, category, title, body, data=None):
+def record_parent_notification(
+    parent,
+    child,
+    category,
+    title,
+    body,
+    data=None,
+    title_translations=None,
+    body_translations=None,
+):
     """Inbox yozuvi yaratadi va WS orqali parent ilovaga darhol uzatadi.
 
-    Bu funksiya `send_fcm_multicast` chaqiriqlari yonida ishlatiladi —
-    FCM tashqi yetkazib beruvchi, bu esa ichki tarix + UI'da darhol ko'rinish.
+    `title` va `body` — asosiy (uz) matn. `title_translations` va
+    `body_translations` — ixtiyoriy {"ru": "...", "en": "..."} dict'lari.
+    Agar berilsa, ParentNotification _ru/_en maydonlariga yoziladi va
+    parent tilini o'zgartirsa avval saqlangan xabarlar ham mos tilda
+    ko'rinadi (LocalizedSerializerMixin tanlaydi).
     """
     if not parent:
         return None
+
+    title_translations = title_translations or {}
+    body_translations = body_translations or {}
+
     try:
         notification = ParentNotification.objects.create(
             parent=parent,
             child=child,
             category=category,
             title=(title or "")[:150],
+            title_ru=(title_translations.get("ru") or "")[:150],
+            title_en=(title_translations.get("en") or "")[:150],
             body=(body or "")[:500],
+            body_ru=(body_translations.get("ru") or "")[:500],
+            body_en=(body_translations.get("en") or "")[:500],
             data=data or {},
         )
     except Exception:
@@ -74,6 +94,21 @@ def record_parent_notification(parent, child, category, title, body, data=None):
     except Exception:
         pass
     return notification
+
+
+def pick_for_lang(translations, lang, fallback=""):
+    """Bola/parent uchun mos tildagi matnni tanlaydi.
+
+    translations: {"uz": "...", "ru": "...", "en": "..."}
+    """
+    if not translations:
+        return fallback
+    code = (lang or "uz").lower()
+    if code.startswith("ru"):
+        return translations.get("ru") or translations.get("uz") or fallback
+    if code.startswith("en"):
+        return translations.get("en") or translations.get("uz") or fallback
+    return translations.get("uz") or fallback
 
 
 def speed_to_kmh(speed):
@@ -113,13 +148,24 @@ def send_route_deviation_notification(assignment, location, distance_meters):
     tokens = list(tokens)
 
     title = "Jojo"
-    child_name = child.full_name or child.first_name or "Farzandingiz"
-    body = f"{child_name} belgilangan marshrutdan chiqdi."
+    name = child.full_name or child.first_name or ""
+    fallback = {"uz": "Farzandingiz", "ru": "Ваш ребёнок", "en": "Your child"}
+
+    def _name(lang):
+        return name or fallback[lang]
+
+    body_translations = {
+        "uz": f"{_name('uz')} belgilangan marshrutdan chiqdi.",
+        "ru": f"{_name('ru')} вышел за пределы маршрута.",
+        "en": f"{_name('en')} left the assigned route.",
+    }
+    title_translations = {"uz": title, "ru": title, "en": title}
+    body = body_translations["uz"]
 
     payload = {
         "type": "route_deviation",
         "child_id": child.id,
-        "child_name": child_name,
+        "child_name": name,
         "route_id": assignment.route.id,
         "route_name": assignment.route.name,
         "distance_meters": round(distance_meters, 2),
@@ -131,12 +177,15 @@ def send_route_deviation_notification(assignment, location, distance_meters):
         "created_at": location.created_at.isoformat(),
     }
 
+    parent_lang = getattr(parent, "language", "uz") or "uz"
+    fcm_body = pick_for_lang(body_translations, parent_lang, fallback=body)
+
     if tokens:
         try:
             send_fcm_multicast(
                 tokens=tokens,
                 title=title,
-                body=body,
+                body=fcm_body,
                 data=payload,
             )
         except Exception:
@@ -149,6 +198,8 @@ def send_route_deviation_notification(assignment, location, distance_meters):
         title=title,
         body=body,
         data=payload,
+        title_translations=title_translations,
+        body_translations=body_translations,
     )
 
     broadcast_route_alert(
@@ -458,39 +509,71 @@ def should_send_saved_location_event(state, event_type):
 
 
 def build_saved_location_message(child, event_type, saved_location=None, previous_location=None):
-    child_name = child.full_name or child.first_name or "Farzandingiz"
+    """Saqlangan joy hodisalari uchun ko'p tilli xabar.
+
+    Qaytaradi: (title, body) — har biri {"uz", "ru", "en"} dict.
+    Eski uz tilidagi single-tuple chaqiruvchilarga moslik uchun
+    .get('uz') orqali ham olinadigan bo'lib qoldirilgan.
+    """
+    fallbacks = {
+        "uz": "Farzandingiz",
+        "ru": "Ваш ребёнок",
+        "en": "Your child",
+    }
+    name = child.full_name or child.first_name or ""
+
+    def child_name(lang):
+        return name or fallbacks.get(lang, fallbacks["uz"])
+
+    title = {"uz": "Jojo", "ru": "Jojo", "en": "Jojo"}
 
     if event_type == ChildSavedLocationEvent.EVENT_ENTER:
-        return (
-            "Jojo",
-            f"{child_name} {saved_location.name} hududiga kirdi."
-        )
+        loc = saved_location.name if saved_location else ""
+        body = {
+            "uz": f"{child_name('uz')} {loc} hududiga kirdi.",
+            "ru": f"{child_name('ru')} вошёл в зону «{loc}».",
+            "en": f"{child_name('en')} entered the «{loc}» area.",
+        }
+        return (title, body)
 
     if event_type == ChildSavedLocationEvent.EVENT_EXIT:
-        return (
-            "Jojo",
-            f"{child_name} {previous_location.name} hududidan chiqdi."
-        )
+        loc = previous_location.name if previous_location else ""
+        body = {
+            "uz": f"{child_name('uz')} {loc} hududidan chiqdi.",
+            "ru": f"{child_name('ru')} вышел из зоны «{loc}».",
+            "en": f"{child_name('en')} left the «{loc}» area.",
+        }
+        return (title, body)
 
     if event_type == ChildSavedLocationEvent.EVENT_MOVING_HOME_TO_SCHOOL:
-        return (
-            "Jojo",
-            f"{child_name} uydan chiqib maktab tomonga ketayapti."
-        )
+        body = {
+            "uz": f"{child_name('uz')} uydan chiqib maktab tomonga ketayapti.",
+            "ru": f"{child_name('ru')} вышел из дома и направляется в школу.",
+            "en": f"{child_name('en')} left home and is heading to school.",
+        }
+        return (title, body)
 
     if event_type == ChildSavedLocationEvent.EVENT_MOVING_SCHOOL_TO_HOME:
-        return (
-            "Jojo",
-            f"{child_name} maktabdan chiqib uy tomonga ketayapti."
-        )
+        body = {
+            "uz": f"{child_name('uz')} maktabdan chiqib uy tomonga ketayapti.",
+            "ru": f"{child_name('ru')} вышел из школы и направляется домой.",
+            "en": f"{child_name('en')} left school and is heading home.",
+        }
+        return (title, body)
 
-    return (
-        "Jojo",
-        f"{child_name} joylashuvi o‘zgardi."
-    )
+    body = {
+        "uz": f"{child_name('uz')} joylashuvi o'zgardi.",
+        "ru": f"Местоположение ребёнка изменилось.",
+        "en": f"{child_name('en')}'s location changed.",
+    }
+    return (title, body)
 
 
-def send_saved_location_notification(parent, child, event, location):
+def send_saved_location_notification(
+    parent, child, event, location,
+    title_translations=None, body_translations=None,
+):
+    """FCM ni parent tiliga moslab yuboradi, inbox yozuvini ko'p tilli saqlaydi."""
     tokens = DeviceToken.objects.filter(
         user=parent,
         is_active=True
@@ -510,12 +593,17 @@ def send_saved_location_notification(parent, child, event, location):
         "created_at": event.created_at.isoformat(),
     }
 
+    # FCM matnini parent tilini hisobga olgan holda tanlaymiz.
+    parent_lang = getattr(parent, "language", "uz") or "uz"
+    fcm_title = pick_for_lang(title_translations, parent_lang, fallback=event.title)
+    fcm_body = pick_for_lang(body_translations, parent_lang, fallback=event.body)
+
     if tokens:
         try:
             send_fcm_multicast(
                 tokens=tokens,
-                title=event.title,
-                body=event.body,
+                title=fcm_title,
+                body=fcm_body,
                 data=payload,
             )
         except Exception:
@@ -536,6 +624,8 @@ def send_saved_location_notification(parent, child, event, location):
         title=event.title,
         body=event.body,
         data=payload,
+        title_translations=title_translations,
+        body_translations=body_translations,
     )
         
 def process_saved_location_events(child, location):
@@ -566,7 +656,7 @@ def process_saved_location_events(child, location):
         event_type = ChildSavedLocationEvent.EVENT_EXIT
 
         if should_send_saved_location_event(state, event_type):
-            title, body = build_saved_location_message(
+            title_tr, body_tr = build_saved_location_message(
                 child=child,
                 event_type=event_type,
                 previous_location=previous_location,
@@ -577,13 +667,17 @@ def process_saved_location_events(child, location):
                 parent=parent,
                 saved_location=previous_location,
                 event_type=event_type,
-                title=title,
-                body=body,
+                title=title_tr.get("uz", "Jojo"),
+                body=body_tr.get("uz", ""),
                 latitude=location.latitude,
                 longitude=location.longitude,
             )
 
-            send_saved_location_notification(parent, child, event, location)
+            send_saved_location_notification(
+                parent, child, event, location,
+                title_translations=title_tr,
+                body_translations=body_tr,
+            )
             created_events.append(event)
 
     # Yangi saved locationga kirdi
@@ -591,7 +685,7 @@ def process_saved_location_events(child, location):
         event_type = ChildSavedLocationEvent.EVENT_ENTER
 
         if should_send_saved_location_event(state, event_type):
-            title, body = build_saved_location_message(
+            title_tr, body_tr = build_saved_location_message(
                 child=child,
                 event_type=event_type,
                 saved_location=current_location,
@@ -602,13 +696,17 @@ def process_saved_location_events(child, location):
                 parent=parent,
                 saved_location=current_location,
                 event_type=event_type,
-                title=title,
-                body=body,
+                title=title_tr.get("uz", "Jojo"),
+                body=body_tr.get("uz", ""),
                 latitude=location.latitude,
                 longitude=location.longitude,
             )
 
-            send_saved_location_notification(parent, child, event, location)
+            send_saved_location_notification(
+                parent, child, event, location,
+                title_translations=title_tr,
+                body_translations=body_tr,
+            )
             created_events.append(event)
 
     # Home -> School mantiqi
@@ -620,7 +718,7 @@ def process_saved_location_events(child, location):
             event_type = ChildSavedLocationEvent.EVENT_MOVING_HOME_TO_SCHOOL
 
             if should_send_saved_location_event(state, event_type):
-                title, body = build_saved_location_message(
+                title_tr, body_tr = build_saved_location_message(
                     child=child,
                     event_type=event_type,
                     saved_location=current_location,
@@ -632,13 +730,17 @@ def process_saved_location_events(child, location):
                     parent=parent,
                     saved_location=current_location,
                     event_type=event_type,
-                    title=title,
-                    body=body,
+                    title=title_tr.get("uz", "Jojo"),
+                    body=body_tr.get("uz", ""),
                     latitude=location.latitude,
                     longitude=location.longitude,
                 )
 
-                send_saved_location_notification(parent, child, event, location)
+                send_saved_location_notification(
+                    parent, child, event, location,
+                    title_translations=title_tr,
+                    body_translations=body_tr,
+                )
                 created_events.append(event)
 
         if (
@@ -648,7 +750,7 @@ def process_saved_location_events(child, location):
             event_type = ChildSavedLocationEvent.EVENT_MOVING_SCHOOL_TO_HOME
 
             if should_send_saved_location_event(state, event_type):
-                title, body = build_saved_location_message(
+                title_tr, body_tr = build_saved_location_message(
                     child=child,
                     event_type=event_type,
                     saved_location=current_location,
@@ -660,13 +762,17 @@ def process_saved_location_events(child, location):
                     parent=parent,
                     saved_location=current_location,
                     event_type=event_type,
-                    title=title,
-                    body=body,
+                    title=title_tr.get("uz", "Jojo"),
+                    body=body_tr.get("uz", ""),
                     latitude=location.latitude,
                     longitude=location.longitude,
                 )
 
-                send_saved_location_notification(parent, child, event, location)
+                send_saved_location_notification(
+                    parent, child, event, location,
+                    title_translations=title_tr,
+                    body_translations=body_tr,
+                )
                 created_events.append(event)
 
     state.previous_location = previous_location
@@ -899,9 +1005,20 @@ def _maybe_emit_recommendation(parent, child, place):
         DeviceToken.objects.filter(user=parent, is_active=True)
         .values_list("token", flat=True)
     )
-    child_name = child.full_name or child.first_name or "Farzandingiz"
+    name = child.full_name or child.first_name or ""
+    fb = {"uz": "Farzandingiz", "ru": "Ваш ребёнок", "en": "Your child"}
+
+    def _n(lang):
+        return name or fb[lang]
+
     title = "Jojo"
-    body = f"{child_name} ushbu joyga ko‘p marta tashrif buyuradi. Saqlanganga qo‘shamizmi?"
+    body_translations = {
+        "uz": f"{_n('uz')} ushbu joyga ko'p marta tashrif buyuradi. Saqlanganga qo'shamizmi?",
+        "ru": f"{_n('ru')} часто посещает это место. Добавить в сохранённые?",
+        "en": f"{_n('en')} visits this place often. Add it to saved locations?",
+    }
+    title_translations = {"uz": title, "ru": title, "en": title}
+    body = body_translations["uz"]
 
     payload = {
         "type": "place_recommendation",
@@ -912,9 +1029,11 @@ def _maybe_emit_recommendation(parent, child, place):
         "visit_count": place.visit_count,
     }
 
+    parent_lang = getattr(parent, "language", "uz") or "uz"
+    fcm_body = pick_for_lang(body_translations, parent_lang, fallback=body)
     if tokens:
         try:
-            send_fcm_multicast(tokens=tokens, title=title, body=body, data=payload)
+            send_fcm_multicast(tokens=tokens, title=title, body=fcm_body, data=payload)
         except Exception:
             pass
 
@@ -925,6 +1044,8 @@ def _maybe_emit_recommendation(parent, child, place):
         title=title,
         body=body,
         data=payload,
+        title_translations=title_translations,
+        body_translations=body_translations,
     )
 
 
@@ -1020,9 +1141,11 @@ def run_destination_predictions(child, location):
 
         eta = distance / max(speed, 0.5)  # sekund (m / (m/s))
 
-        title, body = _build_prediction_message(
+        title_tr, body_tr = _build_prediction_message(
             child=child, saved_location=sl, event_type=event_type,
         )
+        title = title_tr.get("uz", "Jojo")
+        body = body_tr.get("uz", "")
 
         prediction = ChildDestinationPrediction.objects.create(
             child=child,
@@ -1036,7 +1159,7 @@ def run_destination_predictions(child, location):
             body=body,
         )
 
-        # FCM
+        # FCM — parent tilini hisobga olgan holda
         tokens = list(
             DeviceToken.objects.filter(user=parent, is_active=True)
             .values_list("token", flat=True)
@@ -1049,12 +1172,14 @@ def run_destination_predictions(child, location):
             "distance_meters": round(distance, 1),
             "eta_seconds": round(eta, 1),
         }
+        parent_lang = getattr(parent, "language", "uz") or "uz"
+        fcm_body = pick_for_lang(body_tr, parent_lang, fallback=body)
         if tokens:
             try:
                 send_fcm_multicast(
                     tokens=tokens,
                     title=title,
-                    body=body,
+                    body=fcm_body,
                     data=prediction_payload,
                 )
             except Exception:
@@ -1067,6 +1192,8 @@ def run_destination_predictions(child, location):
             title=title,
             body=body,
             data=prediction_payload,
+            title_translations=title_tr,
+            body_translations=body_tr,
         )
 
         # WS broadcast
@@ -1081,23 +1208,60 @@ def run_destination_predictions(child, location):
 
 
 def _build_prediction_message(child, saved_location, event_type):
-    child_name = child.full_name or child.first_name or "Farzandingiz"
+    """Qaytaradi: (title_dict, body_dict) — har biri uz/ru/en."""
+    name = child.full_name or child.first_name or ""
+    fb = {"uz": "Farzandingiz", "ru": "Ваш ребёнок", "en": "Your child"}
+
+    def _n(lang):
+        return name or fb[lang]
+
     place_name = saved_location.name
     place_type = (saved_location.location_type or "").lower()
+    title_tr = {"uz": "Jojo", "ru": "Jojo", "en": "Jojo"}
 
     if event_type == ChildDestinationPrediction.EVENT_ARRIVING_SOON:
         if place_type == SavedLocation.LOCATION_HOME:
-            return ("Jojo", f"{child_name} uyga yetib keldi.")
+            body = {
+                "uz": f"{_n('uz')} uyga yetib keldi.",
+                "ru": f"{_n('ru')} прибыл домой.",
+                "en": f"{_n('en')} has arrived home.",
+            }
+            return (title_tr, body)
         if place_type == SavedLocation.LOCATION_SCHOOL:
-            return ("Jojo", f"{child_name} maktabga yaqin qoldi.")
-        return ("Jojo", f"{child_name} '{place_name}' yaqiniga keldi.")
+            body = {
+                "uz": f"{_n('uz')} maktabga yaqin qoldi.",
+                "ru": f"{_n('ru')} почти у школы.",
+                "en": f"{_n('en')} is close to school.",
+            }
+            return (title_tr, body)
+        body = {
+            "uz": f"{_n('uz')} '{place_name}' yaqiniga keldi.",
+            "ru": f"{_n('ru')} приближается к «{place_name}».",
+            "en": f"{_n('en')} is near «{place_name}».",
+        }
+        return (title_tr, body)
 
     # heading_to
     if place_type == SavedLocation.LOCATION_HOME:
-        return ("Jojo", f"{child_name} uyga yaqinlashyapti.")
+        body = {
+            "uz": f"{_n('uz')} uyga yaqinlashyapti.",
+            "ru": f"{_n('ru')} направляется домой.",
+            "en": f"{_n('en')} is heading home.",
+        }
+        return (title_tr, body)
     if place_type == SavedLocation.LOCATION_SCHOOL:
-        return ("Jojo", f"{child_name} maktab tomon ketmoqda.")
-    return ("Jojo", f"{child_name} '{place_name}' tomon ketmoqda.")
+        body = {
+            "uz": f"{_n('uz')} maktab tomon ketmoqda.",
+            "ru": f"{_n('ru')} направляется в школу.",
+            "en": f"{_n('en')} is heading to school.",
+        }
+        return (title_tr, body)
+    body = {
+        "uz": f"{_n('uz')} '{place_name}' tomon ketmoqda.",
+        "ru": f"{_n('ru')} направляется к «{place_name}».",
+        "en": f"{_n('en')} is heading to «{place_name}».",
+    }
+    return (title_tr, body)
 
 
 # ============================================================================
