@@ -1,0 +1,187 @@
+{
+  "$comment": "Jojolingo kurs kontenti sxemasi. Bitta fayl = bitta kurs. import_course komandasi bilan yuklanadi: python manage.py import_course content/uz_en_a0.json",
+
+  "course": {
+    "code": "uz-en",
+    "source_language": "uz",
+    "target_language": "en",
+    "title_uz": "Ingliz tili",
+    "description_uz": "O'zbek tilida so'zlashuvchilar uchun ingliz tili kursi"
+  },
+
+  "vocabulary": [
+    {
+      "word": "hello",
+      "translation": "salom",
+      "transcription": "heˈləʊ",
+      "part_of_speech": "interjection",
+      "example": "Hello, my name is Aziz.",
+      "example_translation": "Salom, mening ismim Aziz.",
+      "audio": "audio/en/hello.mp3",
+      "image": "img/hello.png",
+      "tags": ["greetings", "a0"]
+    },
+    {
+      "word": "goodbye",
+      "translation": "xayr",
+      "transcription": "ɡʊdˈbaɪ",
+      "part_of_speech": "interjection",
+      "example": "Goodbye, see you tomorrow!",
+      "example_translation": "Xayr, ertaga ko'rishamiz!",
+      "audio": "audio/en/goodbye.mp3",
+      "tags": ["greetings", "a0"]
+    },
+    {
+      "word": "cat",
+      "translation": "mushuk",
+      "transcription": "kæt",
+      "part_of_speech": "noun",
+      "example": "The cat is sleeping.",
+      "example_translation": "Mushuk uxlayapti.",
+      "audio": "audio/en/cat.mp3",
+      "image": "img/cat.png",
+      "tags": ["animals", "a0"]
+    },
+    {
+      "word": "dog",
+      "translation": "it",
+      "transcription": "dɒɡ",
+      "part_of_speech": "noun",
+      "example": "I have a dog.",
+      "example_translation": "Mening itim bor.",
+      "audio": "audio/en/dog.mp3",
+      "image": "img/dog.png",
+      "tags": ["animals", "a0"]
+    }
+  ],
+
+  "levels": [
+    {
+      "code": "A0",
+      "title_uz": "Boshlang'ich",
+      "order": 0,
+      "units": [
+        {
+          "code": "a0-u1",
+          "title_uz": "Salomlashish",
+          "title_en": "Greetings",
+          "order": 0,
+          "icon": "unit_greetings",
+          "lessons": [
+            {
+              "code": "a0-u1-l1",
+              "title_uz": "Salom va xayr",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["hello", "goodbye"],
+              "exercises": [
+                {
+                  "type": "multiple_choice",
+                  "order": 0,
+                  "prompt_uz": "'Salom' inglizchada qanday bo'ladi?",
+                  "word": "hello",
+                  "options": [
+                    {"text": "Hello", "correct": true},
+                    {"text": "Goodbye", "correct": false},
+                    {"text": "Cat", "correct": false},
+                    {"text": "Dog", "correct": false}
+                  ],
+                  "hint_uz": "Bu so'z uchrashganda aytiladi."
+                },
+                {
+                  "type": "translate",
+                  "order": 1,
+                  "prompt_uz": "Tarjima qiling: Xayr",
+                  "word": "goodbye",
+                  "correct_answers": ["goodbye", "good bye"],
+                  "hint_uz": "Xayrlashganda aytiladigan so'z."
+                },
+                {
+                  "type": "word_bank",
+                  "order": 2,
+                  "prompt_uz": "Gapni yig'ing: 'Salom, mening ismim Aziz'",
+                  "correct_answers": ["Hello my name is Aziz"],
+                  "word_bank": ["Hello", "my", "name", "is", "Aziz", "dog", "goodbye"],
+                  "hint_uz": "Gap 'Hello' bilan boshlanadi."
+                },
+                {
+                  "type": "listen",
+                  "order": 3,
+                  "prompt_uz": "Eshiting va yozing",
+                  "audio": "audio/en/hello.mp3",
+                  "correct_answers": ["hello"],
+                  "word": "hello"
+                }
+              ]
+            },
+            {
+              "code": "a0-u1-l2",
+              "title_uz": "Takrorlash: salomlashish",
+              "order": 1,
+              "xp_reward": 10,
+              "is_review": true,
+              "review_words": ["hello", "goodbye"],
+              "exercises": [
+                {
+                  "type": "match_pairs",
+                  "order": 0,
+                  "prompt_uz": "Juftliklarni toping",
+                  "pairs": [
+                    {"left": "hello", "right": "salom"},
+                    {"left": "goodbye", "right": "xayr"}
+                  ]
+                },
+                {
+                  "type": "fill_blank",
+                  "order": 1,
+                  "prompt_uz": "Bo'sh joyni to'ldiring: ___, my name is Malika.",
+                  "correct_answers": ["Hello"],
+                  "word": "hello",
+                  "hint_uz": "Gap boshida salomlashamiz."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "code": "a0-u2",
+          "title_uz": "Hayvonlar",
+          "title_en": "Animals",
+          "order": 1,
+          "icon": "unit_animals",
+          "lessons": [
+            {
+              "code": "a0-u2-l1",
+              "title_uz": "Uy hayvonlari",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["cat", "dog"],
+              "exercises": [
+                {
+                  "type": "multiple_choice",
+                  "order": 0,
+                  "prompt_uz": "'Mushuk' inglizchada qanday bo'ladi?",
+                  "word": "cat",
+                  "image": "img/cat.png",
+                  "options": [
+                    {"text": "Cat", "correct": true},
+                    {"text": "Dog", "correct": false},
+                    {"text": "Hello", "correct": false}
+                  ]
+                },
+                {
+                  "type": "translate",
+                  "order": 1,
+                  "prompt_uz": "Tarjima qiling: Mening itim bor",
+                  "correct_answers": ["I have a dog", "I have got a dog"],
+                  "word": "dog",
+                  "hint_uz": "'Mening ... bor' = 'I have a ...'"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

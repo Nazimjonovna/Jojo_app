@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('parent', '0019_parentstoreproduct_category_label_en_and_more'),
+        ('parent', '0017_alter_parentnotification_category_and_more'),
     ]
 
     operations = [
