@@ -214,6 +214,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.jojoapp.uz",
     "http://api.jojoapp.uz",
     "https://api.jojoapp.uz",
+    "http://admin.jojoapp.uz",
+    "https://admin.jojoapp.uz",
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
@@ -235,6 +237,7 @@ CORS_ALLOW_METHODS = [
 CORS_ALLOW_HEADERS = [
     "accept",
     "accept-encoding",
+    "accept-language",
     "authorization",
     "content-type",
     "dnt",
@@ -242,6 +245,7 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "x-app-platform",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -261,6 +265,9 @@ CSRF_TRUSTED_ORIGINS = [
     
     "http://api.jojoapp.uz",
     "https://api.jojoapp.uz",
+
+    "http://admin.jojoapp.uz",
+    "https://admin.jojoapp.uz",
 ]
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
