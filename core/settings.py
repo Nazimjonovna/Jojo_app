@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'parent',
     'rest_framework',
     'drf_yasg',
+    'jojolingo',
 ]
 
 REST_FRAMEWORK = {
