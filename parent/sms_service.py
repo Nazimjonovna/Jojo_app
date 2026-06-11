@@ -183,6 +183,7 @@ class SmsFlyClient:
         *,
         kind: str = "other",
         user_id: int | None = None,
+        campaign_id: int | None = None,
         max_retries: int = 1,
     ) -> bool:
         """Bitta foydalanuvchiga xabar yuborish.
@@ -198,7 +199,7 @@ class SmsFlyClient:
             self._log(
                 phone=phone, normalized=normalized, kind=kind, message=message,
                 success=False, result_code=-2, reason="INVALID_PHONE",
-                retry_count=0, user_id=user_id,
+                retry_count=0, user_id=user_id, campaign_id=campaign_id,
             )
             logger.warning("SMSFLY skip — invalid UZ phone: %s -> %s", phone, normalized)
             return False
@@ -208,7 +209,7 @@ class SmsFlyClient:
             self._log(
                 phone=phone, normalized=normalized, kind=kind, message=message,
                 success=True, result_code=0, reason="DEV_MODE",
-                retry_count=0, user_id=user_id,
+                retry_count=0, user_id=user_id, campaign_id=campaign_id,
             )
             return True
 
@@ -221,7 +222,7 @@ class SmsFlyClient:
                 self._log(
                     phone=phone, normalized=normalized, kind=kind, message=message,
                     success=True, result_code=0, reason="OK",
-                    retry_count=attempt, user_id=user_id,
+                    retry_count=attempt, user_id=user_id, campaign_id=campaign_id,
                 )
                 return True
             except SmsFlyError as e:
@@ -236,7 +237,7 @@ class SmsFlyClient:
                 self._log(
                     phone=phone, normalized=normalized, kind=kind, message=message,
                     success=False, result_code=last_code, reason=last_reason[:120],
-                    retry_count=attempt, user_id=user_id,
+                    retry_count=attempt, user_id=user_id, campaign_id=campaign_id,
                 )
                 logger.warning(
                     "SMSFLY send failed phone=%s reason=%s (after %s retries)",
@@ -314,6 +315,7 @@ class SmsFlyClient:
         reason: str,
         retry_count: int,
         user_id: int | None,
+        campaign_id: int | None = None,
     ):
         try:
             from .models import SmsSendLog
@@ -327,6 +329,7 @@ class SmsFlyClient:
                 reason=reason,
                 retry_count=retry_count,
                 related_user_id=user_id,
+                campaign_id=campaign_id,
             )
         except Exception:
             logger.exception("SmsSendLog yozib bo'lmadi")

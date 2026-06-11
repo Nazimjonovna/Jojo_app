@@ -176,6 +176,7 @@ from .admin_views import (
     AdminQuickReplyListCreateView, AdminQuickReplyDetailView,
     TelegramWebhookView,
 )
+from . import admin_bulk_sms as _bulk
 
 urlpatterns += [
     path("admin/login/", AdminLoginView.as_view(), name="admin-login"),
@@ -184,6 +185,16 @@ urlpatterns += [
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
     path("admin/sms/test/", AdminSmsTestView.as_view(), name="admin-sms-test"),
     path("admin/sms/log/", AdminSmsLogView.as_view(), name="admin-sms-log"),
+
+    # Bulk SMS — contact groups + campaigns
+    path("admin/sms/parse-numbers/", _bulk.AdminSmsParseNumbersView.as_view(), name="admin-sms-parse-numbers"),
+    path("admin/sms/groups/", _bulk.AdminSmsContactGroupListCreateView.as_view(), name="admin-sms-group-list"),
+    path("admin/sms/groups/<int:group_id>/", _bulk.AdminSmsContactGroupDetailView.as_view(), name="admin-sms-group-detail"),
+    path("admin/sms/groups/<int:group_id>/contacts/", _bulk.AdminSmsContactListCreateView.as_view(), name="admin-sms-group-contacts"),
+    path("admin/sms/groups/<int:group_id>/contacts/<int:contact_id>/", _bulk.AdminSmsContactDetailView.as_view(), name="admin-sms-group-contact-detail"),
+    path("admin/sms/groups/<int:group_id>/import/", _bulk.AdminSmsGroupImportView.as_view(), name="admin-sms-group-import"),
+    path("admin/sms/campaigns/", _bulk.AdminBulkSmsCampaignListCreateView.as_view(), name="admin-sms-campaign-list"),
+    path("admin/sms/campaigns/<int:campaign_id>/", _bulk.AdminBulkSmsCampaignDetailView.as_view(), name="admin-sms-campaign-detail"),
 
     path("admin/notification-rules/", AdminNotificationRuleListCreate.as_view(), name="admin-notif-rule-list"),
     path("admin/notification-rules/<int:rule_id>/", AdminNotificationRuleDetail.as_view(), name="admin-notif-rule-detail"),

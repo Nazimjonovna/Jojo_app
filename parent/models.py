@@ -2993,12 +2993,14 @@ class SmsSendLog(models.Model):
 
     KIND_OTP = "otp"
     KIND_BROADCAST = "broadcast"
+    KIND_BULK = "bulk"
     KIND_RULE = "rule"
     KIND_TEST = "test"
     KIND_OTHER = "other"
     KIND_CHOICES = (
         (KIND_OTP, "OTP"),
         (KIND_BROADCAST, "Broadcast"),
+        (KIND_BULK, "Bulk"),
         (KIND_RULE, "Notif rule"),
         (KIND_TEST, "Test"),
         (KIND_OTHER, "Other"),
@@ -3020,6 +3022,16 @@ class SmsSendLog(models.Model):
     retry_count = models.PositiveSmallIntegerField(default=0)
     related_user_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
 
+    # Bulk SMS campaign — agar bu yozuv biror kampaniyaning qismi bo'lsa
+    campaign = models.ForeignKey(
+        "BulkSmsCampaign",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="logs",
+        db_index=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -3034,3 +3046,138 @@ class SmsSendLog(models.Model):
     def __str__(self):
         status = "OK" if self.success else f"FAIL({self.reason})"
         return f"{self.phone} {self.kind} {status}"
+
+
+class SmsContactGroup(models.Model):
+    """Telefon raqamlar guruhi — bulk SMS yuborishda qayta foydalanish uchun.
+
+    Misol: "STEM dasturlar mijozlari", "Premium parentlar 2026 Q1" va h.k.
+    Operator har safar yangi guruh yaratmasdan bir marotaba saqlangan
+    ro'yxatdan tanlasa ham bo'ladi.
+    """
+
+    name = models.CharField(max_length=120)
+    description = models.CharField(max_length=255, blank=True, default="")
+
+    # Egasi — agar shaxsiy guruh bo'lsa. Bo'sh — hammaga ko'rinadi.
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sms_contact_groups",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "SMS contact group"
+        verbose_name_plural = "SMS contact groups"
+
+    def __str__(self):
+        return self.name
+
+
+class SmsContact(models.Model):
+    """Guruh ichidagi bitta kontakt — telefon + ixtiyoriy ism/eslatma."""
+
+    group = models.ForeignKey(
+        SmsContactGroup,
+        on_delete=models.CASCADE,
+        related_name="contacts",
+    )
+    phone = models.CharField(max_length=20)
+    phone_normalized = models.CharField(max_length=20, db_index=True, default="")
+    name = models.CharField(max_length=120, blank=True, default="")
+    notes = models.CharField(max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        # Bir guruhda bir xil normalized raqam ikki marta bo'lmasin
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "phone_normalized"],
+                name="uniq_group_phone",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.phone} ({self.group.name})"
+
+
+class BulkSmsCampaign(models.Model):
+    """Bulk SMS kampaniyasi — admin tomonidan tanlangan raqamlarga matn yuborish.
+
+    Har bir kampaniya:
+      - 1 ta matn (4 tilda variantlar bo'lishi mumkin)
+      - N ta qabul qiluvchi (manual / guruh / CSV import)
+      - Status: queued (yangi yaratildi, hali start qilinmadi),
+                sending (jarayonda), done (yakunlandi)
+      - Sent/failed sonlari + per-recipient log (SmsSendLog FK orqali)
+    """
+
+    STATUS_QUEUED = "queued"
+    STATUS_SENDING = "sending"
+    STATUS_DONE = "done"
+    STATUS_CHOICES = (
+        (STATUS_QUEUED, "Navbatda"),
+        (STATUS_SENDING, "Yuborilmoqda"),
+        (STATUS_DONE, "Yakunlangan"),
+    )
+
+    SOURCE_MANUAL = "manual"
+    SOURCE_GROUP = "group"
+    SOURCE_CSV = "csv"
+    SOURCE_MIXED = "mixed"
+    SOURCE_CHOICES = (
+        (SOURCE_MANUAL, "Qo'lda kiritildi"),
+        (SOURCE_GROUP, "Guruhdan"),
+        (SOURCE_CSV, "CSV/XLSX dan"),
+        (SOURCE_MIXED, "Aralash"),
+    )
+
+    title = models.CharField(max_length=160, blank=True, default="")
+    message = models.TextField()
+    message_ru = models.TextField(blank=True, default="")
+    message_en = models.TextField(blank=True, default="")
+    message_uz_cyrl = models.TextField(blank=True, default="")
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_QUEUED, db_index=True)
+    source = models.CharField(max_length=16, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+
+    # Tanlangan guruh (agar SOURCE_GROUP yoki SOURCE_MIXED bo'lsa)
+    group = models.ForeignKey(
+        SmsContactGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="campaigns",
+    )
+
+    total = models.PositiveIntegerField(default=0)
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_sms_campaigns",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Bulk SMS campaign"
+        verbose_name_plural = "Bulk SMS campaigns"
+
+    def __str__(self):
+        return f"#{self.id} {self.title or self.message[:30]}"
