@@ -365,8 +365,10 @@ class AdminBroadcastNotificationView(APIView):
 
         title = (request.data.get("title") or "").strip()
         body = (request.data.get("body") or "").strip()
+        title_uz_cyrl = (request.data.get("title_uz_cyrl") or "").strip()
         title_ru = (request.data.get("title_ru") or "").strip()
         title_en = (request.data.get("title_en") or "").strip()
+        body_uz_cyrl = (request.data.get("body_uz_cyrl") or "").strip()
         body_ru = (request.data.get("body_ru") or "").strip()
         body_en = (request.data.get("body_en") or "").strip()
         category = request.data.get("category", "system")
@@ -397,11 +399,15 @@ class AdminBroadcastNotificationView(APIView):
         from .services import record_parent_notification, pick_for_lang
 
         title_translations = {"uz": title}
+        if title_uz_cyrl:
+            title_translations["uz_cyrl"] = title_uz_cyrl
         if title_ru:
             title_translations["ru"] = title_ru
         if title_en:
             title_translations["en"] = title_en
         body_translations = {"uz": body}
+        if body_uz_cyrl:
+            body_translations["uz_cyrl"] = body_uz_cyrl
         if body_ru:
             body_translations["ru"] = body_ru
         if body_en:
@@ -444,7 +450,7 @@ class AdminBroadcastNotificationView(APIView):
 
         created = 0
         # Parent tili bo'yicha SMSlarni guruhlash — har bir tilga o'z matnida yuborish.
-        sms_by_lang = {"uz": [], "ru": [], "en": []}
+        sms_by_lang = {"uz": [], "uz_cyrl": [], "ru": [], "en": []}
         for parent in parents_qs.iterator():
             try:
                 record_parent_notification(
@@ -464,6 +470,8 @@ class AdminBroadcastNotificationView(APIView):
                         bucket = "ru"
                     elif plang.startswith("en"):
                         bucket = "en"
+                    elif "cyr" in plang:
+                        bucket = "uz_cyrl"
                     else:
                         bucket = "uz"
                     sms_by_lang[bucket].append(parent.phone)
@@ -1786,6 +1794,9 @@ def _game_category_to_dict(c, request=None):
     return {
         "id": c.id,
         "name": c.name,
+        "name_uz_cyrl": getattr(c, "name_uz_cyrl", "") or "",
+        "name_ru": getattr(c, "name_ru", "") or "",
+        "name_en": getattr(c, "name_en", "") or "",
         "icon": icon,
         "is_active": c.is_active,
         "order": c.order,
@@ -1804,7 +1815,13 @@ def _game_to_dict(g, request=None):
         "category": g.category_id,
         "category_name": g.category.name if g.category else None,
         "title": g.title,
+        "title_uz_cyrl": getattr(g, "title_uz_cyrl", "") or "",
+        "title_ru": getattr(g, "title_ru", "") or "",
+        "title_en": getattr(g, "title_en", "") or "",
         "description": g.description or "",
+        "description_uz_cyrl": getattr(g, "description_uz_cyrl", "") or "",
+        "description_ru": getattr(g, "description_ru", "") or "",
+        "description_en": getattr(g, "description_en", "") or "",
         "thumbnail": _img(g.thumbnail),
         "banner": _img(g.banner),
         "game_url": g.game_url or "",
@@ -1850,6 +1867,9 @@ class AdminGameCategoryListCreate(APIView):
             return Response({"detail": "Nom majburiy"}, status=400)
         c = GameCategory.objects.create(
             name=name,
+            name_uz_cyrl=(request.data.get("name_uz_cyrl") or "").strip(),
+            name_ru=(request.data.get("name_ru") or "").strip(),
+            name_en=(request.data.get("name_en") or "").strip(),
             is_active=bool(request.data.get("is_active", True)),
             order=int(request.data.get("order") or 0),
         )
@@ -1867,7 +1887,10 @@ class AdminGameCategoryDetail(APIView):
         c = GameCategory.objects.filter(id=cat_id).first()
         if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        for f in ("name", "is_active", "order"):
+        for f in (
+            "name", "name_uz_cyrl", "name_ru", "name_en",
+            "is_active", "order",
+        ):
             if f in request.data:
                 setattr(c, f, request.data[f])
         icon = _resolve_image_path(request.data.get("icon"))
@@ -1908,7 +1931,13 @@ class AdminGameListCreate(APIView):
         g = GameItem.objects.create(
             category=category,
             title=title,
+            title_uz_cyrl=(request.data.get("title_uz_cyrl") or "").strip(),
+            title_ru=(request.data.get("title_ru") or "").strip(),
+            title_en=(request.data.get("title_en") or "").strip(),
             description=request.data.get("description") or "",
+            description_uz_cyrl=request.data.get("description_uz_cyrl") or "",
+            description_ru=request.data.get("description_ru") or "",
+            description_en=request.data.get("description_en") or "",
             game_url=request.data.get("game_url") or "",
             screen_key=request.data.get("screen_key") or "",
             age_min=int(request.data.get("age_min") or 1),
@@ -1934,7 +1963,9 @@ class AdminGameDetail(APIView):
         if not g:
             return Response({"detail": "Topilmadi"}, status=404)
         for f in (
-            "title", "description", "game_url", "screen_key",
+            "title", "title_uz_cyrl", "title_ru", "title_en",
+            "description", "description_uz_cyrl", "description_ru", "description_en",
+            "game_url", "screen_key",
             "age_min", "age_max", "reward_points",
             "is_active", "is_featured", "order",
         ):
@@ -2000,9 +2031,11 @@ def _kids_video_to_dict(v, request=None):
         "category": v.category_id,
         "category_name": v.category.name if v.category else None,
         "title": v.title,
+        "title_uz_cyrl": getattr(v, "title_uz_cyrl", "") or "",
         "title_ru": v.title_ru,
         "title_en": v.title_en,
         "description": v.description or "",
+        "description_uz_cyrl": getattr(v, "description_uz_cyrl", "") or "",
         "description_ru": v.description_ru,
         "description_en": v.description_en,
         "youtube_url": v.youtube_url,
@@ -2032,6 +2065,7 @@ class AdminKidsVideoCategoryListCreate(APIView):
             return Response({"detail": "Nom majburiy"}, status=400)
         c = KidsVideoCategory.objects.create(
             name=name,
+            name_uz_cyrl=(request.data.get("name_uz_cyrl") or "").strip(),
             name_ru=(request.data.get("name_ru") or "").strip(),
             name_en=(request.data.get("name_en") or "").strip(),
             is_active=bool(request.data.get("is_active", True)),
@@ -2051,7 +2085,10 @@ class AdminKidsVideoCategoryDetail(APIView):
         c = KidsVideoCategory.objects.filter(id=cat_id).first()
         if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        for f in ("name", "name_ru", "name_en", "is_active", "order"):
+        for f in (
+            "name", "name_uz_cyrl", "name_ru", "name_en",
+            "is_active", "order",
+        ):
             if f in request.data:
                 setattr(c, f, request.data[f])
         icon = _resolve_image_path(request.data.get("icon"))
@@ -2099,9 +2136,11 @@ class AdminKidsVideoListCreate(APIView):
         v = KidsVideo.objects.create(
             category=category,
             title=title,
+            title_uz_cyrl=(request.data.get("title_uz_cyrl") or "").strip(),
             title_ru=(request.data.get("title_ru") or "").strip(),
             title_en=(request.data.get("title_en") or "").strip(),
             description=request.data.get("description") or "",
+            description_uz_cyrl=request.data.get("description_uz_cyrl") or "",
             description_ru=request.data.get("description_ru") or "",
             description_en=request.data.get("description_en") or "",
             youtube_url=youtube_url,
@@ -2127,8 +2166,8 @@ class AdminKidsVideoDetail(APIView):
         if not v:
             return Response({"detail": "Topilmadi"}, status=404)
         text_fields = (
-            "title", "title_ru", "title_en",
-            "description", "description_ru", "description_en",
+            "title", "title_uz_cyrl", "title_ru", "title_en",
+            "description", "description_uz_cyrl", "description_ru", "description_en",
             "youtube_url", "duration_label",
         )
         for f in text_fields:
@@ -2191,9 +2230,11 @@ def _rule_to_dict(r):
         "audience": r.audience,
         "audience_params": r.audience_params or {},
         "title": r.title,
+        "title_uz_cyrl": getattr(r, "title_uz_cyrl", "") or "",
         "title_ru": r.title_ru,
         "title_en": r.title_en,
         "body": r.body,
+        "body_uz_cyrl": getattr(r, "body_uz_cyrl", "") or "",
         "body_ru": r.body_ru,
         "body_en": r.body_en,
         "category": r.category,
@@ -2207,8 +2248,12 @@ def _rule_to_dict(r):
 
 
 def _rule_apply_payload(rule, data):
-    for f in ("name", "trigger_type", "audience", "title", "title_ru", "title_en",
-              "body", "body_ru", "body_en", "category"):
+    for f in (
+        "name", "trigger_type", "audience",
+        "title", "title_uz_cyrl", "title_ru", "title_en",
+        "body", "body_uz_cyrl", "body_ru", "body_en",
+        "category",
+    ):
         if f in data:
             setattr(rule, f, data[f] or "")
     if "trigger_params" in data:
