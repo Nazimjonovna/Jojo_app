@@ -1,58 +1,34 @@
 {
-  "$comment": "Jojolingo kurs kontenti sxemasi. Bitta fayl = bitta kurs. import_course komandasi bilan yuklanadi: python manage.py import_course content/uz_en_a0.json",
+  "$comment": "uz->en A0 kursi. Unit 1: Salomlashish va tanishish. Eski content/uz_en_a0.json o'rniga shu faylni qo'ying.",
 
   "course": {
     "code": "uz-en",
     "source_language": "uz",
     "target_language": "en",
     "title_uz": "Ingliz tili",
-    "description_uz": "O'zbek tilida so'zlashuvchilar uchun ingliz tili kursi"
+    "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"
   },
 
   "vocabulary": [
-    {
-      "word": "hello",
-      "translation": "salom",
-      "transcription": "heˈləʊ",
-      "part_of_speech": "interjection",
-      "example": "Hello, my name is Aziz.",
-      "example_translation": "Salom, mening ismim Aziz.",
-      "audio": "audio/en/hello.mp3",
-      "image": "img/hello.png",
-      "tags": ["greetings", "a0"]
-    },
-    {
-      "word": "goodbye",
-      "translation": "xayr",
-      "transcription": "ɡʊdˈbaɪ",
-      "part_of_speech": "interjection",
-      "example": "Goodbye, see you tomorrow!",
-      "example_translation": "Xayr, ertaga ko'rishamiz!",
-      "audio": "audio/en/goodbye.mp3",
-      "tags": ["greetings", "a0"]
-    },
-    {
-      "word": "cat",
-      "translation": "mushuk",
-      "transcription": "kæt",
-      "part_of_speech": "noun",
-      "example": "The cat is sleeping.",
-      "example_translation": "Mushuk uxlayapti.",
-      "audio": "audio/en/cat.mp3",
-      "image": "img/cat.png",
-      "tags": ["animals", "a0"]
-    },
-    {
-      "word": "dog",
-      "translation": "it",
-      "transcription": "dɒɡ",
-      "part_of_speech": "noun",
-      "example": "I have a dog.",
-      "example_translation": "Mening itim bor.",
-      "audio": "audio/en/dog.mp3",
-      "image": "img/dog.png",
-      "tags": ["animals", "a0"]
-    }
+    {"word": "hello", "translation": "salom", "level_code": "A0", "example": "Hello, friend!", "example_translation": "Salom, do'st!", "audio": "audio/en/hello.mp3", "image": "img/hello.png", "tags": ["greetings"]},
+    {"word": "hi", "translation": "salom (do'stona)", "level_code": "A0", "example": "Hi! How are you?", "example_translation": "Salom! Qalaysan?", "audio": "audio/en/hi.mp3", "tags": ["greetings"]},
+    {"word": "goodbye", "translation": "xayr", "level_code": "A0", "example": "Goodbye, see you!", "example_translation": "Xayr, ko'rishguncha!", "audio": "audio/en/goodbye.mp3", "tags": ["greetings"]},
+    {"word": "bye", "translation": "xayr (qisqa)", "level_code": "A0", "example": "Bye, friend!", "example_translation": "Xayr, do'st!", "audio": "audio/en/bye.mp3", "tags": ["greetings"]},
+    {"word": "friend", "translation": "do'st", "level_code": "A0", "example": "You are my friend.", "example_translation": "Sen mening do'stimsan.", "audio": "audio/en/friend.mp3", "image": "img/friend.png", "tags": ["greetings"]},
+    {"word": "good morning", "translation": "xayrli tong", "level_code": "A0", "example": "Good morning, Aziz!", "example_translation": "Xayrli tong, Aziz!", "audio": "audio/en/good_morning.mp3", "image": "img/morning.png", "tags": ["greetings"]},
+    {"word": "good afternoon", "translation": "xayrli kun", "level_code": "A0", "example": "Good afternoon!", "example_translation": "Xayrli kun!", "audio": "audio/en/good_afternoon.mp3", "tags": ["greetings"]},
+    {"word": "good evening", "translation": "xayrli kech", "level_code": "A0", "example": "Good evening, friends!", "example_translation": "Xayrli kech, do'stlar!", "audio": "audio/en/good_evening.mp3", "image": "img/evening.png", "tags": ["greetings"]},
+    {"word": "good night", "translation": "xayrli tun", "level_code": "A0", "example": "Good night, Malika!", "example_translation": "Xayrli tun, Malika!", "audio": "audio/en/good_night.mp3", "image": "img/night.png", "tags": ["greetings"]},
+    {"word": "name", "translation": "ism", "level_code": "A0", "example": "My name is Aziz.", "example_translation": "Mening ismim Aziz.", "audio": "audio/en/name.mp3", "tags": ["introduction"]},
+    {"word": "my", "translation": "mening", "level_code": "A0", "example": "My name is Lola.", "example_translation": "Mening ismim Lola.", "audio": "audio/en/my.mp3", "tags": ["introduction"]},
+    {"word": "your", "translation": "sening", "level_code": "A0", "example": "What is your name?", "example_translation": "Sening isming nima?", "audio": "audio/en/your.mp3", "tags": ["introduction"]},
+    {"word": "I", "translation": "men", "level_code": "A0", "example": "I am Aziz.", "example_translation": "Men Azizman.", "audio": "audio/en/i.mp3", "tags": ["introduction"]},
+    {"word": "you", "translation": "sen", "level_code": "A0", "example": "You are my friend.", "example_translation": "Sen mening do'stimsan.", "audio": "audio/en/you.mp3", "tags": ["introduction"]},
+    {"word": "yes", "translation": "ha", "level_code": "A0", "example": "Yes, please!", "example_translation": "Ha, iltimos!", "audio": "audio/en/yes.mp3", "tags": ["polite"]},
+    {"word": "no", "translation": "yo'q", "level_code": "A0", "example": "No, thank you.", "example_translation": "Yo'q, rahmat.", "audio": "audio/en/no.mp3", "tags": ["polite"]},
+    {"word": "please", "translation": "iltimos", "level_code": "A0", "example": "One apple, please.", "example_translation": "Bitta olma, iltimos.", "audio": "audio/en/please.mp3", "tags": ["polite"]},
+    {"word": "thank you", "translation": "rahmat", "level_code": "A0", "example": "Thank you, teacher!", "example_translation": "Rahmat, o'qituvchi!", "audio": "audio/en/thank_you.mp3", "tags": ["polite"]},
+    {"word": "sorry", "translation": "kechirasiz", "level_code": "A0", "example": "Sorry, I am late.", "example_translation": "Kechirasiz, kechikdim.", "audio": "audio/en/sorry.mp3", "tags": ["polite"]}
   ],
 
   "levels": [
@@ -63,8 +39,9 @@
       "units": [
         {
           "code": "a0-u1",
-          "title_uz": "Salomlashish",
+          "title_uz": "Salomlashish va tanishish",
           "title_en": "Greetings",
+          "description_uz": "Salomlashish, xayrlashish va o'zingni tanishtirishni o'rganamiz",
           "order": 0,
           "icon": "unit_greetings",
           "lessons": [
@@ -73,110 +50,153 @@
               "title_uz": "Salom va xayr",
               "order": 0,
               "xp_reward": 10,
-              "new_words": ["hello", "goodbye"],
+              "new_words": ["hello", "hi", "goodbye", "bye", "friend"],
               "exercises": [
-                {
-                  "type": "multiple_choice",
-                  "order": 0,
-                  "prompt_uz": "'Salom' inglizchada qanday bo'ladi?",
-                  "word": "hello",
-                  "options": [
-                    {"text": "Hello", "correct": true},
-                    {"text": "Goodbye", "correct": false},
-                    {"text": "Cat", "correct": false},
-                    {"text": "Dog", "correct": false}
-                  ],
-                  "hint_uz": "Bu so'z uchrashganda aytiladi."
-                },
-                {
-                  "type": "translate",
-                  "order": 1,
-                  "prompt_uz": "Tarjima qiling: Xayr",
-                  "word": "goodbye",
-                  "correct_answers": ["goodbye", "good bye"],
-                  "hint_uz": "Xayrlashganda aytiladigan so'z."
-                },
-                {
-                  "type": "word_bank",
-                  "order": 2,
-                  "prompt_uz": "Gapni yig'ing: 'Salom, mening ismim Aziz'",
-                  "correct_answers": ["Hello my name is Aziz"],
-                  "word_bank": ["Hello", "my", "name", "is", "Aziz", "dog", "goodbye"],
-                  "hint_uz": "Gap 'Hello' bilan boshlanadi."
-                },
-                {
-                  "type": "listen",
-                  "order": 3,
-                  "prompt_uz": "Eshiting va yozing",
-                  "audio": "audio/en/hello.mp3",
-                  "correct_answers": ["hello"],
-                  "word": "hello"
-                }
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Salom' inglizchada qanday bo'ladi?", "word": "hello",
+                 "options": [{"text": "Hello", "correct": true}, {"text": "Goodbye", "correct": false}, {"text": "Sorry", "correct": false}, {"text": "No", "correct": false}],
+                 "hint_uz": "Uchrashganda aytiladigan so'z."},
+                {"type": "listen", "order": 1, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/hello.mp3", "word": "hello",
+                 "correct_answers": ["hello"]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Xayr", "word": "goodbye",
+                 "correct_answers": ["goodbye", "bye", "good bye"],
+                 "hint_uz": "Xayrlashganda aytiladi."},
+                {"type": "match_pairs", "order": 3, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "hello", "right": "salom"}, {"left": "goodbye", "right": "xayr"}, {"left": "friend", "right": "do'st"}]},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Bo'sh joyni to'ldiring: ___, friend!", "word": "hello",
+                 "correct_answers": ["Hello", "Hi"],
+                 "hint_uz": "Do'stingni ko'rganda nima deysan?"},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Do'st' inglizchada qanday bo'ladi?", "word": "friend",
+                 "options": [{"text": "Friend", "correct": true}, {"text": "Name", "correct": false}, {"text": "Hello", "correct": false}],
+                 "hint_uz": "Sen bilan birga o'ynaydigan odam."},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Salom, mening do'stim'",
+                 "correct_answers": ["Hello my friend"],
+                 "word_bank": ["Hello", "my", "friend", "goodbye", "no", "sorry"],
+                 "hint_uz": "Gap salomlashishdan boshlanadi."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Salom, do'st!", "word": "hello",
+                 "correct_answers": ["Hello friend", "Hello, friend!", "Hi friend", "Hi, friend!"]}
               ]
             },
             {
               "code": "a0-u1-l2",
-              "title_uz": "Takrorlash: salomlashish",
+              "title_uz": "Xayrli tong!",
               "order": 1,
               "xp_reward": 10,
-              "is_review": true,
-              "review_words": ["hello", "goodbye"],
+              "new_words": ["good morning", "good afternoon", "good evening", "good night"],
               "exercises": [
-                {
-                  "type": "match_pairs",
-                  "order": 0,
-                  "prompt_uz": "Juftliklarni toping",
-                  "pairs": [
-                    {"left": "hello", "right": "salom"},
-                    {"left": "goodbye", "right": "xayr"}
-                  ]
-                },
-                {
-                  "type": "fill_blank",
-                  "order": 1,
-                  "prompt_uz": "Bo'sh joyni to'ldiring: ___, my name is Malika.",
-                  "correct_answers": ["Hello"],
-                  "word": "hello",
-                  "hint_uz": "Gap boshida salomlashamiz."
-                }
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Xayrli tong' inglizchada qanday bo'ladi?", "word": "good morning",
+                 "options": [{"text": "Good morning", "correct": true}, {"text": "Good night", "correct": false}, {"text": "Goodbye", "correct": false}],
+                 "hint_uz": "Ertalab aytamiz."},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "good morning", "right": "xayrli tong"}, {"left": "good evening", "right": "xayrli kech"}, {"left": "good night", "right": "xayrli tun"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Xayrli tun", "word": "good night",
+                 "correct_answers": ["good night", "goodnight"],
+                 "hint_uz": "Uxlashdan oldin aytamiz."},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Ertalab aytamiz: Good ___!", "word": "good morning",
+                 "correct_answers": ["morning"],
+                 "hint_uz": "Quyosh chiqqan payt."},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/good_night.mp3", "word": "good night",
+                 "correct_answers": ["good night", "goodnight"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "Kechqurun ko'rishganda nima deymiz?", "word": "good evening",
+                 "options": [{"text": "Good evening", "correct": true}, {"text": "Good morning", "correct": false}, {"text": "Good night", "correct": false}],
+                 "hint_uz": "'Good night' uxlashdan oldin, ko'rishganda esa boshqacha."},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Xayrli tong, mening do'stim'",
+                 "correct_answers": ["Good morning my friend"],
+                 "word_bank": ["Good", "morning", "my", "friend", "night", "bye"],
+                 "hint_uz": "Ikki so'z: Good + morning."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Xayrli kech", "word": "good evening",
+                 "correct_answers": ["good evening"]}
               ]
-            }
-          ]
-        },
-        {
-          "code": "a0-u2",
-          "title_uz": "Hayvonlar",
-          "title_en": "Animals",
-          "order": 1,
-          "icon": "unit_animals",
-          "lessons": [
+            },
             {
-              "code": "a0-u2-l1",
-              "title_uz": "Uy hayvonlari",
-              "order": 0,
+              "code": "a0-u1-l3",
+              "title_uz": "Mening ismim",
+              "order": 2,
               "xp_reward": 10,
-              "new_words": ["cat", "dog"],
+              "new_words": ["name", "my", "your", "I", "you"],
               "exercises": [
-                {
-                  "type": "multiple_choice",
-                  "order": 0,
-                  "prompt_uz": "'Mushuk' inglizchada qanday bo'ladi?",
-                  "word": "cat",
-                  "image": "img/cat.png",
-                  "options": [
-                    {"text": "Cat", "correct": true},
-                    {"text": "Dog", "correct": false},
-                    {"text": "Hello", "correct": false}
-                  ]
-                },
-                {
-                  "type": "translate",
-                  "order": 1,
-                  "prompt_uz": "Tarjima qiling: Mening itim bor",
-                  "correct_answers": ["I have a dog", "I have got a dog"],
-                  "word": "dog",
-                  "hint_uz": "'Mening ... bor' = 'I have a ...'"
-                }
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ism' inglizchada qanday bo'ladi?", "word": "name",
+                 "options": [{"text": "Name", "correct": true}, {"text": "Friend", "correct": false}, {"text": "Morning", "correct": false}],
+                 "hint_uz": "Har bir odamda bor: Aziz, Malika, Lola..."},
+                {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Mening ismim Aziz'",
+                 "correct_answers": ["My name is Aziz"],
+                 "word_bank": ["My", "name", "is", "Aziz", "your", "friend"],
+                 "hint_uz": "Gap 'My' bilan boshlanadi."},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Bo'sh joyni to'ldiring: My ___ is Malika.", "word": "name",
+                 "correct_answers": ["name"],
+                 "hint_uz": "Malika — bu nima? Uning ..."},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Mening ismim Lola",
+                 "correct_answers": ["My name is Lola"],
+                 "word": "name",
+                 "hint_uz": "'Mening ismim' = 'My name is'"},
+                {"type": "multiple_choice", "order": 4, "prompt_uz": "'Men' inglizchada qanday bo'ladi?", "word": "I",
+                 "options": [{"text": "I", "correct": true}, {"text": "You", "correct": false}, {"text": "My", "correct": false}],
+                 "hint_uz": "Inglizchada doim katta harf bilan yoziladi."},
+                {"type": "match_pairs", "order": 5, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "I", "right": "men"}, {"left": "you", "right": "sen"}, {"left": "my", "right": "mening"}, {"left": "your", "right": "sening"}]},
+                {"type": "fill_blank", "order": 6, "prompt_uz": "Bo'sh joyni to'ldiring: What is ___ name?", "word": "your",
+                 "correct_answers": ["your"],
+                 "hint_uz": "Sendan so'rayapman: SENING isming nima?"},
+                {"type": "word_bank", "order": 7, "prompt_uz": "Gapni yig'ing: 'Sening isming nima?'",
+                 "correct_answers": ["What is your name"],
+                 "word_bank": ["What", "is", "your", "name", "my", "I"],
+                 "hint_uz": "Savol 'What' bilan boshlanadi."}
+              ]
+            },
+            {
+              "code": "a0-u1-l4",
+              "title_uz": "Muloyim so'zlar",
+              "order": 3,
+              "xp_reward": 10,
+              "new_words": ["yes", "no", "please", "thank you", "sorry"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Rahmat' inglizchada qanday bo'ladi?", "word": "thank you",
+                 "options": [{"text": "Thank you", "correct": true}, {"text": "Please", "correct": false}, {"text": "Sorry", "correct": false}],
+                 "hint_uz": "Kimdir senga yaxshilik qilsa aytasan."},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "'Ha' inglizchada qanday bo'ladi?", "word": "yes",
+                 "options": [{"text": "Yes", "correct": true}, {"text": "No", "correct": false}, {"text": "Hi", "correct": false}]},
+                {"type": "match_pairs", "order": 2, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "yes", "right": "ha"}, {"left": "no", "right": "yo'q"}, {"left": "please", "right": "iltimos"}, {"left": "sorry", "right": "kechirasiz"}]},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Rahmat", "word": "thank you",
+                 "correct_answers": ["thank you", "thanks"]},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Bo'sh joyni to'ldiring: ___, I am late.", "word": "sorry",
+                 "correct_answers": ["Sorry"],
+                 "hint_uz": "Kechikkaningda nima deysan?"},
+                {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/please.mp3", "word": "please",
+                 "correct_answers": ["please"]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Rahmat, mening do'stim'",
+                 "correct_answers": ["Thank you my friend"],
+                 "word_bank": ["Thank", "you", "my", "friend", "sorry", "no"],
+                 "hint_uz": "'Rahmat' ikki so'zdan iborat: Thank + you."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Kechirasiz", "word": "sorry",
+                 "correct_answers": ["sorry"]}
+              ]
+            },
+            {
+              "code": "a0-u1-l5",
+              "title_uz": "Takrorlash: salomlashish",
+              "order": 4,
+              "xp_reward": 15,
+              "is_review": true,
+              "review_words": ["hello", "hi", "goodbye", "bye", "friend", "good morning", "good afternoon", "good evening", "good night", "name", "my", "your", "I", "you", "yes", "no", "please", "thank you", "sorry"],
+              "exercises": [
+                {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "hello", "right": "salom"}, {"left": "good night", "right": "xayrli tun"}, {"left": "thank you", "right": "rahmat"}, {"left": "friend", "right": "do'st"}]},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "Xayrlashganda nima deymiz?", "word": "goodbye",
+                 "options": [{"text": "Goodbye", "correct": true}, {"text": "Hello", "correct": false}, {"text": "Yes", "correct": false}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Mening ismim Lola", "word": "name",
+                 "correct_answers": ["My name is Lola"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Ertalabki salomlashish: Good ___!", "word": "good morning",
+                 "correct_answers": ["morning"]},
+                {"type": "word_bank", "order": 4, "prompt_uz": "Gapni yig'ing: 'Salom, mening ismim Aziz'",
+                 "correct_answers": ["Hello my name is Aziz"],
+                 "word_bank": ["Hello", "my", "name", "is", "Aziz", "goodbye", "sorry"],
+                 "hint_uz": "Avval salomlash, keyin ismingni ayt."},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Iltimos' inglizchada qanday bo'ladi?", "word": "please",
+                 "options": [{"text": "Please", "correct": true}, {"text": "Sorry", "correct": false}, {"text": "Thank you", "correct": false}]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/goodbye.mp3", "word": "goodbye",
+                 "correct_answers": ["goodbye", "good bye"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Xayr, do'st!", "word": "goodbye",
+                 "correct_answers": ["Goodbye friend", "Goodbye, friend!", "Bye friend", "Bye, friend!"]}
               ]
             }
           ]

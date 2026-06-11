@@ -1,0 +1,198 @@
+{
+  "$comment": "uz->en A0 kursi. Unit 5: Hayvonlar (order=4). 'I have a...' konstruksiyasi, 'a' artikli, big/little sifatlari.",
+
+  "course": {
+    "code": "uz-en",
+    "source_language": "uz",
+    "target_language": "en",
+    "title_uz": "Ingliz tili",
+    "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"
+  },
+
+  "vocabulary": [
+    {"word": "cat", "translation": "mushuk", "level_code": "A0", "example": "I have a cat.", "example_translation": "Menda mushuk bor.", "audio": "audio/en/cat.mp3", "image": "img/cat.png", "tags": ["animals"]},
+    {"word": "dog", "translation": "it", "level_code": "A0", "example": "I have a dog.", "example_translation": "Menda it bor.", "audio": "audio/en/dog.mp3", "image": "img/dog.png", "tags": ["animals"]},
+    {"word": "have", "translation": "ega bo'lmoq (bor)", "level_code": "A0", "example": "I have a rabbit.", "example_translation": "Menda quyon bor.", "audio": "audio/en/have.mp3", "tags": ["grammar"]},
+    {"word": "a", "translation": "noaniq artikl (bitta)", "level_code": "A0", "example": "I have a cat.", "example_translation": "Menda (bitta) mushuk bor.", "audio": "audio/en/a.mp3", "tags": ["grammar"]},
+    {"word": "animal", "translation": "hayvon", "level_code": "A0", "example": "The cat is an animal.", "example_translation": "Mushuk — hayvon.", "audio": "audio/en/animal.mp3", "image": "img/animals.png", "tags": ["animals"]},
+    {"word": "horse", "translation": "ot", "level_code": "A0", "example": "The horse is big.", "example_translation": "Ot katta.", "audio": "audio/en/horse.mp3", "image": "img/horse.png", "tags": ["animals"]},
+    {"word": "cow", "translation": "sigir", "level_code": "A0", "example": "I have a cow.", "example_translation": "Menda sigir bor.", "audio": "audio/en/cow.mp3", "image": "img/cow.png", "tags": ["animals"]},
+    {"word": "sheep", "translation": "qo'y", "level_code": "A0", "example": "The sheep is white.", "example_translation": "Qo'y oq.", "audio": "audio/en/sheep.mp3", "image": "img/sheep.png", "tags": ["animals"]},
+    {"word": "goat", "translation": "echki", "level_code": "A0", "example": "I have a goat.", "example_translation": "Menda echki bor.", "audio": "audio/en/goat.mp3", "image": "img/goat.png", "tags": ["animals"]},
+    {"word": "chicken", "translation": "tovuq", "level_code": "A0", "example": "The chicken is little.", "example_translation": "Tovuq kichkina.", "audio": "audio/en/chicken.mp3", "image": "img/chicken.png", "tags": ["animals"]},
+    {"word": "bird", "translation": "qush", "level_code": "A0", "example": "The bird is yellow.", "example_translation": "Qush sariq.", "audio": "audio/en/bird.mp3", "image": "img/bird.png", "tags": ["animals"]},
+    {"word": "fish", "translation": "baliq", "level_code": "A0", "example": "The fish is blue.", "example_translation": "Baliq ko'k.", "audio": "audio/en/fish.mp3", "image": "img/fish.png", "tags": ["animals"]},
+    {"word": "duck", "translation": "o'rdak", "level_code": "A0", "example": "The duck is white.", "example_translation": "O'rdak oq.", "audio": "audio/en/duck.mp3", "image": "img/duck.png", "tags": ["animals"]},
+    {"word": "rabbit", "translation": "quyon", "level_code": "A0", "example": "I have a rabbit.", "example_translation": "Menda quyon bor.", "audio": "audio/en/rabbit.mp3", "image": "img/rabbit.png", "tags": ["animals"]},
+    {"word": "donkey", "translation": "eshak", "level_code": "A0", "example": "The donkey is little.", "example_translation": "Eshak kichkina.", "audio": "audio/en/donkey.mp3", "image": "img/donkey.png", "tags": ["animals"]},
+    {"word": "lion", "translation": "sher", "level_code": "A0", "example": "The lion is big.", "example_translation": "Sher katta.", "audio": "audio/en/lion.mp3", "image": "img/lion.png", "tags": ["animals"]},
+    {"word": "elephant", "translation": "fil", "level_code": "A0", "example": "The elephant is big.", "example_translation": "Fil katta.", "audio": "audio/en/elephant.mp3", "image": "img/elephant.png", "tags": ["animals"]},
+    {"word": "bear", "translation": "ayiq", "level_code": "A0", "example": "The bear is brown.", "example_translation": "Ayiq jigarrang.", "audio": "audio/en/bear.mp3", "image": "img/bear.png", "tags": ["animals"]},
+    {"word": "big", "translation": "katta", "level_code": "A0", "example": "The elephant is big.", "example_translation": "Fil katta.", "audio": "audio/en/big.mp3", "image": "img/big.png", "tags": ["adjectives"]},
+    {"word": "little", "translation": "kichkina", "level_code": "A0", "example": "The cat is little.", "example_translation": "Mushuk kichkina.", "audio": "audio/en/little.mp3", "image": "img/little.png", "tags": ["adjectives"]}
+  ],
+
+  "levels": [
+    {
+      "code": "A0",
+      "title_uz": "Boshlang'ich",
+      "order": 0,
+      "units": [
+        {
+          "code": "a0-u5",
+          "title_uz": "Hayvonlar",
+          "title_en": "Animals",
+          "description_uz": "Hayvonlarni va 'Menda ... bor' deyishni o'rganamiz",
+          "order": 4,
+          "icon": "unit_animals",
+          "lessons": [
+            {
+              "code": "a0-u5-l1",
+              "title_uz": "Mening uy hayvonim",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["cat", "dog", "have", "a", "animal"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Mushuk' inglizchada qanday bo'ladi?", "word": "cat",
+                 "options": [{"text": "Cat", "correct": true}, {"text": "Dog", "correct": false}, {"text": "Bird", "correct": false}],
+                 "image": "img/cat.png"},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "'It' inglizchada qanday bo'ladi?", "word": "dog",
+                 "options": [{"text": "Dog", "correct": true}, {"text": "Cat", "correct": false}, {"text": "Animal", "correct": false}],
+                 "image": "img/dog.png"},
+                {"type": "match_pairs", "order": 2, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "cat", "right": "mushuk"}, {"left": "dog", "right": "it"}, {"left": "animal", "right": "hayvon"}]},
+                {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Menda mushuk bor'",
+                 "correct_answers": ["I have a cat"],
+                 "word_bank": ["I", "have", "a", "cat", "dog"],
+                 "hint_uz": "'Menda ... bor' = 'I have a ...'"},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Menda it bor: I have a ___.", "word": "dog",
+                 "correct_answers": ["dog"]},
+                {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/cat.mp3", "word": "cat",
+                 "correct_answers": ["cat"]},
+                {"type": "translate", "order": 6, "prompt_uz": "Tarjima qiling: Menda mushuk bor", "word": "have",
+                 "correct_answers": ["I have a cat"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Hayvon", "word": "animal",
+                 "correct_answers": ["animal"]}
+              ]
+            },
+            {
+              "code": "a0-u5-l2",
+              "title_uz": "Hovlidagi hayvonlar",
+              "order": 1,
+              "xp_reward": 10,
+              "new_words": ["horse", "cow", "sheep", "goat", "chicken"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ot' inglizchada qanday bo'ladi?", "word": "horse",
+                 "options": [{"text": "Horse", "correct": true}, {"text": "Cow", "correct": false}, {"text": "Goat", "correct": false}],
+                 "image": "img/horse.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "horse", "right": "ot"}, {"left": "cow", "right": "sigir"}, {"left": "sheep", "right": "qo'y"}, {"left": "goat", "right": "echki"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Tovuq", "word": "chicken",
+                 "correct_answers": ["chicken"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Menda echki bor: I have a ___.", "word": "goat",
+                 "correct_answers": ["goat"]},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/horse.mp3", "word": "horse",
+                 "correct_answers": ["horse"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Qo'y' inglizchada qanday bo'ladi?", "word": "sheep",
+                 "options": [{"text": "Sheep", "correct": true}, {"text": "Chicken", "correct": false}, {"text": "Horse", "correct": false}],
+                 "image": "img/sheep.png"},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Menda ot va sigir bor'",
+                 "correct_answers": ["I have a horse and a cow"],
+                 "word_bank": ["I", "have", "a", "horse", "and", "a", "cow"],
+                 "hint_uz": "Har bir hayvon oldidan 'a' qo'yiladi."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda sigir bor", "word": "cow",
+                 "correct_answers": ["I have a cow"]}
+              ]
+            },
+            {
+              "code": "a0-u5-l3",
+              "title_uz": "Qush, baliq va quyon",
+              "order": 2,
+              "xp_reward": 10,
+              "new_words": ["bird", "fish", "duck", "rabbit", "donkey"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qush' inglizchada qanday bo'ladi?", "word": "bird",
+                 "options": [{"text": "Bird", "correct": true}, {"text": "Fish", "correct": false}, {"text": "Duck", "correct": false}],
+                 "image": "img/bird.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "bird", "right": "qush"}, {"left": "fish", "right": "baliq"}, {"left": "duck", "right": "o'rdak"}, {"left": "rabbit", "right": "quyon"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Eshak", "word": "donkey",
+                 "correct_answers": ["donkey"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Baliq ko'k rangda: The fish is ___.", "word": "fish",
+                 "correct_answers": ["blue"],
+                 "hint_uz": "Ranglarni eslang!"},
+                {"type": "multiple_choice", "order": 4, "prompt_uz": "'Quyon' inglizchada qanday bo'ladi?", "word": "rabbit",
+                 "options": [{"text": "Rabbit", "correct": true}, {"text": "Donkey", "correct": false}, {"text": "Bird", "correct": false}],
+                 "image": "img/rabbit.png"},
+                {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/duck.mp3", "word": "duck",
+                 "correct_answers": ["duck"]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Qush sariq'",
+                 "correct_answers": ["The bird is yellow"],
+                 "word_bank": ["The", "bird", "is", "yellow", "fish", "blue"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda quyon bor", "word": "rabbit",
+                 "correct_answers": ["I have a rabbit"]}
+              ]
+            },
+            {
+              "code": "a0-u5-l4",
+              "title_uz": "Katta va kichkina",
+              "order": 3,
+              "xp_reward": 10,
+              "new_words": ["lion", "elephant", "bear", "big", "little"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Sher' inglizchada qanday bo'ladi?", "word": "lion",
+                 "options": [{"text": "Lion", "correct": true}, {"text": "Bear", "correct": false}, {"text": "Elephant", "correct": false}],
+                 "image": "img/lion.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "lion", "right": "sher"}, {"left": "elephant", "right": "fil"}, {"left": "bear", "right": "ayiq"}, {"left": "big", "right": "katta"}, {"left": "little", "right": "kichkina"}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Fil katta: The elephant is ___.", "word": "big",
+                 "correct_answers": ["big"]},
+                {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Mushuk kichkina'",
+                 "correct_answers": ["The cat is little"],
+                 "word_bank": ["The", "cat", "is", "little", "big", "elephant"]},
+                {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Katta ayiq", "word": "bear",
+                 "correct_answers": ["a big bear", "big bear"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi hayvon KATTA?", "word": "elephant",
+                 "options": [{"text": "Elephant", "correct": true}, {"text": "Cat", "correct": false}, {"text": "Bird", "correct": false}],
+                 "hint_uz": "Eng katta quruqlik hayvoni."},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/elephant.mp3", "word": "elephant",
+                 "correct_answers": ["elephant"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Kichkina quyon", "word": "little",
+                 "correct_answers": ["a little rabbit", "little rabbit"]}
+              ]
+            },
+            {
+              "code": "a0-u5-l5",
+              "title_uz": "Takrorlash: hayvonlar",
+              "order": 4,
+              "xp_reward": 15,
+              "is_review": true,
+              "review_words": ["cat", "dog", "have", "a", "animal", "horse", "cow", "sheep", "goat", "chicken", "bird", "fish", "duck", "rabbit", "donkey", "lion", "elephant", "bear", "big", "little"],
+              "exercises": [
+                {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "cat", "right": "mushuk"}, {"left": "horse", "right": "ot"}, {"left": "duck", "right": "o'rdak"}, {"left": "elephant", "right": "fil"}]},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "'Hayvon' inglizchada qanday bo'ladi?", "word": "animal",
+                 "options": [{"text": "Animal", "correct": true}, {"text": "Lion", "correct": false}, {"text": "Family", "correct": false}]},
+                {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Menda katta it bor'",
+                 "correct_answers": ["I have a big dog"],
+                 "word_bank": ["I", "have", "a", "big", "dog", "little"],
+                 "hint_uz": "Sifat (big) hayvondan oldin keladi."},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Menda kichkina mushuk bor", "word": "little",
+                 "correct_answers": ["I have a little cat"]},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Ot jigarrang: The horse is ___.", "word": "horse",
+                 "correct_answers": ["brown"],
+                 "hint_uz": "Ranglarni eslang!"},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi hayvon KICHKINA?", "word": "bird",
+                 "options": [{"text": "Bird", "correct": true}, {"text": "Elephant", "correct": false}, {"text": "Bear", "correct": false}]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/lion.mp3", "word": "lion",
+                 "correct_answers": ["lion"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Fil katta", "word": "big",
+                 "correct_answers": ["The elephant is big", "Elephant is big"]}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

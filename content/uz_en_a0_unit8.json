@@ -1,0 +1,108 @@
+{
+  "$comment": "uz->en A0. Unit 8: Maktab (order=7). 'What is this? It is a...' va 'I read / I write'.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "school", "translation": "maktab", "level_code": "A0", "example": "I like school.", "example_translation": "Men maktabni yoqtiraman.", "audio": "audio/en/school.mp3", "image": "img/school.png", "tags": ["school"]},
+    {"word": "teacher", "translation": "o'qituvchi", "level_code": "A0", "example": "My teacher is kind.", "example_translation": "O'qituvchim mehribon.", "audio": "audio/en/teacher.mp3", "image": "img/teacher.png", "tags": ["school"]},
+    {"word": "student", "translation": "o'quvchi", "level_code": "A0", "example": "I am a student.", "example_translation": "Men o'quvchiman.", "audio": "audio/en/student.mp3", "image": "img/student.png", "tags": ["school"]},
+    {"word": "book", "translation": "kitob", "level_code": "A0", "example": "I read a book.", "example_translation": "Men kitob o'qiyman.", "audio": "audio/en/book.mp3", "image": "img/book.png", "tags": ["school"]},
+    {"word": "pen", "translation": "ruchka", "level_code": "A0", "example": "I have a pen.", "example_translation": "Menda ruchka bor.", "audio": "audio/en/pen.mp3", "image": "img/pen.png", "tags": ["school"]},
+    {"word": "pencil", "translation": "qalam", "level_code": "A0", "example": "The pencil is yellow.", "example_translation": "Qalam sariq.", "audio": "audio/en/pencil.mp3", "image": "img/pencil.png", "tags": ["school"]},
+    {"word": "paper", "translation": "qog'oz", "level_code": "A0", "example": "The paper is white.", "example_translation": "Qog'oz oq.", "audio": "audio/en/paper.mp3", "image": "img/paper.png", "tags": ["school"]},
+    {"word": "bag", "translation": "sumka", "level_code": "A0", "example": "I have a big bag.", "example_translation": "Menda katta sumka bor.", "audio": "audio/en/bag.mp3", "image": "img/bag.png", "tags": ["school"]},
+    {"word": "table", "translation": "stol", "level_code": "A0", "example": "It is a table.", "example_translation": "Bu stol.", "audio": "audio/en/table.mp3", "image": "img/table.png", "tags": ["school"]},
+    {"word": "chair", "translation": "stul", "level_code": "A0", "example": "It is a chair.", "example_translation": "Bu stul.", "audio": "audio/en/chair.mp3", "image": "img/chair.png", "tags": ["school"]},
+    {"word": "read", "translation": "o'qimoq", "level_code": "A0", "example": "I read a book.", "example_translation": "Men kitob o'qiyman.", "audio": "audio/en/read.mp3", "tags": ["school"]},
+    {"word": "write", "translation": "yozmoq", "level_code": "A0", "example": "I write.", "example_translation": "Men yozaman.", "audio": "audio/en/write.mp3", "tags": ["school"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u8", "title_uz": "Maktab buyumlari", "title_en": "School Things", "description_uz": "Maktab buyumlarini va 'Bu nima? - Bu ...' deyishni o'rganamiz", "order": 7, "icon": "unit_school", "lessons": [
+        {"code": "a0-u8-l1", "title_uz": "Maktabda", "order": 0, "xp_reward": 10,
+         "new_words": ["school", "teacher", "student", "book"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Maktab' inglizchada qanday bo'ladi?", "word": "school", "image": "img/school.png",
+           "options": [{"text": "School", "correct": true}, {"text": "Book", "correct": false}, {"text": "Teacher", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "school", "right": "maktab"}, {"left": "teacher", "right": "o'qituvchi"}, {"left": "student", "right": "o'quvchi"}, {"left": "book", "right": "kitob"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Kitob", "word": "book", "correct_answers": ["book"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men o'quvchiman: I am a ___.", "word": "student", "correct_answers": ["student"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/book.mp3", "word": "book", "correct_answers": ["book"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'O'qituvchi' inglizchada qanday bo'ladi?", "word": "teacher",
+           "options": [{"text": "Teacher", "correct": true}, {"text": "Student", "correct": false}, {"text": "School", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Men maktabni yoqtiraman'",
+           "correct_answers": ["I like school"], "word_bank": ["I", "like", "school", "book", "don't"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda kitob bor", "word": "book", "correct_answers": ["I have a book"]}
+         ]},
+        {"code": "a0-u8-l2", "title_uz": "Sumkamda nima bor?", "order": 1, "xp_reward": 10,
+         "new_words": ["pen", "pencil", "paper", "bag"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ruchka' inglizchada qanday bo'ladi?", "word": "pen", "image": "img/pen.png",
+           "options": [{"text": "Pen", "correct": true}, {"text": "Pencil", "correct": false}, {"text": "Paper", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "pen", "right": "ruchka"}, {"left": "pencil", "right": "qalam"}, {"left": "paper", "right": "qog'oz"}, {"left": "bag", "right": "sumka"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Qalam", "word": "pencil", "correct_answers": ["pencil"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Qog'oz oq: The paper is ___.", "word": "paper", "correct_answers": ["white"],
+           "hint_uz": "Ranglarni eslang!"},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/pencil.mp3", "word": "pencil", "correct_answers": ["pencil"]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Menda katta sumka bor'",
+           "correct_answers": ["I have a big bag"], "word_bank": ["I", "have", "a", "big", "bag", "little"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Sumka' inglizchada qanday bo'ladi?", "word": "bag",
+           "options": [{"text": "Bag", "correct": true}, {"text": "Book", "correct": false}, {"text": "Pen", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda ruchka va qalam bor", "word": "pen", "correct_answers": ["I have a pen and a pencil"]}
+         ]},
+        {"code": "a0-u8-l3", "title_uz": "Bu nima?", "order": 2, "xp_reward": 10,
+         "new_words": ["table", "chair"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Stol' inglizchada qanday bo'ladi?", "word": "table", "image": "img/table.png",
+           "options": [{"text": "Table", "correct": true}, {"text": "Chair", "correct": false}, {"text": "Bag", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "table", "right": "stol"}, {"left": "chair", "right": "stul"}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Savolni yig'ing: 'Bu nima?'",
+           "correct_answers": ["What is this"], "word_bank": ["What", "is", "this", "who", "it"],
+           "hint_uz": "'Bu kim?' - Who is this, 'Bu nima?' - ..."},
+          {"type": "word_bank", "order": 3, "prompt_uz": "Javobni yig'ing: 'Bu stul'",
+           "correct_answers": ["It is a chair"], "word_bank": ["It", "is", "a", "chair", "table"],
+           "hint_uz": "Narsa haqida javob 'It is' bilan boshlanadi."},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Bu stol: It is a ___.", "word": "table", "correct_answers": ["table"]},
+          {"type": "translate", "order": 5, "prompt_uz": "Tarjima qiling: Bu nima?", "word": "table", "correct_answers": ["What is this", "What is this?"]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/chair.mp3", "word": "chair", "correct_answers": ["chair"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Bu stul", "word": "chair", "correct_answers": ["It is a chair", "This is a chair"]}
+         ]},
+        {"code": "a0-u8-l4", "title_uz": "O'qiyman va yozaman", "order": 3, "xp_reward": 10,
+         "new_words": ["read", "write"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'O'qimoq' inglizchada qanday bo'ladi?", "word": "read",
+           "options": [{"text": "Read", "correct": true}, {"text": "Write", "correct": false}, {"text": "Like", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "read", "right": "o'qimoq"}, {"left": "write", "right": "yozmoq"}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Men kitob o'qiyman'",
+           "correct_answers": ["I read a book"], "word_bank": ["I", "read", "a", "book", "write"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men yozaman: I ___.", "word": "write", "correct_answers": ["write"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Men kitob o'qiyman", "word": "read", "correct_answers": ["I read a book"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Yozmoq' inglizchada qanday bo'ladi?", "word": "write",
+           "options": [{"text": "Write", "correct": true}, {"text": "Read", "correct": false}, {"text": "White", "correct": false}],
+           "hint_uz": "'White' (oq) bilan adashtirma!"},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/read.mp3", "word": "read", "correct_answers": ["read"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men yozaman", "word": "write", "correct_answers": ["I write"]}
+         ]},
+        {"code": "a0-u8-l5", "title_uz": "Takrorlash: maktab", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["school", "teacher", "student", "book", "pen", "pencil", "paper", "bag", "table", "chair", "read", "write"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "book", "right": "kitob"}, {"left": "pen", "right": "ruchka"}, {"left": "table", "right": "stol"}, {"left": "teacher", "right": "o'qituvchi"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'O'quvchi' inglizchada qanday bo'ladi?", "word": "student",
+           "options": [{"text": "Student", "correct": true}, {"text": "Teacher", "correct": false}, {"text": "School", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Men kitoblarni yoqtiraman'",
+           "correct_answers": ["I like books"], "word_bank": ["I", "like", "books", "pens", "don't"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Bu nima?", "word": "table", "correct_answers": ["What is this", "What is this?"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Qalam sariq: The pencil is ___.", "word": "pencil", "correct_answers": ["yellow"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Maktabda kim DARS BERADI?", "word": "teacher",
+           "options": [{"text": "Teacher", "correct": true}, {"text": "Student", "correct": false}, {"text": "Baby", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/school.mp3", "word": "school", "correct_answers": ["school"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda katta sumka bor", "word": "bag", "correct_answers": ["I have a big bag"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

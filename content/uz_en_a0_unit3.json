@@ -1,0 +1,196 @@
+{
+  "$comment": "uz->en A0 kursi. Unit 3: Raqamlar 1-20 (order=2). How many? savoli va ko'plik -s tanishtiriladi.",
+
+  "course": {
+    "code": "uz-en",
+    "source_language": "uz",
+    "target_language": "en",
+    "title_uz": "Ingliz tili",
+    "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"
+  },
+
+  "vocabulary": [
+    {"word": "one", "translation": "bir", "level_code": "A0", "example": "One baby.", "example_translation": "Bitta chaqaloq.", "audio": "audio/en/one.mp3", "image": "img/num1.png", "tags": ["numbers"]},
+    {"word": "two", "translation": "ikki", "level_code": "A0", "example": "Two friends.", "example_translation": "Ikkita do'st.", "audio": "audio/en/two.mp3", "image": "img/num2.png", "tags": ["numbers"]},
+    {"word": "three", "translation": "uch", "level_code": "A0", "example": "Three girls.", "example_translation": "Uchta qiz bola.", "audio": "audio/en/three.mp3", "image": "img/num3.png", "tags": ["numbers"]},
+    {"word": "four", "translation": "to'rt", "level_code": "A0", "example": "Four boys.", "example_translation": "To'rtta o'g'il bola.", "audio": "audio/en/four.mp3", "image": "img/num4.png", "tags": ["numbers"]},
+    {"word": "five", "translation": "besh", "level_code": "A0", "example": "Two and three is five.", "example_translation": "Ikki qo'shuv uch — besh.", "audio": "audio/en/five.mp3", "image": "img/num5.png", "tags": ["numbers"]},
+    {"word": "six", "translation": "olti", "level_code": "A0", "example": "Six babies.", "example_translation": "Oltita chaqaloq.", "audio": "audio/en/six.mp3", "image": "img/num6.png", "tags": ["numbers"]},
+    {"word": "seven", "translation": "yetti", "level_code": "A0", "example": "Seven days.", "example_translation": "Yetti kun.", "audio": "audio/en/seven.mp3", "image": "img/num7.png", "tags": ["numbers"]},
+    {"word": "eight", "translation": "sakkiz", "level_code": "A0", "example": "Eight friends.", "example_translation": "Sakkizta do'st.", "audio": "audio/en/eight.mp3", "image": "img/num8.png", "tags": ["numbers"]},
+    {"word": "nine", "translation": "to'qqiz", "level_code": "A0", "example": "Nine boys.", "example_translation": "To'qqizta o'g'il bola.", "audio": "audio/en/nine.mp3", "image": "img/num9.png", "tags": ["numbers"]},
+    {"word": "ten", "translation": "o'n", "level_code": "A0", "example": "Five and five is ten.", "example_translation": "Besh qo'shuv besh — o'n.", "audio": "audio/en/ten.mp3", "image": "img/num10.png", "tags": ["numbers"]},
+    {"word": "eleven", "translation": "o'n bir", "level_code": "A0", "example": "Eleven girls.", "example_translation": "O'n bitta qiz bola.", "audio": "audio/en/eleven.mp3", "tags": ["numbers"]},
+    {"word": "twelve", "translation": "o'n ikki", "level_code": "A0", "example": "Twelve months.", "example_translation": "O'n ikki oy.", "audio": "audio/en/twelve.mp3", "tags": ["numbers"]},
+    {"word": "thirteen", "translation": "o'n uch", "level_code": "A0", "example": "Thirteen boys.", "example_translation": "O'n uchta o'g'il bola.", "audio": "audio/en/thirteen.mp3", "tags": ["numbers"]},
+    {"word": "fourteen", "translation": "o'n to'rt", "level_code": "A0", "example": "Fourteen friends.", "example_translation": "O'n to'rtta do'st.", "audio": "audio/en/fourteen.mp3", "tags": ["numbers"]},
+    {"word": "fifteen", "translation": "o'n besh", "level_code": "A0", "example": "Fifteen girls.", "example_translation": "O'n beshta qiz bola.", "audio": "audio/en/fifteen.mp3", "tags": ["numbers"]},
+    {"word": "sixteen", "translation": "o'n olti", "level_code": "A0", "example": "Sixteen boys.", "example_translation": "O'n oltita o'g'il bola.", "audio": "audio/en/sixteen.mp3", "tags": ["numbers"]},
+    {"word": "seventeen", "translation": "o'n yetti", "level_code": "A0", "example": "Seventeen friends.", "example_translation": "O'n yettita do'st.", "audio": "audio/en/seventeen.mp3", "tags": ["numbers"]},
+    {"word": "eighteen", "translation": "o'n sakkiz", "level_code": "A0", "example": "Eighteen girls.", "example_translation": "O'n sakkizta qiz bola.", "audio": "audio/en/eighteen.mp3", "tags": ["numbers"]},
+    {"word": "nineteen", "translation": "o'n to'qqiz", "level_code": "A0", "example": "Nineteen boys.", "example_translation": "O'n to'qqizta o'g'il bola.", "audio": "audio/en/nineteen.mp3", "tags": ["numbers"]},
+    {"word": "twenty", "translation": "yigirma", "level_code": "A0", "example": "Ten and ten is twenty.", "example_translation": "O'n qo'shuv o'n — yigirma.", "audio": "audio/en/twenty.mp3", "tags": ["numbers"]},
+    {"word": "how many", "translation": "nechta", "level_code": "A0", "example": "How many friends?", "example_translation": "Nechta do'st?", "audio": "audio/en/how_many.mp3", "tags": ["numbers", "grammar"]}
+  ],
+
+  "levels": [
+    {
+      "code": "A0",
+      "title_uz": "Boshlang'ich",
+      "order": 0,
+      "units": [
+        {
+          "code": "a0-u3",
+          "title_uz": "Raqamlar (1–20)",
+          "title_en": "Numbers",
+          "description_uz": "1 dan 20 gacha sanashni va 'Nechta?' deb so'rashni o'rganamiz",
+          "order": 2,
+          "icon": "unit_numbers",
+          "lessons": [
+            {
+              "code": "a0-u3-l1",
+              "title_uz": "1 dan 5 gacha",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["one", "two", "three", "four", "five"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Uch' inglizchada qanday bo'ladi?", "word": "three",
+                 "options": [{"text": "Three", "correct": true}, {"text": "Two", "correct": false}, {"text": "Five", "correct": false}]},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "one", "right": "bir"}, {"left": "two", "right": "ikki"}, {"left": "three", "right": "uch"}, {"left": "four", "right": "to'rt"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Besh", "word": "five",
+                 "correct_answers": ["five"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Davom ettiring: one, two, three, four, ___", "word": "five",
+                 "correct_answers": ["five"],
+                 "hint_uz": "To'rtdan keyin nima keladi?"},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/four.mp3", "word": "four",
+                 "correct_answers": ["four"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Bir' inglizchada qanday bo'ladi?", "word": "one",
+                 "options": [{"text": "One", "correct": true}, {"text": "Two", "correct": false}, {"text": "Four", "correct": false}]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Ikki qo'shuv uch — besh'",
+                 "correct_answers": ["Two and three is five"],
+                 "word_bank": ["Two", "and", "three", "is", "five", "one"],
+                 "hint_uz": "'Qo'shuv' = 'and'."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: To'rt", "word": "four",
+                 "correct_answers": ["four"]}
+              ]
+            },
+            {
+              "code": "a0-u3-l2",
+              "title_uz": "6 dan 10 gacha",
+              "order": 1,
+              "xp_reward": 10,
+              "new_words": ["six", "seven", "eight", "nine", "ten"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Olti' inglizchada qanday bo'ladi?", "word": "six",
+                 "options": [{"text": "Six", "correct": true}, {"text": "Seven", "correct": false}, {"text": "Ten", "correct": false}]},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "six", "right": "olti"}, {"left": "seven", "right": "yetti"}, {"left": "eight", "right": "sakkiz"}, {"left": "ten", "right": "o'n"}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Davom ettiring: eight, nine, ___", "word": "ten",
+                 "correct_answers": ["ten"]},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Yetti", "word": "seven",
+                 "correct_answers": ["seven"]},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/nine.mp3", "word": "nine",
+                 "correct_answers": ["nine"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "Five and five is ...?", "word": "ten",
+                 "options": [{"text": "Ten", "correct": true}, {"text": "Nine", "correct": false}, {"text": "Six", "correct": false}],
+                 "hint_uz": "Besh qo'shuv besh nechchi bo'ladi?"},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Olti qo'shuv to'rt — o'n'",
+                 "correct_answers": ["Six and four is ten"],
+                 "word_bank": ["Six", "and", "four", "is", "ten", "nine"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Sakkiz", "word": "eight",
+                 "correct_answers": ["eight"]}
+              ]
+            },
+            {
+              "code": "a0-u3-l3",
+              "title_uz": "11 dan 15 gacha",
+              "order": 2,
+              "xp_reward": 10,
+              "new_words": ["eleven", "twelve", "thirteen", "fourteen", "fifteen"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'O'n bir' inglizchada qanday bo'ladi?", "word": "eleven",
+                 "options": [{"text": "Eleven", "correct": true}, {"text": "Twelve", "correct": false}, {"text": "One", "correct": false}]},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "eleven", "right": "o'n bir"}, {"left": "twelve", "right": "o'n ikki"}, {"left": "thirteen", "right": "o'n uch"}, {"left": "fifteen", "right": "o'n besh"}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Davom ettiring: eleven, twelve, thirteen, ___", "word": "fourteen",
+                 "correct_answers": ["fourteen"]},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: O'n besh", "word": "fifteen",
+                 "correct_answers": ["fifteen"]},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/twelve.mp3", "word": "twelve",
+                 "correct_answers": ["twelve"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'O'n uch' inglizchada qanday bo'ladi?", "word": "thirteen",
+                 "options": [{"text": "Thirteen", "correct": true}, {"text": "Fourteen", "correct": false}, {"text": "Three", "correct": false}],
+                 "hint_uz": "'Three' + 'teen'."},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'O'n qo'shuv ikki — o'n ikki'",
+                 "correct_answers": ["Ten and two is twelve"],
+                 "word_bank": ["Ten", "and", "two", "is", "twelve", "eleven"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: O'n bir", "word": "eleven",
+                 "correct_answers": ["eleven"]}
+              ]
+            },
+            {
+              "code": "a0-u3-l4",
+              "title_uz": "16 dan 20 gacha va 'Nechta?'",
+              "order": 3,
+              "xp_reward": 10,
+              "new_words": ["sixteen", "seventeen", "eighteen", "nineteen", "twenty", "how many"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Yigirma' inglizchada qanday bo'ladi?", "word": "twenty",
+                 "options": [{"text": "Twenty", "correct": true}, {"text": "Twelve", "correct": false}, {"text": "Ten", "correct": false}]},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "sixteen", "right": "o'n olti"}, {"left": "seventeen", "right": "o'n yetti"}, {"left": "nineteen", "right": "o'n to'qqiz"}, {"left": "twenty", "right": "yigirma"}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Davom ettiring: eighteen, nineteen, ___", "word": "twenty",
+                 "correct_answers": ["twenty"]},
+                {"type": "multiple_choice", "order": 3, "prompt_uz": "'Nechta?' inglizchada qanday bo'ladi?", "word": "how many",
+                 "options": [{"text": "How many", "correct": true}, {"text": "Who", "correct": false}, {"text": "What", "correct": false}],
+                 "hint_uz": "Sanash uchun beriladigan savol."},
+                {"type": "word_bank", "order": 4, "prompt_uz": "Savolni yig'ing: 'Nechta o'g'il bola?'",
+                 "correct_answers": ["How many boys"],
+                 "word_bank": ["How", "many", "boys", "girls", "twenty"],
+                 "hint_uz": "Ko'plikda so'z oxiriga -s qo'shiladi: boy → boys."},
+                {"type": "translate", "order": 5, "prompt_uz": "Tarjima qiling: O'n sakkiz", "word": "eighteen",
+                 "correct_answers": ["eighteen"]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/seventeen.mp3", "word": "seventeen",
+                 "correct_answers": ["seventeen"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Nechta?", "word": "how many",
+                 "correct_answers": ["how many", "how many?"]}
+              ]
+            },
+            {
+              "code": "a0-u3-l5",
+              "title_uz": "Takrorlash: raqamlar",
+              "order": 4,
+              "xp_reward": 15,
+              "is_review": true,
+              "review_words": ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "how many"],
+              "exercises": [
+                {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "five", "right": "besh"}, {"left": "ten", "right": "o'n"}, {"left": "fifteen", "right": "o'n besh"}, {"left": "twenty", "right": "yigirma"}]},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "Ten and ten is ...?", "word": "twenty",
+                 "options": [{"text": "Twenty", "correct": true}, {"text": "Nineteen", "correct": false}, {"text": "Twelve", "correct": false}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Davom ettiring: five, ten, fifteen, ___", "word": "twenty",
+                 "correct_answers": ["twenty"],
+                 "hint_uz": "Beshtalab sanayapmiz."},
+                {"type": "word_bank", "order": 3, "prompt_uz": "Savolni yig'ing: 'Nechta do'st?'",
+                 "correct_answers": ["How many friends"],
+                 "word_bank": ["How", "many", "friends", "sisters", "ten"],
+                 "hint_uz": "Ko'plik: friend → friends."},
+                {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Ikki do'st", "word": "two",
+                 "correct_answers": ["two friends"],
+                 "hint_uz": "Bittadan ko'p bo'lsa, so'z oxiriga -s qo'shiladi."},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'O'n to'qqiz' inglizchada qanday bo'ladi?", "word": "nineteen",
+                 "options": [{"text": "Nineteen", "correct": true}, {"text": "Ninety", "correct": false}, {"text": "Nine", "correct": false}]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/twenty.mp3", "word": "twenty",
+                 "correct_answers": ["twenty"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Uch qiz bola", "word": "three",
+                 "correct_answers": ["three girls"],
+                 "hint_uz": "Ko'plikda: girl → girls."}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

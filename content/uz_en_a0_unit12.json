@@ -1,0 +1,109 @@
+{
+  "$comment": "uz->en A0. Unit 12: Harakatlar (order=11). 'I can / cannot' - kursning yakuniy uniti.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "run", "translation": "yugurmoq", "level_code": "A0", "example": "I can run.", "example_translation": "Men yugura olaman.", "audio": "audio/en/run.mp3", "image": "img/run.png", "tags": ["actions"]},
+    {"word": "jump", "translation": "sakramoq", "level_code": "A0", "example": "I can jump.", "example_translation": "Men sakray olaman.", "audio": "audio/en/jump.mp3", "image": "img/jump.png", "tags": ["actions"]},
+    {"word": "walk", "translation": "yurmoq", "level_code": "A0", "example": "I walk to school.", "example_translation": "Men maktabga piyoda boraman.", "audio": "audio/en/walk.mp3", "image": "img/walk.png", "tags": ["actions"]},
+    {"word": "play", "translation": "o'ynamoq", "level_code": "A0", "example": "I play with my friend.", "example_translation": "Men do'stim bilan o'ynayman.", "audio": "audio/en/play.mp3", "image": "img/play.png", "tags": ["actions"]},
+    {"word": "swim", "translation": "suzmoq", "level_code": "A0", "example": "A fish can swim.", "example_translation": "Baliq suza oladi.", "audio": "audio/en/swim.mp3", "image": "img/swim.png", "tags": ["actions"]},
+    {"word": "fly", "translation": "uchmoq", "level_code": "A0", "example": "A bird can fly.", "example_translation": "Qush ucha oladi.", "audio": "audio/en/fly.mp3", "image": "img/fly.png", "tags": ["actions"]},
+    {"word": "sing", "translation": "qo'shiq aytmoq", "level_code": "A0", "example": "I can sing.", "example_translation": "Men qo'shiq ayta olaman.", "audio": "audio/en/sing.mp3", "image": "img/sing.png", "tags": ["actions"]},
+    {"word": "dance", "translation": "raqsga tushmoq", "level_code": "A0", "example": "I can dance.", "example_translation": "Men raqsga tusha olaman.", "audio": "audio/en/dance.mp3", "image": "img/dance.png", "tags": ["actions"]},
+    {"word": "can", "translation": "qila olmoq (-a olaman)", "level_code": "A0", "example": "I can run.", "example_translation": "Men yugura olaman.", "audio": "audio/en/can.mp3", "tags": ["grammar"]},
+    {"word": "see", "translation": "ko'rmoq", "level_code": "A0", "example": "I can see a bird.", "example_translation": "Men qushni ko'ryapman.", "audio": "audio/en/see.mp3", "tags": ["actions"]},
+    {"word": "cannot", "translation": "qila olmaslik (can't)", "level_code": "A0", "example": "A fish cannot walk.", "example_translation": "Baliq yura olmaydi.", "audio": "audio/en/cannot.mp3", "tags": ["grammar"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u12", "title_uz": "Harakatlar", "title_en": "Actions", "description_uz": "'Men ... qila olaman' deyishni o'rganamiz - kursning yakuniy uniti!", "order": 11, "icon": "unit_actions", "lessons": [
+        {"code": "a0-u12-l1", "title_uz": "Yugur va sakra", "order": 0, "xp_reward": 10,
+         "new_words": ["run", "jump", "walk", "play"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Yugurmoq' inglizchada qanday bo'ladi?", "word": "run", "image": "img/run.png",
+           "options": [{"text": "Run", "correct": true}, {"text": "Jump", "correct": false}, {"text": "Walk", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "run", "right": "yugurmoq"}, {"left": "jump", "right": "sakramoq"}, {"left": "walk", "right": "yurmoq"}, {"left": "play", "right": "o'ynamoq"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Sakramoq", "word": "jump", "correct_answers": ["jump"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men do'stim bilan o'ynayman: I ___ with my friend.", "word": "play", "correct_answers": ["play"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/jump.mp3", "word": "jump", "correct_answers": ["jump"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'O'ynamoq' inglizchada qanday bo'ladi?", "word": "play",
+           "options": [{"text": "Play", "correct": true}, {"text": "Run", "correct": false}, {"text": "Walk", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Men yuguraman va sakrayman'",
+           "correct_answers": ["I run and jump"], "word_bank": ["I", "run", "and", "jump", "walk", "play"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Yurmoq", "word": "walk", "correct_answers": ["walk"]}
+         ]},
+        {"code": "a0-u12-l2", "title_uz": "Suz, uch, kuyla", "order": 1, "xp_reward": 10,
+         "new_words": ["swim", "fly", "sing", "dance"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Suzmoq' inglizchada qanday bo'ladi?", "word": "swim", "image": "img/swim.png",
+           "options": [{"text": "Swim", "correct": true}, {"text": "Fly", "correct": false}, {"text": "Sing", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "swim", "right": "suzmoq"}, {"left": "fly", "right": "uchmoq"}, {"left": "sing", "right": "qo'shiq aytmoq"}, {"left": "dance", "right": "raqsga tushmoq"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Uchmoq", "word": "fly", "correct_answers": ["fly"]},
+          {"type": "multiple_choice", "order": 3, "prompt_uz": "Qaysi hayvon SUZADI?", "word": "swim",
+           "options": [{"text": "Fish", "correct": true}, {"text": "Bird", "correct": false}, {"text": "Cat", "correct": false}]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/dance.mp3", "word": "dance", "correct_answers": ["dance"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi hayvon UCHADI?", "word": "fly",
+           "options": [{"text": "Bird", "correct": true}, {"text": "Fish", "correct": false}, {"text": "Dog", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Men qo'shiq aytaman va raqsga tushaman'",
+           "correct_answers": ["I sing and dance"], "word_bank": ["I", "sing", "and", "dance", "swim", "fly"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Raqsga tushmoq", "word": "dance", "correct_answers": ["dance"]}
+         ]},
+        {"code": "a0-u12-l3", "title_uz": "Men qila olaman!", "order": 2, "xp_reward": 10,
+         "new_words": ["can", "see"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qila olmoq' inglizchada qanday bo'ladi?", "word": "can",
+           "options": [{"text": "Can", "correct": true}, {"text": "Have", "correct": false}, {"text": "Like", "correct": false}]},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Men yugura olaman'",
+           "correct_answers": ["I can run"], "word_bank": ["I", "can", "run", "jump", "cannot"],
+           "hint_uz": "'-a olaman' = 'can'."},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Qush ucha oladi'",
+           "correct_answers": ["A bird can fly"], "word_bank": ["A", "bird", "can", "fly", "fish", "swim"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men suza olaman: I ___ swim.", "word": "can", "correct_answers": ["can"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Men sakray olaman", "word": "can", "correct_answers": ["I can jump"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Ko'rmoq' inglizchada qanday bo'ladi?", "word": "see",
+           "options": [{"text": "See", "correct": true}, {"text": "Sing", "correct": false}, {"text": "Sea", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/can.mp3", "word": "can", "correct_answers": ["can"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men qushni ko'ryapman", "word": "see", "correct_answers": ["I can see a bird", "I see a bird"]}
+         ]},
+        {"code": "a0-u12-l4", "title_uz": "Qila olmayman", "order": 3, "xp_reward": 10,
+         "new_words": ["cannot"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qila olmaslik' inglizchada qanday bo'ladi?", "word": "cannot",
+           "options": [{"text": "Cannot", "correct": true}, {"text": "Can", "correct": false}, {"text": "Don't", "correct": false}]},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Baliq yura olmaydi'",
+           "correct_answers": ["A fish cannot walk"], "word_bank": ["A", "fish", "cannot", "walk", "can", "swim"]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "It ucha olmaydi: A dog ___ fly.", "word": "cannot", "correct_answers": ["cannot", "can't"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Men ucha olmayman", "word": "cannot", "correct_answers": ["I cannot fly", "I can't fly"]},
+          {"type": "multiple_choice", "order": 4, "prompt_uz": "Qaysi gap TO'G'RI?", "word": "cannot",
+           "options": [{"text": "A fish can swim", "correct": true}, {"text": "A fish can fly", "correct": false}, {"text": "A fish can walk", "correct": false}]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Mushuk suza olmaydi'",
+           "correct_answers": ["A cat cannot swim"], "word_bank": ["A", "cat", "cannot", "swim", "can", "fly"]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/cannot.mp3", "word": "cannot", "correct_answers": ["cannot"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Qush suza olmaydi", "word": "cannot", "correct_answers": ["A bird cannot swim", "A bird can't swim"]}
+         ]},
+        {"code": "a0-u12-l5", "title_uz": "Katta yakuniy takrorlash", "order": 4, "xp_reward": 20, "is_review": true,
+         "review_words": ["run", "jump", "walk", "play", "swim", "fly", "sing", "dance", "can", "see", "cannot"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "run", "right": "yugurmoq"}, {"left": "swim", "right": "suzmoq"}, {"left": "sing", "right": "qo'shiq aytmoq"}, {"left": "see", "right": "ko'rmoq"}]},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Men yugura olaman va sakray olaman'",
+           "correct_answers": ["I can run and jump"], "word_bank": ["I", "can", "run", "and", "jump", "cannot"]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Qush ucha oladi, baliq esa suza oladi", "word": "can",
+           "correct_answers": ["A bird can fly and a fish can swim"],
+           "hint_uz": "Ikkita gapni 'and' bilan bog'lang."},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Fil ucha olmaydi: An elephant ___ fly.", "word": "cannot", "correct_answers": ["cannot", "can't"]},
+          {"type": "multiple_choice", "order": 4, "prompt_uz": "Sen NIMA qila olasan?", "word": "can",
+           "options": [{"text": "I can run", "correct": true}, {"text": "I can fly", "correct": false}, {"text": "I cannot walk", "correct": false}],
+           "hint_uz": "Haqiqatga mos javobni tanla."},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Men do'stim bilan o'ynayman'",
+           "correct_answers": ["I play with my friend"], "word_bank": ["I", "play", "with", "my", "friend", "can"]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/play.mp3", "word": "play", "correct_answers": ["play"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men qo'shiq ayta olaman va raqsga tusha olaman", "word": "sing",
+           "correct_answers": ["I can sing and dance", "I can sing and I can dance"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

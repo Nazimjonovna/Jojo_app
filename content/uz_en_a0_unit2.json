@@ -1,0 +1,200 @@
+{
+  "$comment": "uz->en A0 kursi. Unit 2: Oila (order=1). Alohida import qilsa bo'ladi yoki asosiy faylning units massiviga qo'shiladi.",
+
+  "course": {
+    "code": "uz-en",
+    "source_language": "uz",
+    "target_language": "en",
+    "title_uz": "Ingliz tili",
+    "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"
+  },
+
+  "vocabulary": [
+    {"word": "family", "translation": "oila", "level_code": "A0", "example": "I love my family.", "example_translation": "Men oilamni yaxshi ko'raman.", "audio": "audio/en/family.mp3", "image": "img/family.png", "tags": ["family"]},
+    {"word": "mother", "translation": "ona", "level_code": "A0", "example": "My mother is Dilnoza.", "example_translation": "Mening onam Dilnoza.", "audio": "audio/en/mother.mp3", "image": "img/mother.png", "tags": ["family"]},
+    {"word": "father", "translation": "ota", "level_code": "A0", "example": "My father is Akmal.", "example_translation": "Mening otam Akmal.", "audio": "audio/en/father.mp3", "image": "img/father.png", "tags": ["family"]},
+    {"word": "mom", "translation": "oyi (erkalab)", "level_code": "A0", "example": "Hello, mom!", "example_translation": "Salom, oyi!", "audio": "audio/en/mom.mp3", "tags": ["family"]},
+    {"word": "dad", "translation": "dada (erkalab)", "level_code": "A0", "example": "My dad is my friend.", "example_translation": "Dadam mening do'stim.", "audio": "audio/en/dad.mp3", "tags": ["family"]},
+    {"word": "sister", "translation": "opa (singil)", "level_code": "A0", "example": "My sister is Malika.", "example_translation": "Mening singlim Malika.", "audio": "audio/en/sister.mp3", "image": "img/sister.png", "tags": ["family"]},
+    {"word": "brother", "translation": "aka (uka)", "level_code": "A0", "example": "My brother is a boy.", "example_translation": "Mening ukam o'g'il bola.", "audio": "audio/en/brother.mp3", "image": "img/brother.png", "tags": ["family"]},
+    {"word": "baby", "translation": "chaqaloq", "level_code": "A0", "example": "The baby is little.", "example_translation": "Chaqaloq kichkina.", "audio": "audio/en/baby.mp3", "image": "img/baby.png", "tags": ["family"]},
+    {"word": "boy", "translation": "o'g'il bola", "level_code": "A0", "example": "Aziz is a boy.", "example_translation": "Aziz — o'g'il bola.", "audio": "audio/en/boy.mp3", "image": "img/boy.png", "tags": ["family"]},
+    {"word": "girl", "translation": "qiz bola", "level_code": "A0", "example": "Lola is a girl.", "example_translation": "Lola — qiz bola.", "audio": "audio/en/girl.mp3", "image": "img/girl.png", "tags": ["family"]},
+    {"word": "grandmother", "translation": "buvi", "level_code": "A0", "example": "My grandmother is kind.", "example_translation": "Buvim mehribon.", "audio": "audio/en/grandmother.mp3", "image": "img/grandmother.png", "tags": ["family"]},
+    {"word": "grandfather", "translation": "buva", "level_code": "A0", "example": "My grandfather is old.", "example_translation": "Buvam keksa.", "audio": "audio/en/grandfather.mp3", "image": "img/grandfather.png", "tags": ["family"]},
+    {"word": "man", "translation": "erkak", "level_code": "A0", "example": "My dad is a man.", "example_translation": "Dadam — erkak kishi.", "audio": "audio/en/man.mp3", "tags": ["family"]},
+    {"word": "woman", "translation": "ayol", "level_code": "A0", "example": "My mom is a woman.", "example_translation": "Oyim — ayol kishi.", "audio": "audio/en/woman.mp3", "tags": ["family"]},
+    {"word": "and", "translation": "va", "level_code": "A0", "example": "My mom and my dad.", "example_translation": "Oyim va dadam.", "audio": "audio/en/and.mp3", "tags": ["grammar"]},
+    {"word": "this", "translation": "bu", "level_code": "A0", "example": "This is my family.", "example_translation": "Bu mening oilam.", "audio": "audio/en/this.mp3", "tags": ["grammar"]},
+    {"word": "is", "translation": "-dir (bog'lovchi)", "level_code": "A0", "example": "This is my mom.", "example_translation": "Bu mening oyim.", "audio": "audio/en/is.mp3", "tags": ["grammar"]},
+    {"word": "who", "translation": "kim", "level_code": "A0", "example": "Who is this?", "example_translation": "Bu kim?", "audio": "audio/en/who.mp3", "tags": ["grammar"]},
+    {"word": "love", "translation": "sevmoq, yaxshi ko'rmoq", "level_code": "A0", "example": "I love my family.", "example_translation": "Men oilamni yaxshi ko'raman.", "audio": "audio/en/love.mp3", "image": "img/love.png", "tags": ["family"]}
+  ],
+
+  "levels": [
+    {
+      "code": "A0",
+      "title_uz": "Boshlang'ich",
+      "order": 0,
+      "units": [
+        {
+          "code": "a0-u2",
+          "title_uz": "Oila",
+          "title_en": "Family",
+          "description_uz": "Oila a'zolarini va 'Bu mening...' deyishni o'rganamiz",
+          "order": 1,
+          "icon": "unit_family",
+          "lessons": [
+            {
+              "code": "a0-u2-l1",
+              "title_uz": "Ota va ona",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["family", "mother", "father", "mom", "dad"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ona' inglizchada qanday bo'ladi?", "word": "mother",
+                 "options": [{"text": "Mother", "correct": true}, {"text": "Father", "correct": false}, {"text": "Friend", "correct": false}],
+                 "hint_uz": "Eng mehribon inson."},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "'Ota' inglizchada qanday bo'ladi?", "word": "father",
+                 "options": [{"text": "Father", "correct": true}, {"text": "Mother", "correct": false}, {"text": "Hello", "correct": false}]},
+                {"type": "match_pairs", "order": 2, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "mother", "right": "ona"}, {"left": "father", "right": "ota"}, {"left": "family", "right": "oila"}]},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Oila", "word": "family",
+                 "correct_answers": ["family"],
+                 "hint_uz": "Ota, ona va bolalar birgalikda."},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Onam haqida: My ___ is Dilnoza.", "word": "mother",
+                 "correct_answers": ["mother", "mom"],
+                 "hint_uz": "Dilnoza — onamning ismi."},
+                {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/family.mp3", "word": "family",
+                 "correct_answers": ["family"]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Salom, oyi'",
+                 "correct_answers": ["Hello mom"],
+                 "word_bank": ["Hello", "mom", "dad", "goodbye", "sorry"],
+                 "hint_uz": "Avval salomlash."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Mening otam", "word": "father",
+                 "correct_answers": ["my father", "my dad"]}
+              ]
+            },
+            {
+              "code": "a0-u2-l2",
+              "title_uz": "Aka-uka, opa-singil",
+              "order": 1,
+              "xp_reward": 10,
+              "new_words": ["sister", "brother", "baby", "boy", "girl"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qiz bola' inglizchada qanday bo'ladi?", "word": "girl",
+                 "options": [{"text": "Girl", "correct": true}, {"text": "Boy", "correct": false}, {"text": "Baby", "correct": false}]},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "sister", "right": "opa (singil)"}, {"left": "brother", "right": "aka (uka)"}, {"left": "baby", "right": "chaqaloq"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Chaqaloq", "word": "baby",
+                 "correct_answers": ["baby"],
+                 "hint_uz": "Eng kichkina oila a'zosi."},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Aziz — o'g'il bola: Aziz is a ___.", "word": "boy",
+                 "correct_answers": ["boy"]},
+                {"type": "multiple_choice", "order": 4, "prompt_uz": "'Aka' yoki 'uka' inglizchada qanday bo'ladi?", "word": "brother",
+                 "options": [{"text": "Brother", "correct": true}, {"text": "Sister", "correct": false}, {"text": "Father", "correct": false}]},
+                {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/sister.mp3", "word": "sister",
+                 "correct_answers": ["sister"]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Mening singlim — qiz bola'",
+                 "correct_answers": ["My sister is a girl"],
+                 "word_bank": ["My", "sister", "is", "a", "girl", "boy", "baby"],
+                 "hint_uz": "Gap 'My' bilan boshlanadi."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Mening singlim", "word": "sister",
+                 "correct_answers": ["my sister"]}
+              ]
+            },
+            {
+              "code": "a0-u2-l3",
+              "title_uz": "Buvi va buva",
+              "order": 2,
+              "xp_reward": 10,
+              "new_words": ["grandmother", "grandfather", "man", "woman", "and"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Buvi' inglizchada qanday bo'ladi?", "word": "grandmother",
+                 "options": [{"text": "Grandmother", "correct": true}, {"text": "Grandfather", "correct": false}, {"text": "Mother", "correct": false}],
+                 "hint_uz": "Onangning yoki otangning onasi."},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "grandmother", "right": "buvi"}, {"left": "grandfather", "right": "buva"}, {"left": "man", "right": "erkak"}, {"left": "woman", "right": "ayol"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Buva", "word": "grandfather",
+                 "correct_answers": ["grandfather", "grandpa"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Onam — ayol kishi: My mom is a ___.", "word": "woman",
+                 "correct_answers": ["woman"]},
+                {"type": "multiple_choice", "order": 4, "prompt_uz": "'Va' inglizchada qanday bo'ladi?", "word": "and",
+                 "options": [{"text": "And", "correct": true}, {"text": "Is", "correct": false}, {"text": "This", "correct": false}],
+                 "hint_uz": "Ikki so'zni bog'laydi: oyim VA dadam."},
+                {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Oyim va dadam'",
+                 "correct_answers": ["My mom and my dad"],
+                 "word_bank": ["My", "mom", "and", "my", "dad", "sister"],
+                 "hint_uz": "'Va' = 'and'."},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/grandmother.mp3", "word": "grandmother",
+                 "correct_answers": ["grandmother", "grandma"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Buvim va buvam", "word": "grandmother",
+                 "correct_answers": ["my grandmother and my grandfather", "my grandmother and grandfather", "my grandma and my grandpa"]}
+              ]
+            },
+            {
+              "code": "a0-u2-l4",
+              "title_uz": "Bu mening oilam",
+              "order": 3,
+              "xp_reward": 10,
+              "new_words": ["this", "is", "who", "love"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Bu' inglizchada qanday bo'ladi?", "word": "this",
+                 "options": [{"text": "This", "correct": true}, {"text": "Who", "correct": false}, {"text": "And", "correct": false}],
+                 "hint_uz": "Biror narsani ko'rsatganda aytamiz."},
+                {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Bu mening onam'",
+                 "correct_answers": ["This is my mother"],
+                 "word_bank": ["This", "is", "my", "mother", "who", "father"],
+                 "hint_uz": "Gap 'This' bilan boshlanadi."},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "Savol: ___ is this? (Bu kim?)", "word": "who",
+                 "correct_answers": ["Who"],
+                 "hint_uz": "'Kim' degan savol so'zi."},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Bu mening otam", "word": "this",
+                 "correct_answers": ["This is my father", "This is my dad"]},
+                {"type": "multiple_choice", "order": 4, "prompt_uz": "'Yaxshi ko'rmoq' inglizchada qanday bo'ladi?", "word": "love",
+                 "options": [{"text": "Love", "correct": true}, {"text": "Like", "correct": false}, {"text": "Live", "correct": false}],
+                 "hint_uz": "Oilangga nisbatan his-tuyg'ung."},
+                {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Men oilamni yaxshi ko'raman'",
+                 "correct_answers": ["I love my family"],
+                 "word_bank": ["I", "love", "my", "family", "this", "who"],
+                 "hint_uz": "Gap 'I' bilan boshlanadi."},
+                {"type": "fill_blank", "order": 6, "prompt_uz": "Men oyimni yaxshi ko'raman: I ___ my mom.", "word": "love",
+                 "correct_answers": ["love"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Bu kim?", "word": "who",
+                 "correct_answers": ["Who is this", "Who is this?"]}
+              ]
+            },
+            {
+              "code": "a0-u2-l5",
+              "title_uz": "Takrorlash: oila",
+              "order": 4,
+              "xp_reward": 15,
+              "is_review": true,
+              "review_words": ["family", "mother", "father", "mom", "dad", "sister", "brother", "baby", "boy", "girl", "grandmother", "grandfather", "man", "woman", "and", "this", "is", "who", "love"],
+              "exercises": [
+                {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "family", "right": "oila"}, {"left": "brother", "right": "aka (uka)"}, {"left": "grandmother", "right": "buvi"}, {"left": "woman", "right": "ayol"}]},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "'Oila' inglizchada qanday bo'ladi?", "word": "family",
+                 "options": [{"text": "Family", "correct": true}, {"text": "Friend", "correct": false}, {"text": "Father", "correct": false}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Bu mening onam", "word": "this",
+                 "correct_answers": ["This is my mother", "This is my mom"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Ukam chaqaloq: My ___ is a baby.", "word": "brother",
+                 "correct_answers": ["brother"]},
+                {"type": "word_bank", "order": 4, "prompt_uz": "Gapni yig'ing: 'Men oyim va dadamni yaxshi ko'raman'",
+                 "correct_answers": ["I love my mom and my dad"],
+                 "word_bank": ["I", "love", "my", "mom", "and", "my", "dad", "sister"],
+                 "hint_uz": "Gap 'I love' bilan boshlanadi."},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Kim?' inglizchada qanday bo'ladi?", "word": "who",
+                 "options": [{"text": "Who", "correct": true}, {"text": "This", "correct": false}, {"text": "And", "correct": false}]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/father.mp3", "word": "father",
+                 "correct_answers": ["father"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men oilamni yaxshi ko'raman", "word": "love",
+                 "correct_answers": ["I love my family"]}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

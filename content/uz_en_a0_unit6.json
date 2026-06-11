@@ -1,0 +1,109 @@
+{
+  "$comment": "uz->en A0. Unit 6: Tana a'zolari (order=5). 'I have two eyes' - raqamlar va ko'plik -s qayta ishlaydi.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "body", "translation": "tana", "level_code": "A0", "example": "My body.", "example_translation": "Mening tanam.", "audio": "audio/en/body.mp3", "image": "img/body.png", "tags": ["body"]},
+    {"word": "head", "translation": "bosh", "level_code": "A0", "example": "My head is big.", "example_translation": "Boshim katta.", "audio": "audio/en/head.mp3", "image": "img/head.png", "tags": ["body"]},
+    {"word": "face", "translation": "yuz", "level_code": "A0", "example": "My face.", "example_translation": "Mening yuzim.", "audio": "audio/en/face.mp3", "image": "img/face.png", "tags": ["body"]},
+    {"word": "hair", "translation": "soch", "level_code": "A0", "example": "My hair is black.", "example_translation": "Sochim qora.", "audio": "audio/en/hair.mp3", "image": "img/hair.png", "tags": ["body"]},
+    {"word": "eye", "translation": "ko'z", "level_code": "A0", "example": "I have two eyes.", "example_translation": "Menda ikkita ko'z bor.", "audio": "audio/en/eye.mp3", "image": "img/eye.png", "tags": ["body"]},
+    {"word": "ear", "translation": "quloq", "level_code": "A0", "example": "I have two ears.", "example_translation": "Menda ikkita quloq bor.", "audio": "audio/en/ear.mp3", "image": "img/ear.png", "tags": ["body"]},
+    {"word": "nose", "translation": "burun", "level_code": "A0", "example": "My nose is little.", "example_translation": "Burnim kichkina.", "audio": "audio/en/nose.mp3", "image": "img/nose.png", "tags": ["body"]},
+    {"word": "mouth", "translation": "og'iz", "level_code": "A0", "example": "My mouth.", "example_translation": "Mening og'zim.", "audio": "audio/en/mouth.mp3", "image": "img/mouth.png", "tags": ["body"]},
+    {"word": "tooth", "translation": "tish", "level_code": "A0", "example": "My tooth is white.", "example_translation": "Tishim oq.", "audio": "audio/en/tooth.mp3", "image": "img/tooth.png", "tags": ["body"]},
+    {"word": "hand", "translation": "qo'l (kaft)", "level_code": "A0", "example": "I have two hands.", "example_translation": "Menda ikkita qo'l bor.", "audio": "audio/en/hand.mp3", "image": "img/hand.png", "tags": ["body"]},
+    {"word": "arm", "translation": "qo'l (bilak)", "level_code": "A0", "example": "My arm.", "example_translation": "Mening qo'lim.", "audio": "audio/en/arm.mp3", "image": "img/arm.png", "tags": ["body"]},
+    {"word": "finger", "translation": "barmoq", "level_code": "A0", "example": "I have ten fingers.", "example_translation": "Menda o'nta barmoq bor.", "audio": "audio/en/finger.mp3", "image": "img/finger.png", "tags": ["body"]},
+    {"word": "leg", "translation": "oyoq", "level_code": "A0", "example": "I have two legs.", "example_translation": "Menda ikkita oyoq bor.", "audio": "audio/en/leg.mp3", "image": "img/leg.png", "tags": ["body"]},
+    {"word": "foot", "translation": "oyoq panjasi", "level_code": "A0", "example": "My foot.", "example_translation": "Mening oyoq panjam.", "audio": "audio/en/foot.mp3", "image": "img/foot.png", "tags": ["body"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u6", "title_uz": "Tana a'zolari", "title_en": "Body Parts", "description_uz": "Tana a'zolarini va 'Menda ikkita ... bor' deyishni o'rganamiz", "order": 5, "icon": "unit_body", "lessons": [
+        {"code": "a0-u6-l1", "title_uz": "Bosh va yuz", "order": 0, "xp_reward": 10,
+         "new_words": ["body", "head", "face", "hair"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Bosh' inglizchada qanday bo'ladi?", "word": "head", "image": "img/head.png",
+           "options": [{"text": "Head", "correct": true}, {"text": "Hair", "correct": false}, {"text": "Hand", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "body", "right": "tana"}, {"left": "head", "right": "bosh"}, {"left": "face", "right": "yuz"}, {"left": "hair", "right": "soch"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Soch", "word": "hair", "correct_answers": ["hair"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Sochim qora: My ___ is black.", "word": "hair", "correct_answers": ["hair"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/face.mp3", "word": "face", "correct_answers": ["face"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Tana' inglizchada qanday bo'ladi?", "word": "body",
+           "options": [{"text": "Body", "correct": true}, {"text": "Head", "correct": false}, {"text": "Face", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Sochim qora'",
+           "correct_answers": ["My hair is black"], "word_bank": ["My", "hair", "is", "black", "head"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Yuz", "word": "face", "correct_answers": ["face"]}
+         ]},
+        {"code": "a0-u6-l2", "title_uz": "Ko'z, quloq, burun", "order": 1, "xp_reward": 10,
+         "new_words": ["eye", "ear", "nose", "mouth"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ko'z' inglizchada qanday bo'ladi?", "word": "eye", "image": "img/eye.png",
+           "options": [{"text": "Eye", "correct": true}, {"text": "Ear", "correct": false}, {"text": "Nose", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "eye", "right": "ko'z"}, {"left": "ear", "right": "quloq"}, {"left": "nose", "right": "burun"}, {"left": "mouth", "right": "og'iz"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Menda ikkita ko'z bor: I have two ___.", "word": "eye", "correct_answers": ["eyes"],
+           "hint_uz": "Ko'plikda -s qo'shiladi: eye → eyes."},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Burun", "word": "nose", "correct_answers": ["nose"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/mouth.mp3", "word": "mouth", "correct_answers": ["mouth"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Quloq' inglizchada qanday bo'ladi?", "word": "ear",
+           "options": [{"text": "Ear", "correct": true}, {"text": "Eye", "correct": false}, {"text": "Mouth", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Menda ikkita ko'z bor'",
+           "correct_answers": ["I have two eyes"], "word_bank": ["I", "have", "two", "eyes", "ears", "one"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda ikkita quloq bor", "word": "ear", "correct_answers": ["I have two ears"]}
+         ]},
+        {"code": "a0-u6-l3", "title_uz": "Qo'l va barmoqlar", "order": 2, "xp_reward": 10,
+         "new_words": ["hand", "arm", "finger"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qo'l (kaft)' inglizchada qanday bo'ladi?", "word": "hand", "image": "img/hand.png",
+           "options": [{"text": "Hand", "correct": true}, {"text": "Arm", "correct": false}, {"text": "Finger", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "hand", "right": "qo'l (kaft)"}, {"left": "arm", "right": "qo'l (bilak)"}, {"left": "finger", "right": "barmoq"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Menda o'nta barmoq bor: I have ten ___.", "word": "finger", "correct_answers": ["fingers"],
+           "hint_uz": "Ko'plik: finger → fingers."},
+          {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Menda ikkita qo'l bor'",
+           "correct_answers": ["I have two hands"], "word_bank": ["I", "have", "two", "hands", "fingers", "ten"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Barmoq", "word": "finger", "correct_answers": ["finger"]},
+          {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/hand.mp3", "word": "hand", "correct_answers": ["hand"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "Nechta barmog'ing bor?", "word": "finger",
+           "options": [{"text": "Ten", "correct": true}, {"text": "Two", "correct": false}, {"text": "Five", "correct": false}],
+           "hint_uz": "Ikkala qo'lingdagi barmoqlarni sana."},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda ikkita qo'l bor", "word": "hand", "correct_answers": ["I have two hands", "I have two arms"]}
+         ]},
+        {"code": "a0-u6-l4", "title_uz": "Oyoq va tish", "order": 3, "xp_reward": 10,
+         "new_words": ["leg", "foot", "tooth"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Oyoq' inglizchada qanday bo'ladi?", "word": "leg", "image": "img/leg.png",
+           "options": [{"text": "Leg", "correct": true}, {"text": "Foot", "correct": false}, {"text": "Arm", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "leg", "right": "oyoq"}, {"left": "foot", "right": "oyoq panjasi"}, {"left": "tooth", "right": "tish"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Menda ikkita oyoq bor: I have two ___.", "word": "leg", "correct_answers": ["legs"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Tish", "word": "tooth", "correct_answers": ["tooth"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/tooth.mp3", "word": "tooth", "correct_answers": ["tooth"]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Tishim oq'",
+           "correct_answers": ["My tooth is white"], "word_bank": ["My", "tooth", "is", "white", "leg"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Oyoq panjasi' inglizchada qanday bo'ladi?", "word": "foot",
+           "options": [{"text": "Foot", "correct": true}, {"text": "Leg", "correct": false}, {"text": "Hand", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Tishim oq", "word": "tooth", "correct_answers": ["My tooth is white"]}
+         ]},
+        {"code": "a0-u6-l5", "title_uz": "Takrorlash: tana", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["body", "head", "face", "hair", "eye", "ear", "nose", "mouth", "tooth", "hand", "arm", "finger", "leg", "foot"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "eye", "right": "ko'z"}, {"left": "nose", "right": "burun"}, {"left": "hand", "right": "qo'l (kaft)"}, {"left": "leg", "right": "oyoq"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'Bosh' inglizchada qanday bo'ladi?", "word": "head",
+           "options": [{"text": "Head", "correct": true}, {"text": "Hair", "correct": false}, {"text": "Body", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Menda ikkita ko'z va ikkita quloq bor'",
+           "correct_answers": ["I have two eyes and two ears"], "word_bank": ["I", "have", "two", "eyes", "and", "two", "ears", "nose"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Sochim qora: My ___ is black.", "word": "hair", "correct_answers": ["hair"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Menda o'nta barmoq bor", "word": "finger", "correct_answers": ["I have ten fingers"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Nechta ko'zing bor?", "word": "eye",
+           "options": [{"text": "Two", "correct": true}, {"text": "Ten", "correct": false}, {"text": "One", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/eye.mp3", "word": "eye", "correct_answers": ["eye"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Mening yuzim", "word": "face", "correct_answers": ["my face"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

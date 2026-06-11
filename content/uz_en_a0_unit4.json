@@ -1,0 +1,195 @@
+{
+  "$comment": "uz->en A0 kursi. Unit 4: Ranglar (order=3). 'It is + rang' va 'What color is it?' konstruksiyalari.",
+
+  "course": {
+    "code": "uz-en",
+    "source_language": "uz",
+    "target_language": "en",
+    "title_uz": "Ingliz tili",
+    "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"
+  },
+
+  "vocabulary": [
+    {"word": "red", "translation": "qizil", "level_code": "A0", "example": "It is red.", "example_translation": "U qizil.", "audio": "audio/en/red.mp3", "image": "img/color_red.png", "tags": ["colors"]},
+    {"word": "blue", "translation": "ko'k", "level_code": "A0", "example": "The sky is blue.", "example_translation": "Osmon ko'k.", "audio": "audio/en/blue.mp3", "image": "img/color_blue.png", "tags": ["colors"]},
+    {"word": "green", "translation": "yashil", "level_code": "A0", "example": "It is green.", "example_translation": "U yashil.", "audio": "audio/en/green.mp3", "image": "img/color_green.png", "tags": ["colors"]},
+    {"word": "yellow", "translation": "sariq", "level_code": "A0", "example": "The sun is yellow.", "example_translation": "Quyosh sariq.", "audio": "audio/en/yellow.mp3", "image": "img/color_yellow.png", "tags": ["colors"]},
+    {"word": "orange", "translation": "to'q sariq", "level_code": "A0", "example": "It is orange.", "example_translation": "U to'q sariq.", "audio": "audio/en/orange_color.mp3", "image": "img/color_orange.png", "tags": ["colors"]},
+    {"word": "pink", "translation": "pushti", "level_code": "A0", "example": "It is pink.", "example_translation": "U pushti.", "audio": "audio/en/pink.mp3", "image": "img/color_pink.png", "tags": ["colors"]},
+    {"word": "purple", "translation": "binafsha", "level_code": "A0", "example": "It is purple.", "example_translation": "U binafsha rangda.", "audio": "audio/en/purple.mp3", "image": "img/color_purple.png", "tags": ["colors"]},
+    {"word": "brown", "translation": "jigarrang", "level_code": "A0", "example": "It is brown.", "example_translation": "U jigarrang.", "audio": "audio/en/brown.mp3", "image": "img/color_brown.png", "tags": ["colors"]},
+    {"word": "black", "translation": "qora", "level_code": "A0", "example": "It is black.", "example_translation": "U qora.", "audio": "audio/en/black.mp3", "image": "img/color_black.png", "tags": ["colors"]},
+    {"word": "white", "translation": "oq", "level_code": "A0", "example": "It is white.", "example_translation": "U oq.", "audio": "audio/en/white.mp3", "image": "img/color_white.png", "tags": ["colors"]},
+    {"word": "color", "translation": "rang", "level_code": "A0", "example": "What color is it?", "example_translation": "Bu nima rang?", "audio": "audio/en/color.mp3", "tags": ["colors"]},
+    {"word": "what", "translation": "nima", "level_code": "A0", "example": "What is your name?", "example_translation": "Sening isming nima?", "audio": "audio/en/what.mp3", "tags": ["grammar"]},
+    {"word": "it", "translation": "u (narsa-buyum)", "level_code": "A0", "example": "It is red.", "example_translation": "U qizil.", "audio": "audio/en/it.mp3", "tags": ["grammar"]},
+    {"word": "the", "translation": "aniqlovchi artikl", "level_code": "A0", "example": "The sun is yellow.", "example_translation": "Quyosh sariq.", "audio": "audio/en/the.mp3", "tags": ["grammar"]},
+    {"word": "sun", "translation": "quyosh", "level_code": "A0", "example": "The sun is yellow.", "example_translation": "Quyosh sariq.", "audio": "audio/en/sun.mp3", "image": "img/sun.png", "tags": ["nature"]},
+    {"word": "sky", "translation": "osmon", "level_code": "A0", "example": "The sky is blue.", "example_translation": "Osmon ko'k.", "audio": "audio/en/sky.mp3", "image": "img/sky.png", "tags": ["nature"]}
+  ],
+
+  "levels": [
+    {
+      "code": "A0",
+      "title_uz": "Boshlang'ich",
+      "order": 0,
+      "units": [
+        {
+          "code": "a0-u4",
+          "title_uz": "Ranglar",
+          "title_en": "Colors",
+          "description_uz": "Ranglarni va 'Bu nima rang?' deb so'rashni o'rganamiz",
+          "order": 3,
+          "icon": "unit_colors",
+          "lessons": [
+            {
+              "code": "a0-u4-l1",
+              "title_uz": "Asosiy ranglar",
+              "order": 0,
+              "xp_reward": 10,
+              "new_words": ["red", "blue", "green", "yellow"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qizil' inglizchada qanday bo'ladi?", "word": "red",
+                 "options": [{"text": "Red", "correct": true}, {"text": "Blue", "correct": false}, {"text": "Green", "correct": false}],
+                 "image": "img/color_red.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "red", "right": "qizil"}, {"left": "blue", "right": "ko'k"}, {"left": "green", "right": "yashil"}, {"left": "yellow", "right": "sariq"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Yashil", "word": "green",
+                 "correct_answers": ["green"]},
+                {"type": "multiple_choice", "order": 3, "prompt_uz": "Rasmda qanday rang?", "word": "blue",
+                 "image": "img/color_blue.png",
+                 "options": [{"text": "Blue", "correct": true}, {"text": "Red", "correct": false}, {"text": "Yellow", "correct": false}]},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/yellow.mp3", "word": "yellow",
+                 "correct_answers": ["yellow"]},
+                {"type": "fill_blank", "order": 5, "prompt_uz": "Sariq + ko'k = ? Yellow and blue is ___.", "word": "green",
+                 "correct_answers": ["green"],
+                 "hint_uz": "Ikkita bo'yoqni aralashtirsang qaysi rang chiqadi?"},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'U qizil'",
+                 "correct_answers": ["It is red"],
+                 "word_bank": ["It", "is", "red", "blue", "green"],
+                 "hint_uz": "Narsa-buyum haqida 'It' deymiz."},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Ko'k", "word": "blue",
+                 "correct_answers": ["blue"]}
+              ]
+            },
+            {
+              "code": "a0-u4-l2",
+              "title_uz": "Yana ranglar",
+              "order": 1,
+              "xp_reward": 10,
+              "new_words": ["orange", "pink", "purple", "brown"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Pushti' inglizchada qanday bo'ladi?", "word": "pink",
+                 "options": [{"text": "Pink", "correct": true}, {"text": "Purple", "correct": false}, {"text": "Brown", "correct": false}],
+                 "image": "img/color_pink.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "orange", "right": "to'q sariq"}, {"left": "pink", "right": "pushti"}, {"left": "purple", "right": "binafsha"}, {"left": "brown", "right": "jigarrang"}]},
+                {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Jigarrang", "word": "brown",
+                 "correct_answers": ["brown"]},
+                {"type": "fill_blank", "order": 3, "prompt_uz": "Qizil + sariq = ? Red and yellow is ___.", "word": "orange",
+                 "correct_answers": ["orange"],
+                 "hint_uz": "Apelsin rangini eslang."},
+                {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/purple.mp3", "word": "purple",
+                 "correct_answers": ["purple"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Binafsha' inglizchada qanday bo'ladi?", "word": "purple",
+                 "options": [{"text": "Purple", "correct": true}, {"text": "Pink", "correct": false}, {"text": "Orange", "correct": false}]},
+                {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'U pushti'",
+                 "correct_answers": ["It is pink"],
+                 "word_bank": ["It", "is", "pink", "purple", "brown"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: To'q sariq", "word": "orange",
+                 "correct_answers": ["orange"]}
+              ]
+            },
+            {
+              "code": "a0-u4-l3",
+              "title_uz": "Bu nima rang?",
+              "order": 2,
+              "xp_reward": 10,
+              "new_words": ["black", "white", "color", "what"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qora' inglizchada qanday bo'ladi?", "word": "black",
+                 "options": [{"text": "Black", "correct": true}, {"text": "White", "correct": false}, {"text": "Brown", "correct": false}],
+                 "image": "img/color_black.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "black", "right": "qora"}, {"left": "white", "right": "oq"}, {"left": "color", "right": "rang"}]},
+                {"type": "multiple_choice", "order": 2, "prompt_uz": "'Nima' inglizchada qanday bo'ladi?", "word": "what",
+                 "options": [{"text": "What", "correct": true}, {"text": "Who", "correct": false}, {"text": "How many", "correct": false}],
+                 "hint_uz": "'Who' — kim, '___' — nima."},
+                {"type": "word_bank", "order": 3, "prompt_uz": "Savolni yig'ing: 'Bu nima rang?'",
+                 "correct_answers": ["What color is it"],
+                 "word_bank": ["What", "color", "is", "it", "who", "red"],
+                 "hint_uz": "Savol 'What' bilan boshlanadi."},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Savol so'zini qo'ying: ___ color is it?", "word": "what",
+                 "correct_answers": ["What"]},
+                {"type": "translate", "order": 5, "prompt_uz": "Tarjima qiling: Qora va oq", "word": "black",
+                 "correct_answers": ["black and white"]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/white.mp3", "word": "white",
+                 "correct_answers": ["white"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Nima rang?", "word": "color",
+                 "correct_answers": ["what color", "what color?"]}
+              ]
+            },
+            {
+              "code": "a0-u4-l4",
+              "title_uz": "Quyosh va osmon",
+              "order": 3,
+              "xp_reward": 10,
+              "new_words": ["it", "the", "sun", "sky"],
+              "exercises": [
+                {"type": "multiple_choice", "order": 0, "prompt_uz": "'Quyosh' inglizchada qanday bo'ladi?", "word": "sun",
+                 "options": [{"text": "Sun", "correct": true}, {"text": "Sky", "correct": false}, {"text": "Sister", "correct": false}],
+                 "image": "img/sun.png"},
+                {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "sun", "right": "quyosh"}, {"left": "sky", "right": "osmon"}, {"left": "it", "right": "u (narsa)"}]},
+                {"type": "fill_blank", "order": 2, "prompt_uz": "U qizil rangda: ___ is red.", "word": "it",
+                 "correct_answers": ["It"],
+                 "hint_uz": "Narsa-buyum haqida gapirganda ishlatamiz."},
+                {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Quyosh sariq'",
+                 "correct_answers": ["The sun is yellow"],
+                 "word_bank": ["The", "sun", "is", "yellow", "sky"],
+                 "hint_uz": "Inglizchada aniq narsalar oldidan 'The' qo'yiladi."},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Osmon ko'k: The sky is ___.", "word": "blue",
+                 "correct_answers": ["blue"]},
+                {"type": "translate", "order": 5, "prompt_uz": "Tarjima qiling: Osmon ko'k", "word": "sky",
+                 "correct_answers": ["The sky is blue", "Sky is blue"]},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/sun.mp3", "word": "sun",
+                 "correct_answers": ["sun"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Quyosh sariq", "word": "sun",
+                 "correct_answers": ["The sun is yellow", "Sun is yellow"]}
+              ]
+            },
+            {
+              "code": "a0-u4-l5",
+              "title_uz": "Takrorlash: ranglar",
+              "order": 4,
+              "xp_reward": 15,
+              "is_review": true,
+              "review_words": ["red", "blue", "green", "yellow", "orange", "pink", "purple", "brown", "black", "white", "color", "what", "it", "the", "sun", "sky"],
+              "exercises": [
+                {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+                 "pairs": [{"left": "red", "right": "qizil"}, {"left": "white", "right": "oq"}, {"left": "purple", "right": "binafsha"}, {"left": "sky", "right": "osmon"}]},
+                {"type": "multiple_choice", "order": 1, "prompt_uz": "Yellow and blue is ...?", "word": "green",
+                 "options": [{"text": "Green", "correct": true}, {"text": "Orange", "correct": false}, {"text": "Pink", "correct": false}],
+                 "hint_uz": "Bo'yoqlarni aralashtiramiz."},
+                {"type": "word_bank", "order": 2, "prompt_uz": "Savolni yig'ing: 'Osmon nima rang?'",
+                 "correct_answers": ["What color is the sky"],
+                 "word_bank": ["What", "color", "is", "the", "sky", "sun"]},
+                {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Bu nima rang?", "word": "color",
+                 "correct_answers": ["What color is it", "What color is it?"]},
+                {"type": "fill_blank", "order": 4, "prompt_uz": "Quyosh sariq: The sun is ___.", "word": "yellow",
+                 "correct_answers": ["yellow"]},
+                {"type": "multiple_choice", "order": 5, "prompt_uz": "'Oq' inglizchada qanday bo'ladi?", "word": "white",
+                 "options": [{"text": "White", "correct": true}, {"text": "Black", "correct": false}, {"text": "What", "correct": false}],
+                 "hint_uz": "'What' so'zi bilan adashtirma!"},
+                {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/green.mp3", "word": "green",
+                 "correct_answers": ["green"]},
+                {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Pushti va ko'k", "word": "pink",
+                 "correct_answers": ["pink and blue"]}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

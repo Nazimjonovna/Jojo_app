@@ -1,0 +1,112 @@
+{
+  "$comment": "uz->en A0. Unit 7: Ovqatlar (order=6). 'I like / I don't like' - birinchi inkor, 'I eat / I drink'.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "food", "translation": "ovqat", "level_code": "A0", "example": "I like food.", "example_translation": "Men ovqatni yoqtiraman.", "audio": "audio/en/food.mp3", "image": "img/food.png", "tags": ["food"]},
+    {"word": "bread", "translation": "non", "level_code": "A0", "example": "I like bread.", "example_translation": "Men nonni yoqtiraman.", "audio": "audio/en/bread.mp3", "image": "img/bread.png", "tags": ["food"]},
+    {"word": "apple", "translation": "olma", "level_code": "A0", "example": "The apple is red.", "example_translation": "Olma qizil.", "audio": "audio/en/apple.mp3", "image": "img/apple.png", "tags": ["food"]},
+    {"word": "banana", "translation": "banan", "level_code": "A0", "example": "The banana is yellow.", "example_translation": "Banan sariq.", "audio": "audio/en/banana.mp3", "image": "img/banana.png", "tags": ["food"]},
+    {"word": "water", "translation": "suv", "level_code": "A0", "example": "I drink water.", "example_translation": "Men suv ichaman.", "audio": "audio/en/water.mp3", "image": "img/water.png", "tags": ["food"]},
+    {"word": "milk", "translation": "sut", "level_code": "A0", "example": "I drink milk.", "example_translation": "Men sut ichaman.", "audio": "audio/en/milk.mp3", "image": "img/milk.png", "tags": ["food"]},
+    {"word": "tea", "translation": "choy", "level_code": "A0", "example": "I drink tea.", "example_translation": "Men choy ichaman.", "audio": "audio/en/tea.mp3", "image": "img/tea.png", "tags": ["food"]},
+    {"word": "drink", "translation": "ichmoq", "level_code": "A0", "example": "I drink water.", "example_translation": "Men suv ichaman.", "audio": "audio/en/drink.mp3", "tags": ["food"]},
+    {"word": "egg", "translation": "tuxum", "level_code": "A0", "example": "I eat eggs.", "example_translation": "Men tuxum yeyman.", "audio": "audio/en/egg.mp3", "image": "img/egg.png", "tags": ["food"]},
+    {"word": "rice", "translation": "guruch", "level_code": "A0", "example": "I eat rice.", "example_translation": "Men guruch yeyman.", "audio": "audio/en/rice.mp3", "image": "img/rice.png", "tags": ["food"]},
+    {"word": "meat", "translation": "go'sht", "level_code": "A0", "example": "I eat meat.", "example_translation": "Men go'sht yeyman.", "audio": "audio/en/meat.mp3", "image": "img/meat.png", "tags": ["food"]},
+    {"word": "soup", "translation": "sho'rva", "level_code": "A0", "example": "I eat soup.", "example_translation": "Men sho'rva ichaman.", "audio": "audio/en/soup.mp3", "image": "img/soup.png", "tags": ["food"]},
+    {"word": "eat", "translation": "yemoq", "level_code": "A0", "example": "I eat bread.", "example_translation": "Men non yeyman.", "audio": "audio/en/eat.mp3", "tags": ["food"]},
+    {"word": "like", "translation": "yoqtirmoq", "level_code": "A0", "example": "I like apples.", "example_translation": "Men olmani yoqtiraman.", "audio": "audio/en/like.mp3", "tags": ["grammar"]},
+    {"word": "don't", "translation": "inkor (emas, -ma)", "level_code": "A0", "example": "I don't like milk.", "example_translation": "Men sutni yoqtirmayman.", "audio": "audio/en/dont.mp3", "tags": ["grammar"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u7", "title_uz": "Ovqatlar va ichimliklar", "title_en": "Food and Drinks", "description_uz": "'Men yoqtiraman / yoqtirmayman' deyishni o'rganamiz", "order": 6, "icon": "unit_food", "lessons": [
+        {"code": "a0-u7-l1", "title_uz": "Non va mevalar", "order": 0, "xp_reward": 10,
+         "new_words": ["food", "bread", "apple", "banana"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Non' inglizchada qanday bo'ladi?", "word": "bread", "image": "img/bread.png",
+           "options": [{"text": "Bread", "correct": true}, {"text": "Apple", "correct": false}, {"text": "Food", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "food", "right": "ovqat"}, {"left": "bread", "right": "non"}, {"left": "apple", "right": "olma"}, {"left": "banana", "right": "banan"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Olma", "word": "apple", "correct_answers": ["apple"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Olma qizil: The apple is ___.", "word": "apple", "correct_answers": ["red"],
+           "hint_uz": "Ranglarni eslang!"},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/apple.mp3", "word": "apple", "correct_answers": ["apple"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Ovqat' inglizchada qanday bo'ladi?", "word": "food",
+           "options": [{"text": "Food", "correct": true}, {"text": "Bread", "correct": false}, {"text": "Banana", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Banan sariq'",
+           "correct_answers": ["The banana is yellow"], "word_bank": ["The", "banana", "is", "yellow", "apple", "red"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Non", "word": "bread", "correct_answers": ["bread"]}
+         ]},
+        {"code": "a0-u7-l2", "title_uz": "Ichimliklar", "order": 1, "xp_reward": 10,
+         "new_words": ["water", "milk", "tea", "drink"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Suv' inglizchada qanday bo'ladi?", "word": "water", "image": "img/water.png",
+           "options": [{"text": "Water", "correct": true}, {"text": "Milk", "correct": false}, {"text": "Tea", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "water", "right": "suv"}, {"left": "milk", "right": "sut"}, {"left": "tea", "right": "choy"}, {"left": "drink", "right": "ichmoq"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Sut", "word": "milk", "correct_answers": ["milk"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men choy ichaman: I ___ tea.", "word": "drink", "correct_answers": ["drink"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/milk.mp3", "word": "milk", "correct_answers": ["milk"]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Men sut ichaman'",
+           "correct_answers": ["I drink milk"], "word_bank": ["I", "drink", "milk", "water", "tea"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Choy' inglizchada qanday bo'ladi?", "word": "tea",
+           "options": [{"text": "Tea", "correct": true}, {"text": "Water", "correct": false}, {"text": "Milk", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men suv ichaman", "word": "water", "correct_answers": ["I drink water"]}
+         ]},
+        {"code": "a0-u7-l3", "title_uz": "Tushlik vaqti", "order": 2, "xp_reward": 10,
+         "new_words": ["egg", "rice", "meat", "soup", "eat"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Tuxum' inglizchada qanday bo'ladi?", "word": "egg", "image": "img/egg.png",
+           "options": [{"text": "Egg", "correct": true}, {"text": "Rice", "correct": false}, {"text": "Meat", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "egg", "right": "tuxum"}, {"left": "rice", "right": "guruch"}, {"left": "meat", "right": "go'sht"}, {"left": "soup", "right": "sho'rva"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Guruch", "word": "rice", "correct_answers": ["rice"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Men sho'rva ichaman: I ___ soup.", "word": "eat", "correct_answers": ["eat"],
+           "hint_uz": "Inglizchada sho'rvani 'yeyishadi' (eat)."},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/rice.mp3", "word": "rice", "correct_answers": ["rice"]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Men guruch va go'sht yeyman'",
+           "correct_answers": ["I eat rice and meat"], "word_bank": ["I", "eat", "rice", "and", "meat", "soup"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Go'sht' inglizchada qanday bo'ladi?", "word": "meat",
+           "options": [{"text": "Meat", "correct": true}, {"text": "Egg", "correct": false}, {"text": "Soup", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men tuxum yeyman", "word": "egg", "correct_answers": ["I eat eggs"],
+           "hint_uz": "Ko'plikda ayting: eggs."}
+         ]},
+        {"code": "a0-u7-l4", "title_uz": "Yoqtiraman / yoqtirmayman", "order": 3, "xp_reward": 10,
+         "new_words": ["like", "don't"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Yoqtirmoq' inglizchada qanday bo'ladi?", "word": "like",
+           "options": [{"text": "Like", "correct": true}, {"text": "Love", "correct": false}, {"text": "Eat", "correct": false}],
+           "hint_uz": "'Love' - sevmoq, '___' - yoqtirmoq."},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Men olmani yoqtiraman'",
+           "correct_answers": ["I like apples"], "word_bank": ["I", "like", "apples", "bananas", "don't"]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Men sho'rvani yoqtirMAYman: I ___ like soup.", "word": "don't", "correct_answers": ["don't", "dont"],
+           "hint_uz": "Inkor so'zi."},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Men nonni yoqtiraman", "word": "like", "correct_answers": ["I like bread"]},
+          {"type": "multiple_choice", "order": 4, "prompt_uz": "'Yoqtirmayman' inglizchada qanday bo'ladi?", "word": "don't",
+           "options": [{"text": "I don't like", "correct": true}, {"text": "I like", "correct": false}, {"text": "I have", "correct": false}]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Men sutni yoqtirmayman'",
+           "correct_answers": ["I don't like milk"], "word_bank": ["I", "don't", "like", "milk", "tea"]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/like.mp3", "word": "like", "correct_answers": ["like"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men bananni yoqtirmayman", "word": "don't", "correct_answers": ["I don't like bananas", "I dont like bananas"]}
+         ]},
+        {"code": "a0-u7-l5", "title_uz": "Takrorlash: ovqatlar", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["food", "bread", "apple", "banana", "water", "milk", "tea", "drink", "egg", "rice", "meat", "soup", "eat", "like", "don't"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "bread", "right": "non"}, {"left": "water", "right": "suv"}, {"left": "egg", "right": "tuxum"}, {"left": "soup", "right": "sho'rva"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'Suv' inglizchada qanday bo'ladi?", "word": "water",
+           "options": [{"text": "Water", "correct": true}, {"text": "Milk", "correct": false}, {"text": "Rice", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Men choyni yoqtiraman'",
+           "correct_answers": ["I like tea"], "word_bank": ["I", "like", "tea", "don't", "milk"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Men olmani yoqtiraman", "word": "like", "correct_answers": ["I like apples"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Men guruch yeyman: I eat ___.", "word": "rice", "correct_answers": ["rice"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi biri ICHIMLIK?", "word": "milk",
+           "options": [{"text": "Milk", "correct": true}, {"text": "Bread", "correct": false}, {"text": "Meat", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/tea.mp3", "word": "tea", "correct_answers": ["tea"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men suv ichaman", "word": "drink", "correct_answers": ["I drink water"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

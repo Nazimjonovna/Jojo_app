@@ -1,0 +1,107 @@
+{
+  "$comment": "uz->en A0. Unit 10: Kiyimlar (order=9). 'I am wearing...' va new/old sifatlari.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "clothes", "translation": "kiyimlar", "level_code": "A0", "example": "I like my clothes.", "example_translation": "Men kiyimlarimni yoqtiraman.", "audio": "audio/en/clothes.mp3", "image": "img/clothes.png", "tags": ["clothes"]},
+    {"word": "shirt", "translation": "ko'ylak", "level_code": "A0", "example": "My shirt is blue.", "example_translation": "Ko'ylagim ko'k.", "audio": "audio/en/shirt.mp3", "image": "img/shirt.png", "tags": ["clothes"]},
+    {"word": "dress", "translation": "ko'ylak (qizlar uchun)", "level_code": "A0", "example": "The dress is pink.", "example_translation": "Ko'ylak pushti.", "audio": "audio/en/dress.mp3", "image": "img/dress.png", "tags": ["clothes"]},
+    {"word": "hat", "translation": "bosh kiyim (shlyapa)", "level_code": "A0", "example": "I am wearing a hat.", "example_translation": "Men bosh kiyim kiyib turibman.", "audio": "audio/en/hat.mp3", "image": "img/hat.png", "tags": ["clothes"]},
+    {"word": "shoes", "translation": "oyoq kiyim", "level_code": "A0", "example": "My shoes are black.", "example_translation": "Oyoq kiyimim qora.", "audio": "audio/en/shoes.mp3", "image": "img/shoes.png", "tags": ["clothes"]},
+    {"word": "socks", "translation": "paypoq", "level_code": "A0", "example": "My socks are white.", "example_translation": "Paypog'im oq.", "audio": "audio/en/socks.mp3", "image": "img/socks.png", "tags": ["clothes"]},
+    {"word": "jacket", "translation": "kurtka", "level_code": "A0", "example": "My jacket is green.", "example_translation": "Kurtkam yashil.", "audio": "audio/en/jacket.mp3", "image": "img/jacket.png", "tags": ["clothes"]},
+    {"word": "skirt", "translation": "yubka", "level_code": "A0", "example": "The skirt is red.", "example_translation": "Yubka qizil.", "audio": "audio/en/skirt.mp3", "image": "img/skirt.png", "tags": ["clothes"]},
+    {"word": "am", "translation": "-man (men uchun bog'lovchi)", "level_code": "A0", "example": "I am a student.", "example_translation": "Men o'quvchiman.", "audio": "audio/en/am.mp3", "tags": ["grammar"]},
+    {"word": "wearing", "translation": "kiyib turmoq", "level_code": "A0", "example": "I am wearing a shirt.", "example_translation": "Men ko'ylak kiyib turibman.", "audio": "audio/en/wearing.mp3", "tags": ["clothes"]},
+    {"word": "new", "translation": "yangi", "level_code": "A0", "example": "I have a new dress.", "example_translation": "Menda yangi ko'ylak bor.", "audio": "audio/en/new.mp3", "tags": ["adjectives"]},
+    {"word": "old", "translation": "eski", "level_code": "A0", "example": "The hat is old.", "example_translation": "Bosh kiyim eski.", "audio": "audio/en/old.mp3", "tags": ["adjectives"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u10", "title_uz": "Kiyimlar", "title_en": "Clothes", "description_uz": "Kiyimlarni va 'kiyib turibman' deyishni o'rganamiz", "order": 9, "icon": "unit_clothes", "lessons": [
+        {"code": "a0-u10-l1", "title_uz": "Ko'ylak va bosh kiyim", "order": 0, "xp_reward": 10,
+         "new_words": ["clothes", "shirt", "dress", "hat"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Ko'ylak' inglizchada qanday bo'ladi?", "word": "shirt", "image": "img/shirt.png",
+           "options": [{"text": "Shirt", "correct": true}, {"text": "Hat", "correct": false}, {"text": "Dress", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "clothes", "right": "kiyimlar"}, {"left": "shirt", "right": "ko'ylak"}, {"left": "dress", "right": "ko'ylak (qizlar uchun)"}, {"left": "hat", "right": "bosh kiyim (shlyapa)"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Bosh kiyim", "word": "hat", "correct_answers": ["hat"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Ko'ylagim ko'k: My shirt is ___.", "word": "shirt", "correct_answers": ["blue"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/dress.mp3", "word": "dress", "correct_answers": ["dress"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Kiyimlar' inglizchada qanday bo'ladi?", "word": "clothes",
+           "options": [{"text": "Clothes", "correct": true}, {"text": "Shirt", "correct": false}, {"text": "Shoes", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Ko'ylak pushti'",
+           "correct_answers": ["The dress is pink"], "word_bank": ["The", "dress", "is", "pink", "shirt", "blue"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda ko'ylak bor", "word": "shirt", "correct_answers": ["I have a shirt", "I have a dress"]}
+         ]},
+        {"code": "a0-u10-l2", "title_uz": "Oyoq kiyim va kurtka", "order": 1, "xp_reward": 10,
+         "new_words": ["shoes", "socks", "jacket", "skirt"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Oyoq kiyim' inglizchada qanday bo'ladi?", "word": "shoes", "image": "img/shoes.png",
+           "options": [{"text": "Shoes", "correct": true}, {"text": "Socks", "correct": false}, {"text": "Jacket", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "shoes", "right": "oyoq kiyim"}, {"left": "socks", "right": "paypoq"}, {"left": "jacket", "right": "kurtka"}, {"left": "skirt", "right": "yubka"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Paypoq", "word": "socks", "correct_answers": ["socks"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Paypog'im oq: My socks ___ white.", "word": "socks", "correct_answers": ["are"],
+           "hint_uz": "Paypoq juft - ko'plik, demak 'are'."},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/jacket.mp3", "word": "jacket", "correct_answers": ["jacket"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Yubka' inglizchada qanday bo'ladi?", "word": "skirt",
+           "options": [{"text": "Skirt", "correct": true}, {"text": "Shirt", "correct": false}, {"text": "Socks", "correct": false}],
+           "hint_uz": "'Shirt' (ko'ylak) bilan adashtirma!"},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Kurtkam yashil'",
+           "correct_answers": ["My jacket is green"], "word_bank": ["My", "jacket", "is", "green", "skirt", "red"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Oyoq kiyimim qora", "word": "shoes", "correct_answers": ["My shoes are black"]}
+         ]},
+        {"code": "a0-u10-l3", "title_uz": "Kiyib turibman", "order": 2, "xp_reward": 10,
+         "new_words": ["am", "wearing"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Kiyib turmoq' inglizchada qanday bo'ladi?", "word": "wearing",
+           "options": [{"text": "Wearing", "correct": true}, {"text": "Reading", "correct": false}, {"text": "Eating", "correct": false}]},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'Men bosh kiyim kiyib turibman'",
+           "correct_answers": ["I am wearing a hat"], "word_bank": ["I", "am", "wearing", "a", "hat", "shirt"],
+           "hint_uz": "'Men ...man' = 'I am ...'"},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "I ___ wearing a jacket. (Men kurtka kiyib turibman)", "word": "am", "correct_answers": ["am"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "I am ___ a dress. (Men ko'ylak kiyib turibman)", "word": "wearing", "correct_answers": ["wearing"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Men ko'ylak kiyib turibman", "word": "wearing", "correct_answers": ["I am wearing a shirt", "I am wearing a dress"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi gap TO'G'RI?", "word": "am",
+           "options": [{"text": "I am wearing a hat", "correct": true}, {"text": "I is wearing a hat", "correct": false}, {"text": "I are wearing a hat", "correct": false}],
+           "hint_uz": "'I' bilan doim 'am' keladi."},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/wearing.mp3", "word": "wearing", "correct_answers": ["wearing"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men kurtka kiyib turibman", "word": "jacket", "correct_answers": ["I am wearing a jacket"]}
+         ]},
+        {"code": "a0-u10-l4", "title_uz": "Yangi va eski", "order": 3, "xp_reward": 10,
+         "new_words": ["new", "old"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Yangi' inglizchada qanday bo'ladi?", "word": "new",
+           "options": [{"text": "New", "correct": true}, {"text": "Old", "correct": false}, {"text": "Big", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "new", "right": "yangi"}, {"left": "old", "right": "eski"}, {"left": "big", "right": "katta"}, {"left": "little", "right": "kichkina"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Bosh kiyim eski: The hat is ___.", "word": "old", "correct_answers": ["old"]},
+          {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Menda yangi ko'ylak bor'",
+           "correct_answers": ["I have a new dress"], "word_bank": ["I", "have", "a", "new", "dress", "old"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Yangi kurtka", "word": "new", "correct_answers": ["a new jacket", "new jacket"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Eski' inglizchada qanday bo'ladi?", "word": "old",
+           "options": [{"text": "Old", "correct": true}, {"text": "New", "correct": false}, {"text": "Little", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/new.mp3", "word": "new", "correct_answers": ["new"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Oyoq kiyimim eski", "word": "old", "correct_answers": ["My shoes are old"]}
+         ]},
+        {"code": "a0-u10-l5", "title_uz": "Takrorlash: kiyimlar", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["clothes", "shirt", "dress", "hat", "shoes", "socks", "jacket", "skirt", "am", "wearing", "new", "old"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "shirt", "right": "ko'ylak"}, {"left": "shoes", "right": "oyoq kiyim"}, {"left": "hat", "right": "bosh kiyim (shlyapa)"}, {"left": "new", "right": "yangi"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'Kurtka' inglizchada qanday bo'ladi?", "word": "jacket",
+           "options": [{"text": "Jacket", "correct": true}, {"text": "Skirt", "correct": false}, {"text": "Socks", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Men yangi ko'ylak kiyib turibman'",
+           "correct_answers": ["I am wearing a new shirt"], "word_bank": ["I", "am", "wearing", "a", "new", "shirt", "old"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Men bosh kiyim kiyib turibman", "word": "wearing", "correct_answers": ["I am wearing a hat"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Yubka qizil: The skirt is ___.", "word": "skirt", "correct_answers": ["red"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "OYOQQA nima kiyamiz?", "word": "shoes",
+           "options": [{"text": "Shoes", "correct": true}, {"text": "Hat", "correct": false}, {"text": "Shirt", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/shoes.mp3", "word": "shoes", "correct_answers": ["shoes"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Menda eski kurtka bor", "word": "old", "correct_answers": ["I have an old jacket", "I have a old jacket"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

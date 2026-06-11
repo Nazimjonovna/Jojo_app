@@ -1,0 +1,110 @@
+{
+  "$comment": "uz->en A0. Unit 11: Ob-havo (order=10). 'It is sunny today' va fasllar.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "weather", "translation": "ob-havo", "level_code": "A0", "example": "I like the weather.", "example_translation": "Menga ob-havo yoqadi.", "audio": "audio/en/weather.mp3", "image": "img/weather.png", "tags": ["weather"]},
+    {"word": "today", "translation": "bugun", "level_code": "A0", "example": "It is sunny today.", "example_translation": "Bugun havo quyoshli.", "audio": "audio/en/today.mp3", "tags": ["weather"]},
+    {"word": "sunny", "translation": "quyoshli", "level_code": "A0", "example": "It is sunny.", "example_translation": "Havo quyoshli.", "audio": "audio/en/sunny.mp3", "image": "img/sunny.png", "tags": ["weather"]},
+    {"word": "rainy", "translation": "yomg'irli", "level_code": "A0", "example": "It is rainy today.", "example_translation": "Bugun havo yomg'irli.", "audio": "audio/en/rainy.mp3", "image": "img/rainy.png", "tags": ["weather"]},
+    {"word": "hot", "translation": "issiq", "level_code": "A0", "example": "It is hot.", "example_translation": "Havo issiq.", "audio": "audio/en/hot.mp3", "image": "img/hot.png", "tags": ["weather"]},
+    {"word": "cold", "translation": "sovuq", "level_code": "A0", "example": "It is cold.", "example_translation": "Havo sovuq.", "audio": "audio/en/cold.mp3", "image": "img/cold.png", "tags": ["weather"]},
+    {"word": "windy", "translation": "shamolli", "level_code": "A0", "example": "It is windy.", "example_translation": "Havo shamolli.", "audio": "audio/en/windy.mp3", "image": "img/windy.png", "tags": ["weather"]},
+    {"word": "snowy", "translation": "qorli", "level_code": "A0", "example": "It is snowy.", "example_translation": "Havo qorli.", "audio": "audio/en/snowy.mp3", "image": "img/snowy.png", "tags": ["weather"]},
+    {"word": "rain", "translation": "yomg'ir", "level_code": "A0", "example": "I don't like rain.", "example_translation": "Men yomg'irni yoqtirmayman.", "audio": "audio/en/rain.mp3", "image": "img/rain.png", "tags": ["weather"]},
+    {"word": "snow", "translation": "qor", "level_code": "A0", "example": "The snow is white.", "example_translation": "Qor oq.", "audio": "audio/en/snow.mp3", "image": "img/snow.png", "tags": ["weather"]},
+    {"word": "summer", "translation": "yoz", "level_code": "A0", "example": "Summer is hot.", "example_translation": "Yoz issiq.", "audio": "audio/en/summer.mp3", "image": "img/summer.png", "tags": ["seasons"]},
+    {"word": "winter", "translation": "qish", "level_code": "A0", "example": "Winter is cold.", "example_translation": "Qish sovuq.", "audio": "audio/en/winter.mp3", "image": "img/winter.png", "tags": ["seasons"]},
+    {"word": "spring", "translation": "bahor", "level_code": "A0", "example": "I like spring.", "example_translation": "Men bahorni yoqtiraman.", "audio": "audio/en/spring.mp3", "image": "img/spring.png", "tags": ["seasons"]},
+    {"word": "autumn", "translation": "kuz", "level_code": "A0", "example": "It is rainy in autumn.", "example_translation": "Kuzda havo yomg'irli.", "audio": "audio/en/autumn.mp3", "image": "img/autumn.png", "tags": ["seasons"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u11", "title_uz": "Ob-havo va fasllar", "title_en": "Weather and Seasons", "description_uz": "Ob-havo haqida gapirishni o'rganamiz", "order": 10, "icon": "unit_weather", "lessons": [
+        {"code": "a0-u11-l1", "title_uz": "Bugun havo qanday?", "order": 0, "xp_reward": 10,
+         "new_words": ["weather", "today", "sunny", "rainy"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Quyoshli' inglizchada qanday bo'ladi?", "word": "sunny", "image": "img/sunny.png",
+           "options": [{"text": "Sunny", "correct": true}, {"text": "Rainy", "correct": false}, {"text": "Sun", "correct": false}],
+           "hint_uz": "'Sun' - quyosh, '___' - quyoshLI."},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "weather", "right": "ob-havo"}, {"left": "today", "right": "bugun"}, {"left": "sunny", "right": "quyoshli"}, {"left": "rainy", "right": "yomg'irli"}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Bugun havo quyoshli'",
+           "correct_answers": ["It is sunny today"], "word_bank": ["It", "is", "sunny", "today", "rainy"],
+           "hint_uz": "Ob-havo haqida 'It is ...' deymiz."},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Ob-havo", "word": "weather", "correct_answers": ["weather"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Bugun havo yomg'irli: It is ___ today.", "word": "rainy", "correct_answers": ["rainy"]},
+          {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/sunny.mp3", "word": "sunny", "correct_answers": ["sunny"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Bugun' inglizchada qanday bo'ladi?", "word": "today",
+           "options": [{"text": "Today", "correct": true}, {"text": "Weather", "correct": false}, {"text": "There", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Havo quyoshli", "word": "sunny", "correct_answers": ["It is sunny"]}
+         ]},
+        {"code": "a0-u11-l2", "title_uz": "Issiq va sovuq", "order": 1, "xp_reward": 10,
+         "new_words": ["hot", "cold", "windy", "snowy"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Issiq' inglizchada qanday bo'ladi?", "word": "hot", "image": "img/hot.png",
+           "options": [{"text": "Hot", "correct": true}, {"text": "Cold", "correct": false}, {"text": "Hat", "correct": false}],
+           "hint_uz": "'Hat' (bosh kiyim) bilan adashtirma!"},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "hot", "right": "issiq"}, {"left": "cold", "right": "sovuq"}, {"left": "windy", "right": "shamolli"}, {"left": "snowy", "right": "qorli"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Sovuq", "word": "cold", "correct_answers": ["cold"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Havo sovuq: It is ___.", "word": "cold", "correct_answers": ["cold"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/cold.mp3", "word": "cold", "correct_answers": ["cold"]},
+          {"type": "word_bank", "order": 5, "prompt_uz": "Gapni yig'ing: 'Bugun havo shamolli'",
+           "correct_answers": ["It is windy today"], "word_bank": ["It", "is", "windy", "today", "snowy"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "'Qorli' inglizchada qanday bo'ladi?", "word": "snowy",
+           "options": [{"text": "Snowy", "correct": true}, {"text": "Windy", "correct": false}, {"text": "Rainy", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Havo issiq", "word": "hot", "correct_answers": ["It is hot"]}
+         ]},
+        {"code": "a0-u11-l3", "title_uz": "Yomg'ir va qor", "order": 2, "xp_reward": 10,
+         "new_words": ["rain", "snow"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Qor' inglizchada qanday bo'ladi?", "word": "snow", "image": "img/snow.png",
+           "options": [{"text": "Snow", "correct": true}, {"text": "Rain", "correct": false}, {"text": "Snowy", "correct": false}],
+           "hint_uz": "'Snowy' - qorLI, '___' - qor."},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "rain", "right": "yomg'ir"}, {"left": "snow", "right": "qor"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Qor oq: The snow is ___.", "word": "snow", "correct_answers": ["white"]},
+          {"type": "word_bank", "order": 3, "prompt_uz": "Gapni yig'ing: 'Men yomg'irni yoqtirmayman'",
+           "correct_answers": ["I don't like rain"], "word_bank": ["I", "don't", "like", "rain", "snow"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Yomg'ir", "word": "rain", "correct_answers": ["rain"]},
+          {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/snow.mp3", "word": "snow", "correct_answers": ["snow"]},
+          {"type": "multiple_choice", "order": 6, "prompt_uz": "Qor qanday rangda?", "word": "snow",
+           "options": [{"text": "White", "correct": true}, {"text": "Black", "correct": false}, {"text": "Green", "correct": false}]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Men qorni yoqtiraman", "word": "snow", "correct_answers": ["I like snow"]}
+         ]},
+        {"code": "a0-u11-l4", "title_uz": "To'rt fasl", "order": 3, "xp_reward": 10,
+         "new_words": ["summer", "winter", "spring", "autumn"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Yoz' inglizchada qanday bo'ladi?", "word": "summer", "image": "img/summer.png",
+           "options": [{"text": "Summer", "correct": true}, {"text": "Winter", "correct": false}, {"text": "Spring", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "summer", "right": "yoz"}, {"left": "winter", "right": "qish"}, {"left": "spring", "right": "bahor"}, {"left": "autumn", "right": "kuz"}]},
+          {"type": "fill_blank", "order": 2, "prompt_uz": "Yoz issiq: Summer is ___.", "word": "summer", "correct_answers": ["hot"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Qish sovuq: Winter is ___.", "word": "winter", "correct_answers": ["cold"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Bahor", "word": "spring", "correct_answers": ["spring"]},
+          {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/winter.mp3", "word": "winter", "correct_answers": ["winter"]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Men bahorni yoqtiraman'",
+           "correct_answers": ["I like spring"], "word_bank": ["I", "like", "spring", "autumn", "don't"]},
+          {"type": "multiple_choice", "order": 7, "prompt_uz": "Qaysi faslda QOR yog'adi?", "word": "winter",
+           "options": [{"text": "Winter", "correct": true}, {"text": "Summer", "correct": false}, {"text": "Spring", "correct": false}]}
+         ]},
+        {"code": "a0-u11-l5", "title_uz": "Takrorlash: ob-havo", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["weather", "today", "sunny", "rainy", "hot", "cold", "windy", "snowy", "rain", "snow", "summer", "winter", "spring", "autumn"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "sunny", "right": "quyoshli"}, {"left": "cold", "right": "sovuq"}, {"left": "snow", "right": "qor"}, {"left": "summer", "right": "yoz"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'Kuz' inglizchada qanday bo'ladi?", "word": "autumn",
+           "options": [{"text": "Autumn", "correct": true}, {"text": "Spring", "correct": false}, {"text": "Winter", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Bugun havo issiq va quyoshli'",
+           "correct_answers": ["It is hot and sunny today"], "word_bank": ["It", "is", "hot", "and", "sunny", "today", "cold"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Qish sovuq", "word": "winter", "correct_answers": ["Winter is cold"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "Bugun havo qorli: It is ___ today.", "word": "snowy", "correct_answers": ["snowy"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi fasl ISSIQ?", "word": "summer",
+           "options": [{"text": "Summer", "correct": true}, {"text": "Winter", "correct": false}, {"text": "Autumn", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/weather.mp3", "word": "weather", "correct_answers": ["weather"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Bugun havo quyoshli", "word": "today", "correct_answers": ["It is sunny today"]}
+         ]}
+      ]}
+    ]}
+  ]
+}

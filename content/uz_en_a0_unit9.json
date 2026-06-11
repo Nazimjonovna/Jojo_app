@@ -1,0 +1,109 @@
+{
+  "$comment": "uz->en A0. Unit 9: Uy (order=8). 'There is / There are' va 'in' predlogi.",
+  "course": {"code": "uz-en", "source_language": "uz", "target_language": "en", "title_uz": "Ingliz tili", "description_uz": "O'zbek tilida so'zlashuvchi bolalar uchun ingliz tili kursi"},
+  "vocabulary": [
+    {"word": "house", "translation": "uy (bino)", "level_code": "A0", "example": "My house is big.", "example_translation": "Uyim katta.", "audio": "audio/en/house.mp3", "image": "img/house.png", "tags": ["home"]},
+    {"word": "home", "translation": "uy (yashash joyi)", "level_code": "A0", "example": "I love my home.", "example_translation": "Men uyimni yaxshi ko'raman.", "audio": "audio/en/home.mp3", "image": "img/home.png", "tags": ["home"]},
+    {"word": "room", "translation": "xona", "level_code": "A0", "example": "My room is little.", "example_translation": "Xonam kichkina.", "audio": "audio/en/room.mp3", "image": "img/room.png", "tags": ["home"]},
+    {"word": "door", "translation": "eshik", "level_code": "A0", "example": "The door is brown.", "example_translation": "Eshik jigarrang.", "audio": "audio/en/door.mp3", "image": "img/door.png", "tags": ["home"]},
+    {"word": "window", "translation": "deraza", "level_code": "A0", "example": "The window is big.", "example_translation": "Deraza katta.", "audio": "audio/en/window.mp3", "image": "img/window.png", "tags": ["home"]},
+    {"word": "kitchen", "translation": "oshxona", "level_code": "A0", "example": "My mom is in the kitchen.", "example_translation": "Oyim oshxonada.", "audio": "audio/en/kitchen.mp3", "image": "img/kitchen.png", "tags": ["home"]},
+    {"word": "bedroom", "translation": "yotoqxona", "level_code": "A0", "example": "My bedroom is little.", "example_translation": "Yotoqxonam kichkina.", "audio": "audio/en/bedroom.mp3", "image": "img/bedroom.png", "tags": ["home"]},
+    {"word": "bathroom", "translation": "hammom", "level_code": "A0", "example": "The bathroom is white.", "example_translation": "Hammom oq.", "audio": "audio/en/bathroom.mp3", "image": "img/bathroom.png", "tags": ["home"]},
+    {"word": "bed", "translation": "karavot", "level_code": "A0", "example": "There is a bed.", "example_translation": "U yerda karavot bor.", "audio": "audio/en/bed.mp3", "image": "img/bed.png", "tags": ["home"]},
+    {"word": "sofa", "translation": "divan", "level_code": "A0", "example": "The sofa is green.", "example_translation": "Divan yashil.", "audio": "audio/en/sofa.mp3", "image": "img/sofa.png", "tags": ["home"]},
+    {"word": "in", "translation": "ichida (-da)", "level_code": "A0", "example": "The cat is in the room.", "example_translation": "Mushuk xonada.", "audio": "audio/en/in.mp3", "tags": ["grammar"]},
+    {"word": "there", "translation": "u yerda", "level_code": "A0", "example": "There is a bed.", "example_translation": "U yerda karavot bor.", "audio": "audio/en/there.mp3", "tags": ["grammar"]},
+    {"word": "are", "translation": "-dir (ko'plik)", "level_code": "A0", "example": "There are two windows.", "example_translation": "U yerda ikkita deraza bor.", "audio": "audio/en/are.mp3", "tags": ["grammar"]}
+  ],
+  "levels": [
+    {"code": "A0", "title_uz": "Boshlang'ich", "order": 0, "units": [
+      {"code": "a0-u9", "title_uz": "Uy va xonalar", "title_en": "House and Rooms", "description_uz": "Uy, xonalar va 'U yerda ... bor' deyishni o'rganamiz", "order": 8, "icon": "unit_house", "lessons": [
+        {"code": "a0-u9-l1", "title_uz": "Mening uyim", "order": 0, "xp_reward": 10,
+         "new_words": ["house", "home", "room", "door", "window"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Uy' inglizchada qanday bo'ladi?", "word": "house", "image": "img/house.png",
+           "options": [{"text": "House", "correct": true}, {"text": "Room", "correct": false}, {"text": "Door", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "house", "right": "uy (bino)"}, {"left": "room", "right": "xona"}, {"left": "door", "right": "eshik"}, {"left": "window", "right": "deraza"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Eshik", "word": "door", "correct_answers": ["door"]},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Uyim katta: My ___ is big.", "word": "house", "correct_answers": ["house", "home"]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/window.mp3", "word": "window", "correct_answers": ["window"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "'Xona' inglizchada qanday bo'ladi?", "word": "room",
+           "options": [{"text": "Room", "correct": true}, {"text": "House", "correct": false}, {"text": "Window", "correct": false}]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Men uyimni yaxshi ko'raman'",
+           "correct_answers": ["I love my home"], "word_bank": ["I", "love", "my", "home", "house", "room"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Deraza katta", "word": "window", "correct_answers": ["The window is big", "Window is big"]}
+         ]},
+        {"code": "a0-u9-l2", "title_uz": "Xonalar", "order": 1, "xp_reward": 10,
+         "new_words": ["kitchen", "bedroom", "bathroom"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Oshxona' inglizchada qanday bo'ladi?", "word": "kitchen", "image": "img/kitchen.png",
+           "options": [{"text": "Kitchen", "correct": true}, {"text": "Bedroom", "correct": false}, {"text": "Bathroom", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "kitchen", "right": "oshxona"}, {"left": "bedroom", "right": "yotoqxona"}, {"left": "bathroom", "right": "hammom"}]},
+          {"type": "translate", "order": 2, "prompt_uz": "Tarjima qiling: Yotoqxona", "word": "bedroom", "correct_answers": ["bedroom"]},
+          {"type": "multiple_choice", "order": 3, "prompt_uz": "Qaysi xonada OVQAT tayyorlanadi?", "word": "kitchen",
+           "options": [{"text": "Kitchen", "correct": true}, {"text": "Bathroom", "correct": false}, {"text": "Bedroom", "correct": false}]},
+          {"type": "listen", "order": 4, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/bedroom.mp3", "word": "bedroom", "correct_answers": ["bedroom"]},
+          {"type": "fill_blank", "order": 5, "prompt_uz": "Yotoqxonam kichkina: My ___ is little.", "word": "bedroom", "correct_answers": ["bedroom"]},
+          {"type": "word_bank", "order": 6, "prompt_uz": "Gapni yig'ing: 'Hammom oq'",
+           "correct_answers": ["The bathroom is white"], "word_bank": ["The", "bathroom", "is", "white", "kitchen"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Oshxona", "word": "kitchen", "correct_answers": ["kitchen"]}
+         ]},
+        {"code": "a0-u9-l3", "title_uz": "Xonada nima bor?", "order": 2, "xp_reward": 10,
+         "new_words": ["bed", "sofa", "in"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'Karavot' inglizchada qanday bo'ladi?", "word": "bed", "image": "img/bed.png",
+           "options": [{"text": "Bed", "correct": true}, {"text": "Sofa", "correct": false}, {"text": "Chair", "correct": false}]},
+          {"type": "match_pairs", "order": 1, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "bed", "right": "karavot"}, {"left": "sofa", "right": "divan"}, {"left": "in", "right": "ichida"}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'Mushuk xonada'",
+           "correct_answers": ["The cat is in the room"], "word_bank": ["The", "cat", "is", "in", "the", "room", "bed"],
+           "hint_uz": "'-da' = 'in the'."},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "Oyim oshxonada: My mom is ___ the kitchen.", "word": "in", "correct_answers": ["in"]},
+          {"type": "translate", "order": 4, "prompt_uz": "Tarjima qiling: Divan", "word": "sofa", "correct_answers": ["sofa"]},
+          {"type": "listen", "order": 5, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/bed.mp3", "word": "bed", "correct_answers": ["bed"]},
+          {"type": "fill_blank", "order": 6, "prompt_uz": "Divan yashil: The sofa is ___.", "word": "sofa", "correct_answers": ["green"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: It xonada", "word": "in", "correct_answers": ["The dog is in the room", "Dog is in the room"]}
+         ]},
+        {"code": "a0-u9-l4", "title_uz": "U yerda ... bor", "order": 3, "xp_reward": 10,
+         "new_words": ["there", "are"],
+         "exercises": [
+          {"type": "multiple_choice", "order": 0, "prompt_uz": "'U yerda' inglizchada qanday bo'ladi?", "word": "there",
+           "options": [{"text": "There", "correct": true}, {"text": "This", "correct": false}, {"text": "The", "correct": false}]},
+          {"type": "word_bank", "order": 1, "prompt_uz": "Gapni yig'ing: 'U yerda karavot bor'",
+           "correct_answers": ["There is a bed"], "word_bank": ["There", "is", "a", "bed", "are", "sofa"],
+           "hint_uz": "Bitta narsa: There is."},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'U yerda ikkita deraza bor'",
+           "correct_answers": ["There are two windows"], "word_bank": ["There", "are", "two", "windows", "is", "doors"],
+           "hint_uz": "Ko'p narsa: There are."},
+          {"type": "fill_blank", "order": 3, "prompt_uz": "There ___ a sofa. (bitta divan)", "word": "there", "correct_answers": ["is"],
+           "hint_uz": "Bitta bo'lsa 'is', ko'p bo'lsa 'are'."},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "There ___ two beds. (ikkita karavot)", "word": "are", "correct_answers": ["are"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi gap TO'G'RI?", "word": "are",
+           "options": [{"text": "There are two doors", "correct": true}, {"text": "There is two doors", "correct": false}, {"text": "There are a door", "correct": false}],
+           "hint_uz": "'Two' - ko'plik, demak 'are'."},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/there.mp3", "word": "there", "correct_answers": ["there"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: U yerda karavot bor", "word": "there", "correct_answers": ["There is a bed"]}
+         ]},
+        {"code": "a0-u9-l5", "title_uz": "Takrorlash: uy", "order": 4, "xp_reward": 15, "is_review": true,
+         "review_words": ["house", "home", "room", "door", "window", "kitchen", "bedroom", "bathroom", "bed", "sofa", "in", "there", "are"],
+         "exercises": [
+          {"type": "match_pairs", "order": 0, "prompt_uz": "Juftliklarni toping",
+           "pairs": [{"left": "house", "right": "uy (bino)"}, {"left": "kitchen", "right": "oshxona"}, {"left": "bed", "right": "karavot"}, {"left": "window", "right": "deraza"}]},
+          {"type": "multiple_choice", "order": 1, "prompt_uz": "'Hammom' inglizchada qanday bo'ladi?", "word": "bathroom",
+           "options": [{"text": "Bathroom", "correct": true}, {"text": "Bedroom", "correct": false}, {"text": "Kitchen", "correct": false}]},
+          {"type": "word_bank", "order": 2, "prompt_uz": "Gapni yig'ing: 'U yerda divan va karavot bor'",
+           "correct_answers": ["There is a sofa and a bed"], "word_bank": ["There", "is", "a", "sofa", "and", "a", "bed"]},
+          {"type": "translate", "order": 3, "prompt_uz": "Tarjima qiling: Mushuk oshxonada", "word": "in", "correct_answers": ["The cat is in the kitchen", "Cat is in the kitchen"]},
+          {"type": "fill_blank", "order": 4, "prompt_uz": "There ___ two rooms. (ikkita xona)", "word": "are", "correct_answers": ["are"]},
+          {"type": "multiple_choice", "order": 5, "prompt_uz": "Qaysi xonada UXLAYMIZ?", "word": "bedroom",
+           "options": [{"text": "Bedroom", "correct": true}, {"text": "Kitchen", "correct": false}, {"text": "Bathroom", "correct": false}]},
+          {"type": "listen", "order": 6, "prompt_uz": "Eshiting va yozing", "audio": "audio/en/house.mp3", "word": "house", "correct_answers": ["house"]},
+          {"type": "translate", "order": 7, "prompt_uz": "Tarjima qiling: Uyim katta", "word": "house", "correct_answers": ["My house is big", "My home is big"]}
+         ]}
+      ]}
+    ]}
+  ]
+}
