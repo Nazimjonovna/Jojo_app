@@ -32,13 +32,12 @@ from django.conf import settings
 
 logger = logging.getLogger("jojo.sms")
 
-# O'zbek mobil operatorlari uchun rasmiy prefiksilar — ro'yxat info uchun;
-# kelajakda fallback logging'da ishlatish mumkin (filtrlash uchun emas, chunki
-# yangi operatorlar paydo bo'lib turishi mumkin).
-UZ_MOBILE_PREFIXES = (
-    "20", "33", "55", "61", "62", "65", "66", "67", "69", "71",
-    "77", "78", "79", "88", "90", "91", "93", "94", "95", "97", "98", "99",
-)
+# O'zbek mobil prefiksilarini hardcode qilmasligimiz uchun sabab: yangi
+# operatorlar (50 - Mobi-UZ, 33 - UMS rebrandi, 20 - Perfectum yangi seriya
+# va h.k.) muntazam qo'shilib turadi. Yagona qattiq tekshiruv:
+#   - 998 + 9 raqam = 12 ta raqam
+#   - faqat raqamlar
+#   - aniq test/anomaliya patternlari (998900000000, hammasi nol kabi)
 
 
 class SmsFlyError(Exception):
@@ -76,22 +75,21 @@ def normalize_phone(raw: str) -> str:
 
 
 def is_valid_uz_phone(normalized: str) -> bool:
-    """Normalized phone (998xxxxxxxxx) O'zbek mobil raqamigami?
+    """Normalized phone (998xxxxxxxxx) O'zbek raqami formatigami?
 
-    Kriteriya:
+    Faqat fundamental tekshiruv:
       - aniq 12 ta raqam
       - 998 bilan boshlanadi
-      - keyingi 2 raqam mavjud mobil prefiksilar ro'yxatidan
-      - hech qachon 998900000000 yoki shu kabi anomaliya emas
+      - hammasi bir xil raqam emas (anomaliya: 998900000000 va h.k.)
+
+    Operator prefiksi ro'yxati bu yerda yo'q — Uzbektelekomda yangi
+    seriyalar tez-tez chiqadi (50, 33 yangilangan kabi). Operator rad qilsa
+    SMSFLY o'zining xato kodi orqali xabar beradi.
     """
     if not normalized or not normalized.isdigit() or len(normalized) != 12:
         return False
     if not normalized.startswith("998"):
         return False
-    prefix = normalized[3:5]
-    if prefix not in UZ_MOBILE_PREFIXES:
-        return False
-    # 998900000000 kabi nol-takror raqamlar — clearly test phone
     suffix = normalized[3:]
     if suffix == suffix[0] * 9:
         return False
