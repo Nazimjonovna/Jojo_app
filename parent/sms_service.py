@@ -246,10 +246,59 @@ class SmsFlyClient:
                 return False
         return False
 
-    def send_otp(self, phone: str, code: str, *, user_id: int | None = None) -> bool:
-        """Verifikatsiya kodini yuborish."""
-        text = f"JoJo: tasdiqlash kodi {code}. Kodni hech kimga bermang."
-        return self.send(phone, text, kind="otp", user_id=user_id)
+    OTP_TEMPLATES = {
+        "uz_latn": "JoJo: tasdiqlash kodi {code}. Kodni hech kimga bermang.",
+        "uz_cyrl": "JoJo: тасдиқлаш коди {code}. Кодни ҳеч кимга берманг.",
+        "ru": "JoJo: код подтверждения {code}. Никому не сообщайте код.",
+        "en": "JoJo: verification code {code}. Do not share it with anyone.",
+    }
+
+    def send_otp(
+        self,
+        phone: str,
+        code: str,
+        *,
+        user_id: int | None = None,
+        lang: str | None = None,
+    ) -> bool:
+        """Verifikatsiya kodini foydalanuvchi tilida yuborish.
+
+        `lang` berilmasa va `user_id` bor bo'lsa, User.language o'qiladi.
+        Aks holda default uz_latn.
+        """
+        normalized_lang = self._normalize_lang(lang)
+        if not normalized_lang and user_id:
+            try:
+                from django.contrib.auth import get_user_model
+                u = (
+                    get_user_model().objects
+                    .filter(pk=user_id).only("language").first()
+                )
+                if u:
+                    normalized_lang = self._normalize_lang(u.language)
+            except Exception:
+                pass
+        template = self.OTP_TEMPLATES.get(
+            normalized_lang or "uz_latn", self.OTP_TEMPLATES["uz_latn"],
+        )
+        return self.send(
+            phone, template.format(code=code), kind="otp", user_id=user_id,
+        )
+
+    @staticmethod
+    def _normalize_lang(value):
+        if not value:
+            return ""
+        v = str(value).lower()
+        if v.startswith("ru"):
+            return "ru"
+        if v.startswith("en"):
+            return "en"
+        if "cyr" in v:
+            return "uz_cyrl"
+        if v.startswith("uz"):
+            return "uz_latn"
+        return ""
 
     def send_bulk_per_phone(
         self,

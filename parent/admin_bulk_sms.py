@@ -503,14 +503,38 @@ class AdminBulkSmsCampaignListCreateView(APIView):
             started_at=timezone.now(),
         )
 
+        # Per-recipient til: har bir foydalanuvchi User.language ga qarab
+        # mos matn oladi. Telefon → User mapping bir marotaba.
+        from django.contrib.auth import get_user_model
+        UserModel = get_user_model()
+        users_by_phone = {
+            u.phone: u for u in UserModel.objects
+            .filter(phone__in=list(phones))
+            .only("id", "phone", "language")
+        }
+
+        def pick_message_for(phone):
+            u = users_by_phone.get(phone)
+            lang_value = (u.language if u else "") or ""
+            v = lang_value.lower()
+            if v.startswith("ru") and campaign.message_ru:
+                return campaign.message_ru, u.id if u else None
+            if v.startswith("en") and campaign.message_en:
+                return campaign.message_en, u.id if u else None
+            if "cyr" in v and campaign.message_uz_cyrl:
+                return campaign.message_uz_cyrl, u.id if u else None
+            return campaign.message, u.id if u else None
+
         # Sinxron yuborish — per phone, har biri SmsSendLog ga yoziladi.
         sent = 0
         failed = []
         for phone in phones:
+            text, uid = pick_message_for(phone)
             ok = sms_client.send(
-                phone, message,
+                phone, text,
                 kind=SmsSendLog.KIND_BULK,
                 campaign_id=campaign.id,
+                user_id=uid,
             )
             if ok:
                 sent += 1

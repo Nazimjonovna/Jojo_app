@@ -63,10 +63,9 @@ def record_parent_notification(
     """Inbox yozuvi yaratadi va WS orqali parent ilovaga darhol uzatadi.
 
     `title` va `body` — asosiy (uz) matn. `title_translations` va
-    `body_translations` — ixtiyoriy {"ru": "...", "en": "..."} dict'lari.
-    Agar berilsa, ParentNotification _ru/_en maydonlariga yoziladi va
-    parent tilini o'zgartirsa avval saqlangan xabarlar ham mos tilda
-    ko'rinadi (LocalizedSerializerMixin tanlaydi).
+    `body_translations` — {"uz_cyrl":"...","ru":"...","en":"..."} dict'lari.
+    To'rt tildagi maydonlar ham yoziladi — parent tilini o'zgartirsa
+    avval saqlangan xabarlar ham mos tilda ko'rinadi.
     """
     if not parent:
         return None
@@ -80,9 +79,11 @@ def record_parent_notification(
             child=child,
             category=category,
             title=(title or "")[:150],
+            title_uz_cyrl=(title_translations.get("uz_cyrl") or "")[:150],
             title_ru=(title_translations.get("ru") or "")[:150],
             title_en=(title_translations.get("en") or "")[:150],
             body=(body or "")[:500],
+            body_uz_cyrl=(body_translations.get("uz_cyrl") or "")[:500],
             body_ru=(body_translations.get("ru") or "")[:500],
             body_en=(body_translations.get("en") or "")[:500],
             data=data or {},
@@ -99,7 +100,9 @@ def record_parent_notification(
 def pick_for_lang(translations, lang, fallback=""):
     """Bola/parent uchun mos tildagi matnni tanlaydi.
 
-    translations: {"uz": "...", "ru": "...", "en": "..."}
+    translations: {"uz": "...", "uz_cyrl": "...", "ru": "...", "en": "..."}
+    `lang` — User.language ("uz_latn"/"uz_cyrl"/"ru"/"en") yoki
+    Accept-Language qiymati ("uz"/"uz-Cyrl"/"ru"/"en").
     """
     if not translations:
         return fallback
@@ -108,7 +111,24 @@ def pick_for_lang(translations, lang, fallback=""):
         return translations.get("ru") or translations.get("uz") or fallback
     if code.startswith("en"):
         return translations.get("en") or translations.get("uz") or fallback
-    return translations.get("uz") or fallback
+    if "cyr" in code:
+        return (
+            translations.get("uz_cyrl")
+            or translations.get("uz")
+            or fallback
+        )
+    return translations.get("uz") or translations.get("uz_latn") or fallback
+
+
+def translations_dict(uz, uz_cyrl=None, ru=None, en=None):
+    """4-tilli matnlarni record_parent_notification / pick_for_lang
+    yordamchilariga uzatish uchun standart shakl."""
+    return {
+        "uz": uz or "",
+        "uz_cyrl": uz_cyrl or "",
+        "ru": ru or "",
+        "en": en or "",
+    }
 
 
 def speed_to_kmh(speed):

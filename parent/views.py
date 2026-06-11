@@ -156,14 +156,16 @@ def normalize_phone(phone):
     return _norm(phone)
 
 
-def send_sms_code(phone, code, *, user_id=None):
-    """Tasdiqlash kodini SMS orqali yuboradi.
+def send_sms_code(phone, code, *, user_id=None, lang=None):
+    """Tasdiqlash kodini SMS orqali — foydalanuvchining tilida.
 
     Bitta yagona `sms_service.sms_client.send_otp` orqali — har bir urinish
     `SmsSendLog` ga yoziladi, SESSION_NOT_BOUND da avto retry ishlaydi.
+    `lang` — Accept-Language header'dan kelishi mumkin. Bo'lmasa user_id
+    bo'yicha User.language o'qiladi.
     """
     from .sms_service import sms_client
-    return sms_client.send_otp(phone, code, user_id=user_id)
+    return sms_client.send_otp(phone, code, user_id=user_id, lang=lang)
 
 
 def save_user_device(user, device_id, token, device_type="android"):
@@ -256,7 +258,21 @@ class SendOTPView(APIView):
         OTPCode.objects.create(phone=phone, code=code, expires_at=timezone.now() + timedelta(minutes=5))
         # Mavjud parentni topib uning id sini sms log ga bog'laymiz (debugging uchun)
         user = User.objects.filter(phone=phone).first()
-        send_sms_code(phone, code, user_id=user.id if user else None)
+        # Til: registratsiya bosqichida hali profil tilini bilmaymiz, shuning
+        # uchun Accept-Language header (parent ilovasi har doim qo'shadi)
+        # yoki mavjud user.language fallback. Yangi telefon raqami uchun
+        # default sifatida uz_latn qoladi (klient tilini header orqali bersa
+        # darrov to'g'rilaymiz).
+        otp_lang = (
+            getattr(request, "language", None)
+            or (user.language if user else None)
+            or None
+        )
+        send_sms_code(
+            phone, code,
+            user_id=user.id if user else None,
+            lang=otp_lang,
+        )
         return Response({"status": True, "detail": "SMS kod yuborildi.", "code": code, "lifetime": "5 minutes"}, status=status.HTTP_200_OK)
 
 
@@ -1495,24 +1511,45 @@ class KidsSOSCreateView(APIView):
         sos = SOSAlert.objects.create(child=request.user, parent=parent, latitude=latitude, longitude=longitude, address=serializer.validated_data.get("address"), note=serializer.validated_data.get("note"))
 
         # Parent dasturiga darrov xabar — WS push + inbox yozuvi + FCM.
-        # `record_parent_notification` o'zi `broadcast_parent_notification` ni
-        # chaqiradi. Qo'shimcha ravishda alohida 'sos.alert' WS xabarini ham
-        # yuboramiz — parent dasturda darhol modal/full-screen ogohlantirish
-        # ko'rinishi uchun.
+        # SOS eng kritik moment, shuning uchun har 4 tilda ham matn
+        # bo'ladi va FCM push ham jo'natiladi (app yopiq bo'lsa ham yetadi).
         try:
-            from .services import record_parent_notification
+            from .services import record_parent_notification, translations_dict
             from .realtime import broadcast_sos_alert
+            from .firebase import send_fcm_notification
             child_name = (request.user.first_name or request.user.username or "Farzand").strip()
-            title = "SOS! Farzand yordam so'ramoqda"
-            body = f"{child_name} SOS tugmasini bosdi"
-            if serializer.validated_data.get("note"):
-                body = f"{body}\n{serializer.validated_data.get('note')}"
+            note = (serializer.validated_data.get("note") or "").strip()
+
+            title_t = translations_dict(
+                uz=f"SOS! {child_name} yordam so'ramoqda",
+                uz_cyrl=f"SOS! {child_name} ёрдам сўрамоқда",
+                ru=f"SOS! {child_name} просит помощи",
+                en=f"SOS! {child_name} is asking for help",
+            )
+
+            def body_with_note(line):
+                return f"{line}\n{note}" if note else line
+
+            body_t = translations_dict(
+                uz=body_with_note(f"{child_name} SOS tugmasini bosdi"),
+                uz_cyrl=body_with_note(f"{child_name} SOS тугмасини босди"),
+                ru=body_with_note(f"{child_name} нажал(а) SOS"),
+                en=body_with_note(f"{child_name} pressed SOS"),
+            )
+
+            parent_lang = (parent.language or "uz_latn").lower()
+            from .services import pick_for_lang
+            picked_title = pick_for_lang(title_t, parent_lang, title_t["uz"])
+            picked_body = pick_for_lang(body_t, parent_lang, body_t["uz"])
+
             record_parent_notification(
                 parent=parent,
                 child=request.user,
                 category=ParentNotification.CATEGORY_SOS if hasattr(ParentNotification, "CATEGORY_SOS") else "sos",
-                title=title,
-                body=body,
+                title=picked_title,
+                body=picked_body,
+                title_translations=title_t,
+                body_translations=body_t,
                 data={
                     "sos_id": sos.id,
                     "child_id": request.user.id,
@@ -1522,6 +1559,26 @@ class KidsSOSCreateView(APIView):
                     "address": serializer.validated_data.get("address"),
                 },
             )
+
+            # FCM push — app yopiq bo'lsa ham parent eshitadi.
+            try:
+                for dt in DeviceToken.objects.filter(user=parent, is_active=True):
+                    if dt.token:
+                        send_fcm_notification(
+                            token=dt.token,
+                            title=picked_title,
+                            body=picked_body,
+                            data={
+                                "category": "sos",
+                                "sos_id": str(sos.id),
+                                "child_id": str(request.user.id),
+                                "child_name": child_name,
+                            },
+                        )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("SOS FCM failed")
+
             broadcast_sos_alert(
                 parent_id=parent.id,
                 payload={

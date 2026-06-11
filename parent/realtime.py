@@ -141,13 +141,66 @@ def broadcast_saved_location_event(child, event):
 
 
 def broadcast_parent_notification(parent_id, notification):
+    """Real-time toast — parent tilini hisobga olib mos title/body yuboradi.
+
+    Parent ilovasi WS message qabul qiladi va `title`/`body` ni darrov
+    ekranga chiqaradi. Shuning uchun bu yerda allaqachon localized
+    qiymatni jo'natamiz; barcha til variantlari ham yuboriladi shunda
+    klient kerak bo'lsa boshqasini tanlaydi.
+    """
+    parent_lang = ""
+    try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        parent = User.objects.filter(pk=parent_id).only("language").first()
+        if parent:
+            parent_lang = (parent.language or "").strip()
+    except Exception:
+        pass
+
+    def pick(canonical, ru, en, cyr):
+        code = (parent_lang or "uz_latn").lower()
+        if code.startswith("ru"):
+            return ru or canonical
+        if code.startswith("en"):
+            return en or canonical
+        if "cyr" in code:
+            return cyr or canonical
+        return canonical
+
+    title = pick(
+        notification.title or "",
+        getattr(notification, "title_ru", "") or "",
+        getattr(notification, "title_en", "") or "",
+        getattr(notification, "title_uz_cyrl", "") or "",
+    )
+    body = pick(
+        notification.body or "",
+        getattr(notification, "body_ru", "") or "",
+        getattr(notification, "body_en", "") or "",
+        getattr(notification, "body_uz_cyrl", "") or "",
+    )
+
     payload = {
         "t": "notification_created",
         "notification": {
             "id": notification.id,
             "category": notification.category,
-            "title": notification.title,
-            "body": notification.body,
+            "title": title,
+            "body": body,
+            # Klient kerak bo'lsa o'zi tanlashi uchun barcha variantlar.
+            "title_translations": {
+                "uz": notification.title or "",
+                "uz_cyrl": getattr(notification, "title_uz_cyrl", "") or "",
+                "ru": getattr(notification, "title_ru", "") or "",
+                "en": getattr(notification, "title_en", "") or "",
+            },
+            "body_translations": {
+                "uz": notification.body or "",
+                "uz_cyrl": getattr(notification, "body_uz_cyrl", "") or "",
+                "ru": getattr(notification, "body_ru", "") or "",
+                "en": getattr(notification, "body_en", "") or "",
+            },
             "data": notification.data or {},
             "is_read": notification.is_read,
             "child_id": notification.child_id,
