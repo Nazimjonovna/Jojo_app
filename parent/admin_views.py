@@ -957,47 +957,58 @@ class AdminTicketUpdateStatusView(APIView):
 
 
 class AdminLeadUnreadCountView(APIView):
-    """Sidebar uchun "javob kutilayotgan murojaatlar" sanog'i.
+    """Sidebar badge sanog'i — ikki rejimi bor:
 
-    Hisoblash mantig'i: tikket yopilmagan/hal qilinmagan bo'lsin va
-    oxirgi izoh foydalanuvchidan kelgan bo'lsin (yoki umuman hech kim
-    yozmagan — yangi tikket). `source` query param bilan filterlash
-    mumkin — Sorovlar sidebarda telegram, Leadlarda app/manual ko'rinadi.
+    - `mode=new` (default): faqat `status=new` tikketlar soni. CRM
+      uchun mos — "Yangi" kanban kolonkasidagi kartochkalar bilan
+      to'liq mos keladi. Leadlar sahifasi uchun.
+    - `mode=needs_reply`: yopilmagan/hal qilinmagan tikketlar ichida
+      oxirgi izoh foydalanuvchidan kelgan yoki hech kim yozmagan +
+      status=new. Telegram support chat uchun mos — operator kimga
+      javob berishi kerakligini ko'rsatadi.
+
+    `source` query param bilan filterlash mumkin (CSV).
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
         from django.db.models import OuterRef, Subquery, Q
 
-        qs = CallCenterTicket.objects.exclude(
-            status__in=[
-                CallCenterTicket.STATUS_CLOSED,
-                CallCenterTicket.STATUS_RESOLVED,
-            ],
-        )
+        qs = CallCenterTicket.objects.all()
         source = request.query_params.get("source")
         if source:
             wanted = [s.strip() for s in source.split(",") if s.strip()]
             if wanted:
                 qs = qs.filter(source__in=wanted)
 
-        # Har bir tikketning oxirgi izoh yo'nalishi (in/out) — subquery.
-        last_direction = (
-            CallCenterComment.objects
-            .filter(ticket=OuterRef("pk"))
-            .order_by("-created_at")
-            .values("direction")[:1]
-        )
-        qs = qs.annotate(_last_dir=Subquery(last_direction))
+        mode = (request.query_params.get("mode") or "new").strip().lower()
 
-        # "Javob kutilmoqda": oxirgi izoh foydalanuvchidan (`in`) yoki
-        # umuman izoh yo'q lekin status `new`.
-        unread = qs.filter(
-            Q(_last_dir=CallCenterComment.DIRECTION_IN)
-            | Q(_last_dir__isnull=True, status=CallCenterTicket.STATUS_NEW)
-        ).count()
+        if mode == "needs_reply":
+            # Yopilmagan tikketlar ichida operator javob bermagan yoki
+            # foydalanuvchi yana yozgan tikketlar.
+            qs = qs.exclude(
+                status__in=[
+                    CallCenterTicket.STATUS_CLOSED,
+                    CallCenterTicket.STATUS_RESOLVED,
+                ],
+            )
+            last_direction = (
+                CallCenterComment.objects
+                .filter(ticket=OuterRef("pk"))
+                .order_by("-created_at")
+                .values("direction")[:1]
+            )
+            qs = qs.annotate(_last_dir=Subquery(last_direction))
+            count = qs.filter(
+                Q(_last_dir=CallCenterComment.DIRECTION_IN)
+                | Q(_last_dir__isnull=True, status=CallCenterTicket.STATUS_NEW)
+            ).count()
+        else:
+            # Default — sof "Yangi" status sanog'i (kanban kolonkasi bilan
+            # bir xil).
+            count = qs.filter(status=CallCenterTicket.STATUS_NEW).count()
 
-        return Response({"count": unread})
+        return Response({"count": count})
 
 
 class AdminLeadBoardView(APIView):
