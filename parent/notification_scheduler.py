@@ -269,7 +269,12 @@ def fire_rule(rule: NotificationRule) -> NotificationRuleLog:
                 sms_phones.append(parent.phone)
                 # Per-parent SMS uchun individual matn kerak (template'da
                 # `{name}` bor bo'lishi mumkin). Bittadan yuboramiz.
-                if sms_client.send(parent.phone, f"{title}\n{body}"[:500]):
+                if sms_client.send(
+                    parent.phone,
+                    f"{title}\n{body}"[:500],
+                    kind="rule",
+                    user_id=parent.id,
+                ):
                     sms_sent += 1
 
         success = True

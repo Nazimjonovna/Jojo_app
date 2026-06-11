@@ -136,7 +136,7 @@ def get_tokens_for_user(user):
     return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
-# resultCode ma'nolari (SMSFLY doc bo'yicha)
+# resultCode ma'nolari (SMSFLY doc bo'yicha) — UI tarjima uchun saqlab qoldik.
 SMSFLY_RESULT_MESSAGES = {
     0: "Muvaffaqiyatli yuborildi",
     2: "Mijoz akkaunti bloklangan",
@@ -148,62 +148,22 @@ SMSFLY_RESULT_MESSAGES = {
 
 
 def normalize_phone(phone):
-    """+998901234567 -> 998901234567 (SMSFLY '+' ni qabul qilmaydi)."""
-    if not phone:
-        return phone
-    return phone.replace("+", "").replace(" ", "").strip()
+    """Yagona normalize — sms_service.normalize_phone ga proxy.
+
+    Eski view'lar shu nomni ishlatadi; backward compatibility uchun qoldirdik.
+    """
+    from .sms_service import normalize_phone as _norm
+    return _norm(phone)
 
 
-def send_sms(phone, message):
-    api_key = getattr(settings, "SMSFLY_API_KEY", "")
-    api_url = getattr(settings, "SMSFLY_SEND_URL", "https://api.smsfly.uz/send")
-
-    if not api_key:
-        # Dev rejim — key yo'q bo'lsa konsolga chiqaramiz, ilova qotib qolmaydi
-        logger.warning("SMSFLY_API_KEY topilmadi. SMS yuborilmadi.")
-        print(f"[DEV SMS] {phone}: {message}")
-        return False
-
-    payload = {
-        "key": api_key,
-        "phone": normalize_phone(phone),
-        "message": message,
-    }
-
-    try:
-        resp = requests.post(api_url, json=payload, timeout=10)
-        data = resp.json()
-    except requests.RequestException as e:
-        logger.error("SMSFLY ulanish xatosi: %s", e)
-        return False
-    except ValueError:
-        logger.error("SMSFLY javobi JSON emas: %s", resp.text[:300])
-        return False
-
-    result_code = data.get("resultCode")
-    if data.get("success") and result_code == 0:
-        logger.info("SMS yuborildi: %s", phone)
-        return True
-
-    logger.error(
-        "SMSFLY xato: phone=%s reason=%s resultCode=%s (%s)",
-        phone,
-        data.get("reason"),
-        result_code,
-        SMSFLY_RESULT_MESSAGES.get(result_code, "noma'lum"),
-    )
-    return False
-
-
-def send_sms_code(phone, code):
+def send_sms_code(phone, code, *, user_id=None):
     """Tasdiqlash kodini SMS orqali yuboradi.
 
-    Avval lokal `send_sms()` (oddiy, sync) chaqiriladi — `SMSFLY_API_KEY`
-    env orqali ulangan. Agar muvaffaqiyatsiz bo'lsa, `sms_service.sms_client`
-    (bulk/template uchun ham ishlatiluvchi singleton) fallback sifatida
-    yuboradi. Dev rejimda (key yo'q) ikkalasi ham log'ga yozib qaytadi."""
-    message = f"JoJo tasdiqlash kodi: {code}. Kodni hech kimga bermang."
-    return send_sms(phone, message)
+    Bitta yagona `sms_service.sms_client.send_otp` orqali — har bir urinish
+    `SmsSendLog` ga yoziladi, SESSION_NOT_BOUND da avto retry ishlaydi.
+    """
+    from .sms_service import sms_client
+    return sms_client.send_otp(phone, code, user_id=user_id)
 
 
 def save_user_device(user, device_id, token, device_type="android"):
@@ -294,7 +254,9 @@ class SendOTPView(APIView):
                 return Response({"status": False, "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.", "time_left": time_left}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         code = generate_numeric_code(6)
         OTPCode.objects.create(phone=phone, code=code, expires_at=timezone.now() + timedelta(minutes=5))
-        send_sms_code(phone, code)
+        # Mavjud parentni topib uning id sini sms log ga bog'laymiz (debugging uchun)
+        user = User.objects.filter(phone=phone).first()
+        send_sms_code(phone, code, user_id=user.id if user else None)
         return Response({"status": True, "detail": "SMS kod yuborildi.", "code": code, "lifetime": "5 minutes"}, status=status.HTTP_200_OK)
 
 

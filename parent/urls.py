@@ -170,6 +170,7 @@ from .admin_views import (
     AdminKidsVideoCategoryListCreate, AdminKidsVideoCategoryDetail,
     AdminKidsVideoListCreate, AdminKidsVideoDetail,
     AdminSmsTestView,
+    AdminSmsLogView,
     AdminNotificationRuleListCreate, AdminNotificationRuleDetail,
     AdminNotificationRuleRunNow, AdminNotificationRuleLogs,
     AdminQuickReplyListCreateView, AdminQuickReplyDetailView,
@@ -182,6 +183,7 @@ urlpatterns += [
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
     path("admin/sms/test/", AdminSmsTestView.as_view(), name="admin-sms-test"),
+    path("admin/sms/log/", AdminSmsLogView.as_view(), name="admin-sms-log"),
 
     path("admin/notification-rules/", AdminNotificationRuleListCreate.as_view(), name="admin-notif-rule-list"),
     path("admin/notification-rules/<int:rule_id>/", AdminNotificationRuleDetail.as_view(), name="admin-notif-rule-detail"),

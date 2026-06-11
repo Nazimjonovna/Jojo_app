@@ -470,7 +470,10 @@ class AdminBroadcastNotificationView(APIView):
             except Exception:
                 continue
 
+        # SMS yuborish — per-phone, har biri alohida loglanadi va SESSION_NOT_BOUND
+        # bo'lsa avto-retry qilinadi. Sekinroq, lekin per-raqam ko'rinish bor.
         sms_sent = 0
+        sms_failed = []
         if send_sms:
             from .sms_service import sms_client
             for lang_code, phones in sms_by_lang.items():
@@ -479,14 +482,18 @@ class AdminBroadcastNotificationView(APIView):
                 lang_title = pick_for_lang(title_translations, lang_code, fallback=title)
                 lang_body = pick_for_lang(body_translations, lang_code, fallback=body)
                 sms_text = f"{lang_title}\n{lang_body}"[:500]
-                ok = sms_client.send_bulk(phones, sms_text)
-                if ok:
-                    sms_sent += len(phones)
+                result = sms_client.send_bulk_per_phone(phones, sms_text, kind="broadcast")
+                sms_sent += len(result["sent"])
+                sms_failed.extend(result["failed"])
 
         return Response({
             "status": True,
             "sent_to": created,
             "sms_sent": sms_sent,
+            "sms_failed_count": len(sms_failed),
+            # Birinchi 50 ta failed ni qaytaramiz — admin UI ko'rsata oladi,
+            # full ro'yxat /admin/sms-log/ orqali olinadi.
+            "sms_failed": sms_failed[:50],
             "audience": audience,
         })
 
@@ -1587,6 +1594,90 @@ class AdminMediaUploadView(APIView):
 # ============================================================================
 
 
+class AdminSmsLogView(APIView):
+    """SMS yuborish jurnali — har bir urinish, success/fail, sabab bilan.
+
+    Query parametrlari:
+      kind      — otp / broadcast / rule / test / other
+      success   — true / false (string)
+      phone     — substring qidirish (normalized telefon bo'yicha)
+      page_size — default 50
+      offset    — pagination
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from .models import SmsSendLog
+        qs = SmsSendLog.objects.all()
+        kind = request.query_params.get("kind")
+        if kind:
+            qs = qs.filter(kind=kind)
+        success = request.query_params.get("success")
+        if success in ("true", "1"):
+            qs = qs.filter(success=True)
+        elif success in ("false", "0"):
+            qs = qs.filter(success=False)
+        phone = (request.query_params.get("phone") or "").strip()
+        if phone:
+            digits = "".join(c for c in phone if c.isdigit())
+            qs = qs.filter(phone_normalized__icontains=digits or phone)
+        try:
+            page_size = max(1, min(int(request.query_params.get("page_size", 50)), 200))
+        except ValueError:
+            page_size = 50
+        try:
+            offset = max(0, int(request.query_params.get("offset", 0)))
+        except ValueError:
+            offset = 0
+        total = qs.count()
+        items = []
+        for r in qs[offset:offset + page_size]:
+            items.append({
+                "id": r.id,
+                "phone": r.phone,
+                "phone_normalized": r.phone_normalized,
+                "kind": r.kind,
+                "message": r.message,
+                "success": r.success,
+                "result_code": r.result_code,
+                "reason": r.reason,
+                "retry_count": r.retry_count,
+                "related_user_id": r.related_user_id,
+                "created_at": r.created_at.isoformat(),
+            })
+
+        # Statistik xulosa — admin UI da chiroyli ko'rsatish uchun
+        from django.db.models import Count, Q
+        stats_qs = SmsSendLog.objects.all()
+        if kind:
+            stats_qs = stats_qs.filter(kind=kind)
+        stats = stats_qs.aggregate(
+            total_all=Count("id"),
+            sent_all=Count("id", filter=Q(success=True)),
+            failed_all=Count("id", filter=Q(success=False)),
+        )
+        # Eng tez-tez uchraydigan xato sabablarini ham ko'rsatamiz
+        top_reasons = list(
+            stats_qs.filter(success=False)
+            .values("reason")
+            .annotate(c=Count("id"))
+            .order_by("-c")[:10]
+        )
+
+        return Response({
+            "count": total,
+            "offset": offset,
+            "page_size": page_size,
+            "results": items,
+            "stats": {
+                "total": stats["total_all"] or 0,
+                "sent": stats["sent_all"] or 0,
+                "failed": stats["failed_all"] or 0,
+                "top_failure_reasons": top_reasons,
+            },
+        })
+
+
 class AdminSmsTestView(APIView):
     """Adminga SMSFLY kalitining ishlashini va test SMS yuborishni tekshirib
     ko'rish imkonini beradi.
@@ -1604,13 +1695,27 @@ class AdminSmsTestView(APIView):
         })
 
     def post(self, request):
-        from .sms_service import sms_client
+        from .sms_service import sms_client, normalize_phone, is_valid_uz_phone
+        from .models import SmsSendLog
         phone = (request.data.get("phone") or "").strip()
         message = (request.data.get("message") or "JoJo: test xabar").strip()
         if not phone:
             return Response({"detail": "phone majburiy"}, status=400)
-        ok = sms_client.send(phone, message)
-        return Response({"success": ok, "phone": phone})
+        ok = sms_client.send(phone, message, kind=SmsSendLog.KIND_TEST)
+        # Tegishli oxirgi log yozuvini ham qaytaramiz — UI da reason ko'rsatadi
+        normalized = normalize_phone(phone)
+        last = SmsSendLog.objects.filter(
+            phone_normalized=normalized,
+        ).order_by("-created_at").first()
+        return Response({
+            "success": ok,
+            "phone": phone,
+            "normalized": normalized,
+            "valid": is_valid_uz_phone(normalized),
+            "reason": last.reason if last else "",
+            "result_code": last.result_code if last else -1,
+            "retry_count": last.retry_count if last else 0,
+        })
 
 
 # ============================================================================

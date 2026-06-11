@@ -2981,3 +2981,56 @@ class KidsVideo(models.Model):
         if vid:
             return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
         return ""
+
+
+class SmsSendLog(models.Model):
+    """Har bir SMS yuborish urinishi yoziladi — operator retrospektiv ko'rishi
+    uchun. Asosiy savol: "Filan raqamga SMS yetib bordimi?" — DB dan javob.
+
+    `result_code` SMSFLY javobidan — 0 muvaffaqiyatli, qolganlari xato.
+    Mahalliy xatolar uchun `result_code=-1`, `reason` ichida tafsilot.
+    """
+
+    KIND_OTP = "otp"
+    KIND_BROADCAST = "broadcast"
+    KIND_RULE = "rule"
+    KIND_TEST = "test"
+    KIND_OTHER = "other"
+    KIND_CHOICES = (
+        (KIND_OTP, "OTP"),
+        (KIND_BROADCAST, "Broadcast"),
+        (KIND_RULE, "Notif rule"),
+        (KIND_TEST, "Test"),
+        (KIND_OTHER, "Other"),
+    )
+
+    phone = models.CharField(max_length=20, db_index=True)
+    # `phone_normalized` — `998901234567` ko'rinishida (+, bo'shliqlar olib
+    # tashlangan). Search/aggr uchun.
+    phone_normalized = models.CharField(max_length=20, db_index=True, default="")
+
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_OTHER, db_index=True)
+    message = models.TextField(blank=True, default="")
+
+    # SMSFLY natijasi
+    success = models.BooleanField(default=False, db_index=True)
+    result_code = models.IntegerField(default=-1)
+    reason = models.CharField(max_length=120, blank=True, default="")
+
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    related_user_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "SMS send log"
+        verbose_name_plural = "SMS send logs"
+        indexes = [
+            models.Index(fields=["kind", "success", "-created_at"]),
+            models.Index(fields=["phone_normalized", "-created_at"]),
+        ]
+
+    def __str__(self):
+        status = "OK" if self.success else f"FAIL({self.reason})"
+        return f"{self.phone} {self.kind} {status}"
