@@ -464,12 +464,46 @@ def _handle_message(message):
             ticket.save(update_fields=["bot_state", "updated_at"])
             _broadcast_ticket(ticket, kind="updated")
 
+        # Operator chat panel'ida foydalanuvchi /start bosganini ko'rsin —
+        # aks holda yangi tikkitlar chat paneli bo'sh ko'rinadi va operator
+        # "tizim ishlamayapti" deb gumon qiladi.
+        try:
+            start_comment = CallCenterComment.objects.create(
+                ticket=ticket,
+                operator=None,
+                comment=text or "/start",
+                direction=CallCenterComment.DIRECTION_IN,
+                old_status=ticket.status,
+                new_status=ticket.status,
+                telegram_message_id=str(message.get("message_id", "")),
+            )
+            _broadcast_comment(ticket, start_comment)
+        except Exception:
+            # Comment seed muvaffaqiyatsiz bo'lsa ham asosiy oqim davom etsin.
+            pass
+
         lang_hint = ticket.language or "uz_latn"
+        welcome_text = t(lang_hint, "welcome")
         tg_send_message(
             chat_id,
-            t(lang_hint, "welcome"),
+            welcome_text,
             reply_markup=_language_keyboard(),
         )
+        # Bot tomondan yuborilgan xush kelibsiz xabarini ham ticketga yozamiz —
+        # admin chat tarixi to'liq bo'lsin (haqiqiy Telegram chat bilan moslashsin).
+        try:
+            bot_comment = CallCenterComment.objects.create(
+                ticket=ticket,
+                operator=None,
+                comment=welcome_text,
+                direction=CallCenterComment.DIRECTION_OUT,
+                old_status=ticket.status,
+                new_status=ticket.status,
+            )
+            _broadcast_comment(ticket, bot_comment)
+        except Exception:
+            pass
+        _broadcast_ticket(ticket, kind="updated")
         return
 
     # Raqam ulashilsa — parent bilan bog'laymiz

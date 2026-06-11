@@ -751,6 +751,18 @@ def _parent_brief(p, *, request=None):
 
 def _lead_to_dict(t, *, request=None):
     op = t.operator
+
+    # Suhbatdagi eng oxirgi va eng oxirgi USER xabarini bir ORM aylantirishda
+    # olamiz — ticket kartochkasidagi "Hali xabar yo'q" matnini almashtirish
+    # va "yangi javob keldi" jihatini tezkor aniqlash uchun.
+    last_msg = t.comments.order_by("-created_at").first()
+    last_user_msg = (
+        t.comments.filter(direction=getattr(CallCenterComment, "DIRECTION_IN", "in"))
+        .order_by("-created_at")
+        .first()
+        if hasattr(t, "comments") else None
+    )
+
     return {
         "id": t.id,
         "title": t.title,
@@ -767,12 +779,29 @@ def _lead_to_dict(t, *, request=None):
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "comments_count": t.comments.count(),
-        "source": getattr(t, "source", "app"),                      
-        "telegram": {                                               
+        "source": getattr(t, "source", "app"),
+        "telegram": {
             "chat_id": t.telegram_chat_id,
             "username": t.telegram_username,
             "name": t.telegram_name,
         } if getattr(t, "telegram_chat_id", None) else None,
+        # Bot bilan ishlovchi tikket holatlari — chat panel + kartochka uchun
+        "language": getattr(t, "language", "") or "",
+        "bot_state": getattr(t, "bot_state", "") or "",
+        # Foydalanuvchining oxirgi baholash natijasi (resolved bo'lsa)
+        "rating": getattr(t, "rating", None),
+        "rating_comment": getattr(t, "rating_comment", "") or "",
+        "rated_at": t.rated_at.isoformat() if getattr(t, "rated_at", None) else None,
+        # Kartochka ko'rinishi uchun: oxirgi xabar matni va sanasi.
+        # Frontend TS interface kalit nomi `at` (created_at o'rniga).
+        "last_message": {
+            "text": (last_msg.comment or "")[:200],
+            "direction": getattr(last_msg, "direction", "out"),
+            "is_operator": bool(last_msg.operator_id),
+            "at": last_msg.created_at.isoformat(),
+        } if last_msg else None,
+        "last_user_message_at": last_user_msg.created_at.isoformat()
+            if last_user_msg else None,
     }
 
 
