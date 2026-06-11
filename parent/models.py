@@ -1744,6 +1744,30 @@ class CallCenterComment(models.Model):
     )
     direction = models.CharField(max_length=4, choices=DIRECTION_CHOICES, default=DIRECTION_OUT)
     telegram_message_id = models.CharField(max_length=64, blank=True, default="")
+
+    # Telegram rasm va hujjatlar uchun. Adminkadan operator ham fayl
+    # yuklab bera oladi, botdan kelganda ham shu yerga saqlanadi.
+    ATTACHMENT_NONE = ""
+    ATTACHMENT_PHOTO = "photo"
+    ATTACHMENT_DOCUMENT = "document"
+    ATTACHMENT_CHOICES = (
+        (ATTACHMENT_NONE, "Yo'q"),
+        (ATTACHMENT_PHOTO, "Rasm"),
+        (ATTACHMENT_DOCUMENT, "Hujjat"),
+    )
+    attachment = models.FileField(
+        upload_to="support/attachments/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    attachment_kind = models.CharField(
+        max_length=12,
+        choices=ATTACHMENT_CHOICES,
+        blank=True,
+        default=ATTACHMENT_NONE,
+    )
+    attachment_name = models.CharField(max_length=255, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

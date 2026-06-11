@@ -14,7 +14,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -853,16 +853,31 @@ def _lead_to_dict(t, *, request=None):
     }
 
 
-def _comment_to_dict(c):
+def _comment_to_dict(c, *, request=None):
     op = c.operator
+    attachment_url = None
+    att = getattr(c, "attachment", None)
+    if att and getattr(att, "name", ""):
+        try:
+            url = att.url
+            attachment_url = (
+                request.build_absolute_uri(url)
+                if request and not url.startswith("http")
+                else url
+            )
+        except Exception:
+            attachment_url = None
     return {
         "id": c.id,
         "ticket_id": c.ticket_id,
         "text": c.comment,
-        "direction": getattr(c, "direction", "out"),  
-        "is_operator": bool(op),  
+        "direction": getattr(c, "direction", "out"),
+        "is_operator": bool(op),
         "old_status": c.old_status or "",
         "new_status": c.new_status or "",
+        "attachment_url": attachment_url,
+        "attachment_kind": getattr(c, "attachment_kind", "") or "",
+        "attachment_name": getattr(c, "attachment_name", "") or "",
         "operator": {
             "id": op.id,
             "name": op.full_name or op.first_name or op.phone or "—",
@@ -1196,15 +1211,24 @@ class AdminLeadFullView(APIView):
 
 
 class AdminLeadCommentsView(APIView):
-    """Lead izohlari — operatorlar yozadigan history."""
+    """Lead izohlari — operatorlar yozadigan history.
+
+    POST endpoint multipart/form-data ham qabul qiladi: `text` matn va
+    ixtiyoriy `attachment` fayl (rasm yoki hujjat). Telegram orqali
+    kelgan tikket bo'lsa, javob mos ravishda `tg_send_message` yoki
+    `tg_send_photo`/`tg_send_document` bilan foydalanuvchiga yetkaziladi.
+    """
     permission_classes = [IsAuthenticated, IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request, ticket_id):
         comments = CallCenterComment.objects.filter(
             ticket_id=ticket_id
         ).select_related("operator").order_by("-created_at")
         return Response({
-            "results": [_comment_to_dict(c) for c in comments[:100]],
+            "results": [
+                _comment_to_dict(c, request=request) for c in comments[:100]
+            ],
         })
 
     def post(self, request, ticket_id):
@@ -1212,28 +1236,70 @@ class AdminLeadCommentsView(APIView):
         if not ticket:
             return Response({"detail": "Lead topilmadi"}, status=404)
         text = (request.data.get("text") or "").strip()
-        if not text:
-            return Response({"detail": "text majburiy"}, status=400)
+        upload = request.FILES.get("attachment")
+        if not text and not upload:
+            return Response(
+                {"detail": "text yoki attachment majburiy"},
+                status=400,
+            )
+
+        attachment_kind = ""
+        attachment_name = ""
+        if upload:
+            attachment_name = upload.name[:255]
+            ctype = (upload.content_type or "").lower()
+            if ctype.startswith("image/") or attachment_name.lower().endswith(
+                (".jpg", ".jpeg", ".png", ".gif", ".webp")
+            ):
+                attachment_kind = CallCenterComment.ATTACHMENT_PHOTO
+            else:
+                attachment_kind = CallCenterComment.ATTACHMENT_DOCUMENT
+
         c = CallCenterComment.objects.create(
             ticket=ticket,
             operator=request.user,
             comment=text,
-            direction=CallCenterComment.DIRECTION_OUT,   # <-- qo'shildi
+            direction=CallCenterComment.DIRECTION_OUT,
             old_status=ticket.status,
             new_status=ticket.status,
+            attachment=upload if upload else None,
+            attachment_kind=attachment_kind,
+            attachment_name=attachment_name,
         )
         ticket.last_contact_at = timezone.now()
         ticket.save(update_fields=["last_contact_at", "updated_at"])
 
-        # Telegram'dan kelgan murojaat bo'lsa, javobni botga yuboramiz
+        # Telegramdan kelgan murojaat bo'lsa, javobni botga yuboramiz.
+        # Fayl bo'lsa — tegishli sendPhoto/sendDocument; matn bo'lsa
+        # oddiy sendMessage. Caption bilan rasm yuborilsa ikkalasi
+        # ham bir xil postda yetkaziladi.
         if ticket.telegram_chat_id:
-            from .telegram_bot import tg_send_message
-            mid = tg_send_message(ticket.telegram_chat_id, text)
+            from .telegram_bot import (
+                tg_send_message,
+                tg_send_photo,
+                tg_send_document,
+            )
+            mid = None
+            if attachment_kind == CallCenterComment.ATTACHMENT_PHOTO and c.attachment:
+                mid = tg_send_photo(
+                    ticket.telegram_chat_id,
+                    c.attachment.path,
+                    caption=text or None,
+                )
+            elif attachment_kind == CallCenterComment.ATTACHMENT_DOCUMENT and c.attachment:
+                mid = tg_send_document(
+                    ticket.telegram_chat_id,
+                    c.attachment.path,
+                    caption=text or None,
+                    filename=attachment_name,
+                )
+            elif text:
+                mid = tg_send_message(ticket.telegram_chat_id, text)
             if mid:
                 c.telegram_message_id = str(mid)
                 c.save(update_fields=["telegram_message_id"])
 
-        payload = _comment_to_dict(c)
+        payload = _comment_to_dict(c, request=request)
         try:
             broadcast_lead_comment({"ticket_id": ticket.id, "comment": payload})
         except Exception:
