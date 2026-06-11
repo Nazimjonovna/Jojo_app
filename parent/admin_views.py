@@ -336,7 +336,7 @@ class AdminSOSAlertListView(generics.ListAPIView):
 
 
 class AdminBroadcastNotificationView(APIView):
-    """Parentlarga bildirishnoma yuborish (hammaga yoki tanlangan ro'yxatga).
+    """Parentlarga bildirishnoma yuborish (audience bo'yicha filtrlash bilan).
 
     POST body:
       title, body            — uz (asosiy) matn — majburiy
@@ -344,12 +344,25 @@ class AdminBroadcastNotificationView(APIView):
       title_en, body_en      — en tarjima (ixtiyoriy)
       category               — ParentNotification.category (default: "system")
       send_sms               — true bo'lsa SMSFLY orqali ham yuboriladi
-      parent_ids             — int ro'yxati; bo'sh/yo'q bo'lsa hamma aktiv parent
+      audience               — kimga jo'natilsin (default: "active"):
+                                 "all"         — hamma parentlar (faol va nofaol)
+                                 "active"      — faqat is_active=True
+                                 "inactive"    — faqat is_active=False
+                                 "premium"     — faol premium (muddati o'tmagan)
+                                 "non_premium" — premium bo'lmagan faol parentlar
+                                 "selected"    — `parent_ids` ro'yxatidagilar
+      parent_ids             — int ro'yxati (audience="selected" uchun majburiy)
     """
 
     permission_classes = [IsAuthenticated, IsAdminUser]
 
+    _AUDIENCE_CHOICES = {
+        "all", "active", "inactive", "premium", "non_premium", "selected",
+    }
+
     def post(self, request):
+        from django.db.models import Q
+
         title = (request.data.get("title") or "").strip()
         body = (request.data.get("body") or "").strip()
         title_ru = (request.data.get("title_ru") or "").strip()
@@ -365,6 +378,18 @@ class AdminBroadcastNotificationView(APIView):
             parent_ids = [int(x) for x in raw_ids if x is not None and str(x).strip() != ""]
         except (TypeError, ValueError):
             return Response({"detail": "parent_ids noto'g'ri formatda"}, status=400)
+
+        # Audience tanlash. Backward-compat:
+        #   - parent_ids berilgan bo'lsa va audience yo'q bo'lsa => "selected".
+        #   - aks holda default "active" (eski "all" semantikasi shu edi).
+        audience = request.data.get("audience")
+        if not audience:
+            audience = "selected" if parent_ids else "active"
+        audience = str(audience).strip().lower()
+        if audience not in self._AUDIENCE_CHOICES:
+            return Response(
+                {"detail": f"audience noto'g'ri: {audience}"}, status=400,
+            )
 
         if not title or not body:
             return Response({"detail": "title va body majburiy"}, status=400)
@@ -382,15 +407,38 @@ class AdminBroadcastNotificationView(APIView):
         if body_en:
             body_translations["en"] = body_en
 
-        parents_qs = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
-        targeted = bool(parent_ids)
-        if targeted:
-            parents_qs = parents_qs.filter(id__in=parent_ids)
+        parents_qs = User.objects.filter(role=User.ROLE_PARENT)
 
+        # has_active_premium = is_premium=True AND (premium_expires_at IS NULL OR > now)
+        now = timezone.now()
+        active_premium_q = Q(is_premium=True) & (
+            Q(premium_expires_at__isnull=True) | Q(premium_expires_at__gt=now)
+        )
+
+        if audience == "selected":
+            if not parent_ids:
+                return Response(
+                    {"detail": "selected uchun parent_ids majburiy"}, status=400,
+                )
+            # Tanlangan ro'yxatda hatto bloklangan/nofaollar ham bo'lishi mumkin
+            # — admin aniq tanlagan, hurmat qilamiz.
+            parents_qs = parents_qs.filter(id__in=parent_ids)
+        elif audience == "active":
+            parents_qs = parents_qs.filter(is_active=True)
+        elif audience == "inactive":
+            parents_qs = parents_qs.filter(is_active=False)
+        elif audience == "premium":
+            parents_qs = parents_qs.filter(is_active=True).filter(active_premium_q)
+        elif audience == "non_premium":
+            parents_qs = parents_qs.filter(is_active=True).exclude(active_premium_q)
+        # audience == "all" => filtr qo'shmaymiz (faol + nofaol hammasi)
+
+        targeted = audience == "selected"
         announcement_data = {
             "announcement": True,
-            "audience": "selected" if targeted else "all",
+            "audience": audience,
         }
+        # Tanlanganlar uchun aniq sonni ham yozamiz — history filtrida foydali.
         if targeted:
             announcement_data["audience_count"] = parents_qs.count()
 
@@ -439,7 +487,7 @@ class AdminBroadcastNotificationView(APIView):
             "status": True,
             "sent_to": created,
             "sms_sent": sms_sent,
-            "audience": "selected" if targeted else "all",
+            "audience": audience,
         })
 
 
