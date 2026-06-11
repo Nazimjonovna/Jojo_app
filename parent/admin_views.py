@@ -945,6 +945,17 @@ class AdminLeadBoardView(APIView):
             "parent", "operator"
         ).prefetch_related("comments").order_by("-updated_at")
 
+        # Lead-CRM va Sorovlar (telegram support) ikki alohida ish oqimi.
+        # `?source=telegram` → Sorovlar (bot orqali); `?source=app,manual`
+        # yoki shunga o'xshash CSV → faqat parent app-dan / qo'lda
+        # kiritilgan murojaatlar. Aniq berilmasa hammasi qaytariladi
+        # (eski API mosligi uchun).
+        source = request.query_params.get("source")
+        if source:
+            wanted = [s.strip() for s in source.split(",") if s.strip()]
+            if wanted:
+                qs = qs.filter(source__in=wanted)
+
         q = request.query_params.get("q")
         if q:
             from django.db.models import Q
@@ -954,6 +965,8 @@ class AdminLeadBoardView(APIView):
                 | Q(parent__phone__icontains=q)
                 | Q(parent__first_name__icontains=q)
                 | Q(parent__full_name__icontains=q)
+                | Q(telegram_username__icontains=q)
+                | Q(telegram_name__icontains=q)
             )
 
         # Operator filtersi — faqat shu operatorga biriktirilganlar
@@ -1031,6 +1044,7 @@ class AdminLeadDetailView(APIView):
             if f in request.data:
                 setattr(t, f, request.data.get(f) or "")
                 update_fields.append(f)
+        rating_requested = False
         if "status" in request.data:
             s = request.data["status"]
             if s in dict(CallCenterTicket.STATUS_CHOICES):
@@ -1039,6 +1053,20 @@ class AdminLeadDetailView(APIView):
                 if s == CallCenterTicket.STATUS_CLOSED and not t.closed_at:
                     t.closed_at = timezone.now()
                     update_fields.append("closed_at")
+                # Telegram orqali kelgan murojaat operator tomonidan
+                # `resolved` deb belgilanganda bot foydalanuvchidan
+                # baho so'raydi. Status `closed` qachon `awaiting_rating`
+                # tugagandan keyin qo'yiladi (callback handler).
+                if (
+                    s == CallCenterTicket.STATUS_RESOLVED
+                    and old_status != CallCenterTicket.STATUS_RESOLVED
+                    and getattr(t, "source", "") == CallCenterTicket.SOURCE_TELEGRAM
+                    and t.telegram_chat_id
+                ):
+                    if t.resolved_at is None:
+                        t.resolved_at = timezone.now()
+                        update_fields.append("resolved_at")
+                    rating_requested = True
         if "operator_id" in request.data:
             op_id = request.data["operator_id"]
             if op_id:
@@ -1050,6 +1078,13 @@ class AdminLeadDetailView(APIView):
         if update_fields:
             update_fields.append("updated_at")
             t.save(update_fields=update_fields)
+        if rating_requested:
+            try:
+                from .telegram_bot import request_rating
+                request_rating(t)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("request_rating failed")
         data = _lead_to_dict(t, request=request)
         try:
             broadcast_lead_changed({

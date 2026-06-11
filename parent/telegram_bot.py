@@ -45,8 +45,9 @@ I18N = {
             "operatorlarimiz tez orada javob beradi."
         ),
         "ticket_closed_intro": (
-            "Murojaatingiz hal qilindi 🎉\n"
-            "Iltimos, xizmatimizni baholang:"
+            "Murojaatingiz hal qilindi 🎉\n\n"
+            "Muammoyingiz hal etildimi? Bizning xizmatimizni 1 dan 10 "
+            "ballgacha baholang:"
         ),
         "rating_thanks": "Bahoyingiz uchun rahmat! 🙏",
         "rating_skip": "Bo‘ldi, rahmat!",
@@ -67,8 +68,9 @@ I18N = {
             "операторларимиз тез орада жавоб беради."
         ),
         "ticket_closed_intro": (
-            "Мурожаатингиз ҳал қилинди 🎉\n"
-            "Илтимос, хизматимизни баҳоланг:"
+            "Мурожаатингиз ҳал қилинди 🎉\n\n"
+            "Муаммоингиз ҳал этилдими? Бизнинг хизматимизни 1 дан 10 "
+            "баллгача баҳоланг:"
         ),
         "rating_thanks": "Баҳойингиз учун раҳмат! 🙏",
         "rating_skip": "Бўлди, раҳмат!",
@@ -89,8 +91,9 @@ I18N = {
             "оператор ответит в ближайшее время."
         ),
         "ticket_closed_intro": (
-            "Ваше обращение решено 🎉\n"
-            "Пожалуйста, оцените нашу работу:"
+            "Ваше обращение решено 🎉\n\n"
+            "Решена ли ваша проблема? Оцените нашу работу "
+            "по шкале от 1 до 10:"
         ),
         "rating_thanks": "Спасибо за оценку! 🙏",
         "rating_skip": "Хорошо, спасибо!",
@@ -111,8 +114,9 @@ I18N = {
             "an operator will reply shortly."
         ),
         "ticket_closed_intro": (
-            "Your request has been resolved 🎉\n"
-            "Please rate our support:"
+            "Your request has been resolved 🎉\n\n"
+            "Was your issue solved? Rate our service on a scale from "
+            "1 to 10:"
         ),
         "rating_thanks": "Thanks for your rating! 🙏",
         "rating_skip": "Alright, thank you!",
@@ -213,16 +217,25 @@ def _language_keyboard():
 
 
 def _rating_keyboard(ticket_id, language):
-    """1..5 yulduz + skip tugmasi."""
-    stars_row = [
-        {"text": "⭐" * n, "callback_data": f"rate:{ticket_id}:{n}"}
+    """1..10 raqamli baho + skip tugmasi.
+
+    Inline keyboard 2 qatorda joylashadi (1-5, 6-10) — telegramda
+    har bir tugma kichkina, lekin ko'rinarli. Pastdan "O'tkazib
+    yuborish" tugmasi.
+    """
+    row1 = [
+        {"text": str(n), "callback_data": f"rate:{ticket_id}:{n}"}
         for n in range(1, 6)
+    ]
+    row2 = [
+        {"text": str(n), "callback_data": f"rate:{ticket_id}:{n}"}
+        for n in range(6, 11)
     ]
     skip_row = [{
         "text": t(language, "skip_button"),
         "callback_data": f"rate:{ticket_id}:skip",
     }]
-    return {"inline_keyboard": [stars_row, skip_row]}
+    return {"inline_keyboard": [row1, row2, skip_row]}
 
 
 # ----------------------------------------------------------------------------
@@ -408,7 +421,7 @@ def _handle_callback(cq):
         except ValueError:
             tg_answer_callback(callback_id)
             return
-        if not 1 <= rating <= 5:
+        if not 1 <= rating <= 10:
             tg_answer_callback(callback_id)
             return
 
@@ -422,7 +435,9 @@ def _handle_callback(cq):
             "rating", "rated_at", "bot_state", "status", "closed_at", "updated_at",
         ])
 
-        thanks = f"{'⭐' * rating}\n{t(lang, 'rating_thanks')}"
+        # Vizual feedback — 1-10 ballik bahoda yulduzlar 1:2 nisbatda.
+        stars = "⭐" * max(1, round(rating / 2))
+        thanks = f"{stars}  {rating}/10\n{t(lang, 'rating_thanks')}"
         tg_answer_callback(callback_id, t(lang, "rating_thanks"))
         if message_id:
             tg_edit_message(chat_id, message_id, thanks)
