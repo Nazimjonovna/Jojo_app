@@ -955,13 +955,86 @@ class ChildActiveRoutesView(APIView):
         return Response({"status": True, "assignments": ChildRouteAssignmentSerializer(assignments, many=True).data}, status=status.HTTP_200_OK)
 
 
+def _loc_short_to_long(raw):
+    """Kids ilovasi `lat/lng/acc/spd/hdg/bat/chg/net/act/ts` kabi qisqa
+    kalitlarda yuboradi (Socket.IO kanali bilan bir xil format). REST
+    fallback view ham xuddi shu payload'ni qabul qilishi uchun bu helper
+    ikkala variant — qisqa va to'liq — kalitlarini bir xil dict'ga
+    keltiradi.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        "latitude": raw.get("lat", raw.get("latitude")),
+        "longitude": raw.get("lng", raw.get("longitude")),
+        "accuracy": raw.get("acc", raw.get("accuracy")),
+        "speed": raw.get("spd", raw.get("speed")),
+        "heading": raw.get("hdg", raw.get("heading")),
+        "altitude": raw.get("alt", raw.get("altitude")),
+        "battery_level": raw.get("bat", raw.get("battery_level")),
+        "is_charging": raw.get("chg", raw.get("is_charging")),
+        "signal_strength": raw.get("sig", raw.get("signal_strength")),
+        "network_type": raw.get("net", raw.get("network_type")),
+        "activity_type": raw.get("act", raw.get("activity_type")),
+        "captured_at": raw.get("ts", raw.get("captured_at")),
+        "provider": raw.get("prv", raw.get("provider")),
+        "is_mock_location": raw.get("mck", raw.get("is_mock_location")),
+    }
+
+
+def _broadcast_presence_for_rest(child, latest_payload=None):
+    """REST orqali bola location yuborganida ham parent app real-time'da
+    bolani "online" sifatida ko'rishi uchun presence event yuboradi.
+
+    Socket.IO `connect/disconnect/presence` event'lari bilan bir xil
+    payload shaklini ishlatamiz: parent klient `t='presence'` deb
+    payload-ni o'qiydi va `isOnline=true` bo'lsa indikatorni yoqadi.
+    """
+    try:
+        from core.socketio_server import emit_to_room_sync
+        from .models import ParentChild
+    except Exception:
+        return
+    src = latest_payload or {}
+    payload = {
+        "child_id": child.id,
+        "online": True,
+        "has_gps_fix": src.get("latitude") is not None,
+        "battery_level": src.get("battery_level"),
+        "is_charging": bool(src.get("is_charging")) if src.get("is_charging") is not None else False,
+        "network_type": src.get("network_type"),
+        "ringer_mode": None,
+        "captured_at": src.get("captured_at"),
+    }
+    parent_ids = list(
+        ParentChild.objects.filter(child=child).values_list("parent_id", flat=True)
+    )
+    for parent_id in parent_ids:
+        emit_to_room_sync("presence", payload, f"parent_{parent_id}")
+
+
 class SendChildLocationView(APIView):
     permission_classes = [IsChild]
     @swagger_auto_schema(request_body=ChildLocationSerializer, tags=["location"])
     def post(self, request):
-        serializer = ChildLocationSerializer(data=request.data)
+        # Kids ilovasi qisqa kalitlarni (lat/lng/...) yuborishi mumkin —
+        # serializer'ga uzatishdan oldin normalize qilamiz.
+        norm = _loc_short_to_long(request.data)
+        merged = {**(request.data if isinstance(request.data, dict) else {}), **{k: v for k, v in norm.items() if v is not None}}
+        serializer = ChildLocationSerializer(data=merged)
         serializer.is_valid(raise_exception=True)
-        location, realtime_payload = process_child_location(child=request.user, latitude=serializer.validated_data["latitude"], longitude=serializer.validated_data["longitude"], accuracy=serializer.validated_data.get("accuracy"), battery_level=serializer.validated_data.get("battery_level"), speed=serializer.validated_data.get("speed"), heading=serializer.validated_data.get("heading"), source=ChildLocation.SOURCE_REST)
+        location, realtime_payload = process_child_location(
+            child=request.user,
+            latitude=serializer.validated_data["latitude"],
+            longitude=serializer.validated_data["longitude"],
+            accuracy=serializer.validated_data.get("accuracy"),
+            battery_level=serializer.validated_data.get("battery_level"),
+            speed=serializer.validated_data.get("speed"),
+            heading=serializer.validated_data.get("heading"),
+            source=ChildLocation.SOURCE_REST,
+        )
+        # REST path uchun ham parent app'ga "online" bayrog'ini yuboramiz.
+        _broadcast_presence_for_rest(request.user, latest_payload=merged)
         return Response({"status": True, "detail": "Location saqlandi va real-time yuborildi.", "location": ChildLocationSerializer(location).data, "realtime_payload": realtime_payload}, status=status.HTTP_201_CREATED)
 
 
@@ -969,9 +1042,11 @@ class SendChildLocationBatchView(APIView):
     """REST fallback — Socket.IO uzilgan bo'lsa kids ilovasi disk
     buffer'dagi nuqtalarni shu yerga 100 tagacha bir requestda jo'natadi.
 
-    Har bir element bilan `process_child_location` chaqirilmaydi — bu og'ir
-    bo'ladi. Buning o'rniga `ChildLocation.objects.bulk_create` ishlatamiz
-    va eng so'nggisini `ChildLastLocation`'ga yozamiz + WS broadcast qilamiz.
+    Kids ilovasi qisqa kalitlarni (`lat`, `lng`, `ts`, `bat`, `chg`,
+    `net`, `act`) yuboradi — Socket.IO `loc` event'i bilan bir xil
+    shakl. Bu yerda ularni to'liq kalitlarga (latitude, longitude, ...)
+    o'zgartirib saqlaymiz, eng so'nggini `process_child_location` orqali
+    o'tkazamiz va parent app'ga `presence` event yuboramiz.
     """
     permission_classes = [IsChild]
 
@@ -993,9 +1068,10 @@ class SendChildLocationBatchView(APIView):
             if not isinstance(raw, dict):
                 skipped += 1
                 continue
+            norm = _loc_short_to_long(raw)
             try:
-                lat = float(raw.get("latitude"))
-                lon = float(raw.get("longitude"))
+                lat = float(norm.get("latitude"))
+                lon = float(norm.get("longitude"))
             except (TypeError, ValueError):
                 skipped += 1
                 continue
@@ -1007,17 +1083,17 @@ class SendChildLocationBatchView(APIView):
                 child=child,
                 latitude=lat,
                 longitude=lon,
-                accuracy=_safe_float(raw.get("accuracy")),
-                battery_level=_safe_int(raw.get("battery_level")),
-                is_charging=raw.get("is_charging"),
-                speed=_safe_float(raw.get("speed")),
-                heading=_safe_float(raw.get("heading")),
-                network_type=str(raw.get("network_type") or "")[:20],
-                activity_type=str(raw.get("activity_type") or "")[:20],
+                accuracy=_safe_float(norm.get("accuracy")),
+                battery_level=_safe_int(norm.get("battery_level")),
+                is_charging=norm.get("is_charging"),
+                speed=_safe_float(norm.get("speed")),
+                heading=_safe_float(norm.get("heading")),
+                network_type=str(norm.get("network_type") or "")[:20],
+                activity_type=str(norm.get("activity_type") or "")[:20],
                 source=ChildLocation.SOURCE_REST,
             )
             objects.append(obj)
-            latest_for_processing = raw
+            latest_for_processing = norm
 
         if objects:
             ChildLocation.objects.bulk_create(objects, batch_size=200)
@@ -1039,6 +1115,10 @@ class SendChildLocationBatchView(APIView):
                 )
             except Exception:
                 latest_payload = None
+
+            # REST path uchun "online" presence — Socket.IO uzilgan paytda
+            # ham parent app bolani online ko'rsin.
+            _broadcast_presence_for_rest(child, latest_payload=latest_for_processing)
 
         return Response({
             "status": True,
