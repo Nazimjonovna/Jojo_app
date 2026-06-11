@@ -73,17 +73,33 @@ def record_parent_notification(
     title_translations = title_translations or {}
     body_translations = body_translations or {}
 
+    # `uz_cyrl` qo'lda berilmagan bo'lsa, asosiy `uz` lotinidan
+    # mexanik transliteratsiya qilamiz — Cyrillic foydalanuvchilarga
+    # bo'sh maydon chiqib qolmasin.
+    def _auto_cyr(translations, base):
+        v = (translations.get("uz_cyrl") or "").strip()
+        if v:
+            return v
+        src = (base or "").strip()
+        if not src:
+            return ""
+        try:
+            from .translation import latin_to_cyrillic
+            return latin_to_cyrillic(src)
+        except Exception:
+            return ""
+
     try:
         notification = ParentNotification.objects.create(
             parent=parent,
             child=child,
             category=category,
             title=(title or "")[:150],
-            title_uz_cyrl=(title_translations.get("uz_cyrl") or "")[:150],
+            title_uz_cyrl=_auto_cyr(title_translations, title)[:150],
             title_ru=(title_translations.get("ru") or "")[:150],
             title_en=(title_translations.get("en") or "")[:150],
             body=(body or "")[:500],
-            body_uz_cyrl=(body_translations.get("uz_cyrl") or "")[:500],
+            body_uz_cyrl=_auto_cyr(body_translations, body)[:500],
             body_ru=(body_translations.get("ru") or "")[:500],
             body_en=(body_translations.get("en") or "")[:500],
             data=data or {},
@@ -103,6 +119,10 @@ def pick_for_lang(translations, lang, fallback=""):
     translations: {"uz": "...", "uz_cyrl": "...", "ru": "...", "en": "..."}
     `lang` — User.language ("uz_latn"/"uz_cyrl"/"ru"/"en") yoki
     Accept-Language qiymati ("uz"/"uz-Cyrl"/"ru"/"en").
+
+    `uz_cyrl` so'ralib, lekin tarjima yo'q bo'lsa lotin matn avto-
+    transliteratsiya qilinadi (mexanik o'tkazish) — admin tarjima
+    yozmagani bilan Cyrillic foydalanuvchiga lotin chiqib qolmaydi.
     """
     if not translations:
         return fallback
@@ -112,20 +132,39 @@ def pick_for_lang(translations, lang, fallback=""):
     if code.startswith("en"):
         return translations.get("en") or translations.get("uz") or fallback
     if "cyr" in code:
-        return (
-            translations.get("uz_cyrl")
-            or translations.get("uz")
-            or fallback
-        )
+        cyr = translations.get("uz_cyrl")
+        if cyr:
+            return cyr
+        uz_value = translations.get("uz") or fallback
+        if uz_value:
+            try:
+                from .translation import latin_to_cyrillic
+                return latin_to_cyrillic(uz_value)
+            except Exception:
+                return uz_value
+        return fallback
     return translations.get("uz") or translations.get("uz_latn") or fallback
 
 
-def translations_dict(uz, uz_cyrl=None, ru=None, en=None):
+def translations_dict(uz, uz_cyrl=None, ru=None, en=None, *, auto_cyrl=True):
     """4-tilli matnlarni record_parent_notification / pick_for_lang
-    yordamchilariga uzatish uchun standart shakl."""
+    yordamchilariga uzatish uchun standart shakl.
+
+    `auto_cyrl=True` (default): `uz_cyrl` berilmagan bo'lsa, `uz` dan
+    mexanik transliteratsiya qilinadi. Manualan berilgan tarjima
+    har doim ustun.
+    """
+    uz_value = uz or ""
+    cyr_value = uz_cyrl or ""
+    if auto_cyrl and uz_value and not cyr_value:
+        try:
+            from .translation import latin_to_cyrillic
+            cyr_value = latin_to_cyrillic(uz_value)
+        except Exception:
+            pass
     return {
-        "uz": uz or "",
-        "uz_cyrl": uz_cyrl or "",
+        "uz": uz_value,
+        "uz_cyrl": cyr_value,
         "ru": ru or "",
         "en": en or "",
     }
