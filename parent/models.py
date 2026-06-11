@@ -636,6 +636,7 @@ class GameCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="games/categories/",
         null=True,
@@ -663,6 +664,7 @@ class GameItem(models.Model):
     title = models.CharField(max_length=150)
     title_ru = models.CharField(max_length=150, blank=True, default="")
     title_en = models.CharField(max_length=150, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
 
     description = models.TextField(
         null=True,
@@ -670,6 +672,7 @@ class GameItem(models.Model):
     )
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     thumbnail = models.ImageField(
         upload_to="games/thumbnails/",
@@ -1754,6 +1757,7 @@ class BlogCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="blog/categories/",
         null=True,
@@ -1792,6 +1796,7 @@ class BlogPost(models.Model):
     title = models.CharField(max_length=255)
     title_ru = models.CharField(max_length=255, blank=True, default="")
     title_en = models.CharField(max_length=255, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
 
     short_description = models.CharField(
         max_length=500,
@@ -1800,6 +1805,7 @@ class BlogPost(models.Model):
     )
     short_description_ru = models.CharField(max_length=500, blank=True, default="")
     short_description_en = models.CharField(max_length=500, blank=True, default="")
+    short_description_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     content = models.TextField(
         null=True,
@@ -1807,6 +1813,7 @@ class BlogPost(models.Model):
     )
     content_ru = models.TextField(blank=True, default="")
     content_en = models.TextField(blank=True, default="")
+    content_uz_cyrl = models.TextField(blank=True, default="")
 
     post_type = models.CharField(
         max_length=20,
@@ -1940,6 +1947,7 @@ class ParentStoreCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     slug = models.SlugField(max_length=160, unique=True)
     product_type = models.CharField(
         max_length=20,
@@ -1975,6 +1983,7 @@ class ProductTag(models.Model):
     name = models.CharField(max_length=80, unique=True)
     name_ru = models.CharField(max_length=80, blank=True, default="")
     name_en = models.CharField(max_length=80, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=80, blank=True, default="")
     slug = models.SlugField(max_length=90, unique=True)
     is_active = models.BooleanField(default=True)
     usage_count = models.PositiveIntegerField(default=0)
@@ -2022,15 +2031,19 @@ class ParentStoreProduct(models.Model):
     name = models.CharField(max_length=255)
     name_ru = models.CharField(max_length=255, blank=True, default="")
     name_en = models.CharField(max_length=255, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
 
     short_description_ru = models.CharField(max_length=500, blank=True, default="")
     short_description_en = models.CharField(max_length=500, blank=True, default="")
+    short_description_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     category_label_ru = models.CharField(max_length=120, blank=True, default="")
     category_label_en = models.CharField(max_length=120, blank=True, default="")
+    category_label_uz_cyrl = models.CharField(max_length=120, blank=True, default="")
 
     tags = models.ManyToManyField(
         ProductTag,
@@ -2189,12 +2202,15 @@ class ParentStorePromoBanner(models.Model):
     kicker = models.CharField(max_length=80)
     kicker_ru = models.CharField(max_length=80, blank=True, default="")
     kicker_en = models.CharField(max_length=80, blank=True, default="")
+    kicker_uz_cyrl = models.CharField(max_length=80, blank=True, default="")
     title = models.CharField(max_length=160)
     title_ru = models.CharField(max_length=160, blank=True, default="")
     title_en = models.CharField(max_length=160, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=160, blank=True, default="")
     subtitle = models.CharField(max_length=255, blank=True, default="")
     subtitle_ru = models.CharField(max_length=255, blank=True, default="")
     subtitle_en = models.CharField(max_length=255, blank=True, default="")
+    subtitle_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
     theme = models.CharField(
         max_length=10,
         choices=THEME_CHOICES,
@@ -2563,9 +2579,11 @@ class ParentNotification(models.Model):
     title = models.CharField(max_length=150)
     title_ru = models.CharField(max_length=150, blank=True, default="")
     title_en = models.CharField(max_length=150, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     body = models.CharField(max_length=500, blank=True, default="")
     body_ru = models.CharField(max_length=500, blank=True, default="")
     body_en = models.CharField(max_length=500, blank=True, default="")
+    body_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     data = models.JSONField(
         blank=True,
@@ -2674,9 +2692,11 @@ class NotificationRule(models.Model):
     title = models.CharField(max_length=200)
     title_ru = models.CharField(max_length=200, blank=True, default="")
     title_en = models.CharField(max_length=200, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=200, blank=True, default="")
     body = models.TextField()
     body_ru = models.TextField(blank=True, default="")
     body_en = models.TextField(blank=True, default="")
+    body_uz_cyrl = models.TextField(blank=True, default="")
     category = models.CharField(max_length=40, default="system")
 
     send_push = models.BooleanField(default=True)
@@ -2833,6 +2853,7 @@ class KidsVideoCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="kids_videos/categories/",
         null=True,
@@ -2861,10 +2882,12 @@ class KidsVideo(models.Model):
     title = models.CharField(max_length=200)
     title_ru = models.CharField(max_length=200, blank=True, default="")
     title_en = models.CharField(max_length=200, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=200, blank=True, default="")
 
     description = models.TextField(blank=True, default="")
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     youtube_url = models.URLField(
         help_text="Toʻliq YouTube havola, masalan https://www.youtube.com/watch?v=XXXX",

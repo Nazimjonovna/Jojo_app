@@ -1667,6 +1667,7 @@ def _kids_video_category_to_dict(c, request=None):
         "name": c.name,
         "name_ru": c.name_ru,
         "name_en": c.name_en,
+        "name_uz_cyrl": getattr(c, "name_uz_cyrl", "") or "",
         "icon": icon,
         "is_active": c.is_active,
         "order": c.order,
