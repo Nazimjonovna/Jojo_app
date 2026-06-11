@@ -7,7 +7,7 @@ va companion xabarlarini yaratadi. Idempotent — qayta ishlatsa dublikat qilmay
 """
 from django.core.management.base import BaseCommand
 
-from jojolingo.models_gamification import (
+from jojolingo.models import (
     Achievement,
     AICompanion,
     CompanionMessageTemplate,
