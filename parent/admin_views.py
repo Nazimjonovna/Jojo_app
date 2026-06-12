@@ -59,11 +59,150 @@ User = get_user_model()
 
 
 class IsAdminUser(BasePermission):
-    """Faqat `is_staff=True` foydalanuvchilarga ruxsat."""
+    """`is_staff=True` bo'lgan foydalanuvchilarga ruxsat — va agar view'da
+    `required_permission` o'rnatilgan bo'lsa, operatorning `admin_role`
+    permission ro'yxatida shu kalit bor-yo'qligini tekshiradi.
+
+    Superuser har doim o'tadi (admin o'zini bloklab qo'ymasligi uchun).
+    """
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.is_staff)
+        if not (user and user.is_authenticated and user.is_staff):
+            return False
+        if user.is_superuser:
+            return True
+        required = getattr(view, "required_permission", None)
+        if not required:
+            # View'da required_permission bo'lmasa, class nomi bo'yicha
+            # global jadvalga qaraymiz (VIEW_PERMISSION_MAP).
+            required = VIEW_PERMISSION_MAP.get(view.__class__.__name__)
+        if not required:
+            return True
+        perms = get_user_permissions(user)
+        if isinstance(required, (list, tuple, set)):
+            return any(r in perms for r in required)
+        return required in perms
+
+
+# Sidebar va RolesPage'dagi nav kalitlari bilan bir xil bo'lishi kerak —
+# frontend va backend "haqiqat manbai" sifatida shu ro'yxatga tayanadi.
+ADMIN_PERMISSION_KEYS = [
+    "dashboard",
+    "users",
+    "children",
+    "premium",
+    "payments",
+    "requests",
+    "leads",
+    "blocked",
+    "advice",
+    "kids_content",
+    "products",
+    "categories",
+    "banners",
+    "orders",
+    "notifications",
+    "notification_rules",
+    "sms",
+    "ads",
+    "settings",
+    "operators",
+    "roles",
+]
+
+
+# View class nomidan kerakli permission kalitiga jadval. Bu yerda yo'q
+# bo'lgan view'lar (login, me, upload, webhook) — barcha staff'ga ochiq.
+# IsAdminUser har bir request'da shu jadvalga qaraydi va `required_permission`
+# o'rnatilganidek ishlatadi.
+VIEW_PERMISSION_MAP = {
+    # Banners / store
+    "AdminBannerListCreate": "banners",
+    "AdminBannerDetail": "banners",
+    "AdminStoreCategoryListCreate": "categories",
+    "AdminStoreCategoryDetail": "categories",
+    "AdminStoreProductListCreate": "products",
+    "AdminStoreProductDetail": "products",
+    "AdminProductTagListCreate": "products",
+    "AdminProductTagDetail": "products",
+    "AdminOrderListView": "orders",
+    "AdminOrderDetailView": "orders",
+    # Blog / advice
+    "AdminBlogCategoryListCreate": "advice",
+    "AdminBlogCategoryDetail": "advice",
+    "AdminBlogPostListCreate": "advice",
+    "AdminBlogPostDetail": "advice",
+    # Users
+    "AdminUserListView": "users",
+    "AdminUserToggleActiveView": "users",
+    "AdminChildrenListView": "children",
+    # Premium / payments
+    "AdminSubscriptionPlanListCreate": "premium",
+    "AdminSubscriptionPlanDetail": "premium",
+    "AdminSubscriptionPaymentListView": "payments",
+    # Notifications / SMS / ads
+    "AdminNotificationListView": "notifications",
+    "AdminNotificationDetailView": "notifications",
+    "AdminBroadcastNotificationView": "notifications",
+    "AdminBroadcastHistoryView": "notifications",
+    "AdminNotificationRuleListCreate": "notification_rules",
+    "AdminNotificationRuleDetail": "notification_rules",
+    "AdminNotificationRuleRunNow": "notification_rules",
+    "AdminNotificationRuleLogs": "notification_rules",
+    "AdminSmsLogView": "sms",
+    "AdminSmsTestView": "sms",
+    # Support / leads / requests
+    "AdminTicketListView": "requests",
+    "AdminTicketUpdateStatusView": "requests",
+    "AdminQuickReplyListCreateView": "requests",
+    "AdminQuickReplyDetailView": "requests",
+    "AdminSOSAlertListView": "leads",
+    "AdminLeadUnreadCountView": "leads",
+    "AdminLeadBoardView": "leads",
+    "AdminLeadListCreate": "leads",
+    "AdminLeadDetailView": "leads",
+    "AdminLeadFullView": "leads",
+    "AdminLeadCommentsView": "leads",
+    # Operators / roles
+    "AdminOperatorListView": "operators",
+    "AdminOperatorCreateView": "operators",
+    "AdminOperatorDetailView": "operators",
+    "AdminRoleListCreateView": "roles",
+    "AdminRoleDetailView": "roles",
+    # Kids content
+    "AdminGameCategoryListCreate": "kids_content",
+    "AdminGameCategoryDetail": "kids_content",
+    "AdminGameListCreate": "kids_content",
+    "AdminGameDetail": "kids_content",
+    "AdminKidsVideoCategoryListCreate": "kids_content",
+    "AdminKidsVideoCategoryDetail": "kids_content",
+    "AdminKidsVideoListCreate": "kids_content",
+    "AdminKidsVideoDetail": "kids_content",
+    # Dashboard
+    "AdminDashboardStatsView": "dashboard",
+}
+
+
+def get_user_permissions(user):
+    """Foydalanuvchining samarali permission ro'yxatini qaytaradi.
+
+    - Superuser yoki `is_superuser=True` — barcha kalitlarni oladi (admin
+      hech qachon o'zini bloklab qo'ymasligi uchun).
+    - Aks holda `user.admin_role.permissions` ro'yxati (yo'q bo'lsa bo'sh).
+    """
+    if not user or not user.is_authenticated:
+        return []
+    if user.is_superuser:
+        return list(ADMIN_PERMISSION_KEYS)
+    role = getattr(user, "admin_role", None)
+    if role and isinstance(role.permissions, list):
+        return [str(p) for p in role.permissions if p]
+    return []
+
+
+# Backwards-compat alias — IsAdminUser endi permission'ni tekshiradi.
+HasAdminPermission = IsAdminUser
 
 
 # ============================================================================
@@ -106,13 +245,7 @@ class AdminLoginView(APIView):
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
-            "user": {
-                "id": user.id,
-                "phone": getattr(user, "phone", None),
-                "username": user.username,
-                "full_name": user.first_name or "",
-                "is_superuser": user.is_superuser,
-            },
+            "user": _serialize_admin_user(user),
         })
 
 
@@ -120,14 +253,34 @@ class AdminMeView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        user = request.user
-        return Response({
-            "id": user.id,
-            "phone": getattr(user, "phone", None),
-            "username": user.username,
-            "full_name": user.first_name or "",
-            "is_superuser": user.is_superuser,
-        })
+        return Response(_serialize_admin_user(request.user))
+
+
+def _serialize_admin_user(user):
+    """Login va `/me/` endpointlari uchun yagona shakl.
+
+    `admin_role` o'rnida operator rolining nomi va aniq permission kalitlari
+    qaytariladi — frontend shularga qarab sidebar va sahifalarni filtrlaydi.
+    Superuser uchun `permissions` ga barcha kalitlar joylanadi.
+    """
+    role = getattr(user, "admin_role", None)
+    return {
+        "id": user.id,
+        "phone": getattr(user, "phone", None),
+        "username": user.username,
+        "full_name": user.first_name or "",
+        "is_superuser": user.is_superuser,
+        "admin_role": (
+            {
+                "id": role.id,
+                "name": role.name,
+                "is_system": role.is_system,
+            }
+            if role
+            else None
+        ),
+        "permissions": get_user_permissions(user),
+    }
 
 
 # ============================================================================
