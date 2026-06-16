@@ -45,8 +45,9 @@ I18N = {
             "operatorlarimiz tez orada javob beradi."
         ),
         "ticket_closed_intro": (
-            "Murojaatingiz hal qilindi 🎉\n"
-            "Iltimos, xizmatimizni baholang:"
+            "Murojaatingiz hal qilindi 🎉\n\n"
+            "Muammoyingiz hal etildimi? Bizning xizmatimizni 1 dan 10 "
+            "ballgacha baholang:"
         ),
         "rating_thanks": "Bahoyingiz uchun rahmat! 🙏",
         "rating_skip": "Bo‘ldi, rahmat!",
@@ -67,8 +68,9 @@ I18N = {
             "операторларимиз тез орада жавоб беради."
         ),
         "ticket_closed_intro": (
-            "Мурожаатингиз ҳал қилинди 🎉\n"
-            "Илтимос, хизматимизни баҳоланг:"
+            "Мурожаатингиз ҳал қилинди 🎉\n\n"
+            "Муаммоингиз ҳал этилдими? Бизнинг хизматимизни 1 дан 10 "
+            "баллгача баҳоланг:"
         ),
         "rating_thanks": "Баҳойингиз учун раҳмат! 🙏",
         "rating_skip": "Бўлди, раҳмат!",
@@ -89,8 +91,9 @@ I18N = {
             "оператор ответит в ближайшее время."
         ),
         "ticket_closed_intro": (
-            "Ваше обращение решено 🎉\n"
-            "Пожалуйста, оцените нашу работу:"
+            "Ваше обращение решено 🎉\n\n"
+            "Решена ли ваша проблема? Оцените нашу работу "
+            "по шкале от 1 до 10:"
         ),
         "rating_thanks": "Спасибо за оценку! 🙏",
         "rating_skip": "Хорошо, спасибо!",
@@ -111,8 +114,9 @@ I18N = {
             "an operator will reply shortly."
         ),
         "ticket_closed_intro": (
-            "Your request has been resolved 🎉\n"
-            "Please rate our support:"
+            "Your request has been resolved 🎉\n\n"
+            "Was your issue solved? Rate our service on a scale from "
+            "1 to 10:"
         ),
         "rating_thanks": "Thanks for your rating! 🙏",
         "rating_skip": "Alright, thank you!",
@@ -192,6 +196,95 @@ def tg_answer_callback(callback_id, text=""):
     })
 
 
+def _tg_upload(method, chat_id, file_path, *, file_field, caption=None,
+               filename=None):
+    """`sendPhoto` / `sendDocument` kabi multipart-fayl yuborish.
+    Telegram fayl URL emas, ko'p hollarda haqiqiy fayl kontentini kutadi —
+    yuklash tugagach `message_id` qaytariladi (yoki xato bo'lsa None).
+    """
+    token = _token()
+    if not token:
+        logger.warning("TELEGRAM_BOT_TOKEN yo'q. Telegram chaqiriq tashlandi: %s", method)
+        return None
+    url = TELEGRAM_API.format(token=token, method=method)
+    data = {"chat_id": chat_id}
+    if caption:
+        data["caption"] = caption
+        data["parse_mode"] = "HTML"
+    try:
+        with open(file_path, "rb") as fp:
+            files = {file_field: (filename or fp.name, fp)}
+            r = requests.post(
+                url,
+                data=data,
+                files=files,
+                timeout=30,
+                verify=getattr(settings, "TELEGRAM_VERIFY_SSL", True),
+            )
+        payload = r.json()
+        if not payload.get("ok"):
+            logger.error("Telegram %s xato: %s", method, payload)
+            return None
+        return payload.get("result", {}).get("message_id")
+    except (requests.RequestException, OSError) as e:
+        logger.error("Telegram %s yuklash xatosi: %s", method, e)
+        return None
+
+
+def tg_send_photo(chat_id, file_path, caption=None):
+    return _tg_upload(
+        "sendPhoto",
+        chat_id,
+        file_path,
+        file_field="photo",
+        caption=caption,
+    )
+
+
+def tg_send_document(chat_id, file_path, caption=None, filename=None):
+    return _tg_upload(
+        "sendDocument",
+        chat_id,
+        file_path,
+        file_field="document",
+        caption=caption,
+        filename=filename,
+    )
+
+
+def _tg_download_file(file_id):
+    """Telegramdan fayl content'ini olib keladi va `(bytes, ext)` qaytaradi.
+    Aks holda `(None, None)`. Foydalanuvchi yuborgan rasmlar shu yo'l
+    bilan local diskka saqlanadi.
+    """
+    token = _token()
+    if not token:
+        return None, None
+    try:
+        meta = _tg_call("getFile", {"file_id": file_id}) or {}
+        file_path = meta.get("file_path")
+        if not file_path:
+            return None, None
+        ext = ""
+        if "." in file_path:
+            ext = "." + file_path.rsplit(".", 1)[-1].split("/")[-1][:8]
+        download_url = (
+            "https://api.telegram.org/file/bot{token}/{path}"
+            .format(token=token, path=file_path)
+        )
+        r = requests.get(
+            download_url,
+            timeout=30,
+            verify=getattr(settings, "TELEGRAM_VERIFY_SSL", True),
+        )
+        if r.status_code != 200:
+            return None, None
+        return r.content, ext
+    except requests.RequestException as e:
+        logger.error("Telegram getFile xatosi: %s", e)
+        return None, None
+
+
 # ----------------------------------------------------------------------------
 # Inline keyboardlar — til tanlash & baholash
 # ----------------------------------------------------------------------------
@@ -213,16 +306,25 @@ def _language_keyboard():
 
 
 def _rating_keyboard(ticket_id, language):
-    """1..5 yulduz + skip tugmasi."""
-    stars_row = [
-        {"text": "⭐" * n, "callback_data": f"rate:{ticket_id}:{n}"}
+    """1..10 raqamli baho + skip tugmasi.
+
+    Inline keyboard 2 qatorda joylashadi (1-5, 6-10) — telegramda
+    har bir tugma kichkina, lekin ko'rinarli. Pastdan "O'tkazib
+    yuborish" tugmasi.
+    """
+    row1 = [
+        {"text": str(n), "callback_data": f"rate:{ticket_id}:{n}"}
         for n in range(1, 6)
+    ]
+    row2 = [
+        {"text": str(n), "callback_data": f"rate:{ticket_id}:{n}"}
+        for n in range(6, 11)
     ]
     skip_row = [{
         "text": t(language, "skip_button"),
         "callback_data": f"rate:{ticket_id}:skip",
     }]
-    return {"inline_keyboard": [stars_row, skip_row]}
+    return {"inline_keyboard": [row1, row2, skip_row]}
 
 
 # ----------------------------------------------------------------------------
@@ -408,7 +510,7 @@ def _handle_callback(cq):
         except ValueError:
             tg_answer_callback(callback_id)
             return
-        if not 1 <= rating <= 5:
+        if not 1 <= rating <= 10:
             tg_answer_callback(callback_id)
             return
 
@@ -422,7 +524,9 @@ def _handle_callback(cq):
             "rating", "rated_at", "bot_state", "status", "closed_at", "updated_at",
         ])
 
-        thanks = f"{'⭐' * rating}\n{t(lang, 'rating_thanks')}"
+        # Vizual feedback — 1-10 ballik bahoda yulduzlar 1:2 nisbatda.
+        stars = "⭐" * max(1, round(rating / 2))
+        thanks = f"{stars}  {rating}/10\n{t(lang, 'rating_thanks')}"
         tg_answer_callback(callback_id, t(lang, "rating_thanks"))
         if message_id:
             tg_edit_message(chat_id, message_id, thanks)
@@ -464,12 +568,46 @@ def _handle_message(message):
             ticket.save(update_fields=["bot_state", "updated_at"])
             _broadcast_ticket(ticket, kind="updated")
 
+        # Operator chat panel'ida foydalanuvchi /start bosganini ko'rsin —
+        # aks holda yangi tikkitlar chat paneli bo'sh ko'rinadi va operator
+        # "tizim ishlamayapti" deb gumon qiladi.
+        try:
+            start_comment = CallCenterComment.objects.create(
+                ticket=ticket,
+                operator=None,
+                comment=text or "/start",
+                direction=CallCenterComment.DIRECTION_IN,
+                old_status=ticket.status,
+                new_status=ticket.status,
+                telegram_message_id=str(message.get("message_id", "")),
+            )
+            _broadcast_comment(ticket, start_comment)
+        except Exception:
+            # Comment seed muvaffaqiyatsiz bo'lsa ham asosiy oqim davom etsin.
+            pass
+
         lang_hint = ticket.language or "uz_latn"
+        welcome_text = t(lang_hint, "welcome")
         tg_send_message(
             chat_id,
-            t(lang_hint, "welcome"),
+            welcome_text,
             reply_markup=_language_keyboard(),
         )
+        # Bot tomondan yuborilgan xush kelibsiz xabarini ham ticketga yozamiz —
+        # admin chat tarixi to'liq bo'lsin (haqiqiy Telegram chat bilan moslashsin).
+        try:
+            bot_comment = CallCenterComment.objects.create(
+                ticket=ticket,
+                operator=None,
+                comment=welcome_text,
+                direction=CallCenterComment.DIRECTION_OUT,
+                old_status=ticket.status,
+                new_status=ticket.status,
+            )
+            _broadcast_comment(ticket, bot_comment)
+        except Exception:
+            pass
+        _broadcast_ticket(ticket, kind="updated")
         return
 
     # Raqam ulashilsa — parent bilan bog'laymiz
@@ -508,7 +646,35 @@ def _handle_message(message):
     if contact:
         tg_send_message(chat_id, t(ticket.language or "uz_latn", "phone_saved"))
 
-    if not text:
+    # Rasm yoki hujjat keldi — local diskka saqlab CallCenterComment-ga
+    # ulaymiz. Telegram `photo` 4-5 ta size variant qaytaradi; eng yiriki
+    # ro'yxatning oxirgisi.
+    attachment_file = None
+    attachment_kind = ""
+    attachment_name = ""
+    photos = message.get("photo") or []
+    doc = message.get("document")
+    if photos:
+        best = photos[-1]
+        content, ext = _tg_download_file(best.get("file_id"))
+        if content:
+            from django.core.files.base import ContentFile
+            filename = f"tg_{message.get('message_id', '0')}{ext or '.jpg'}"
+            attachment_file = ContentFile(content, name=filename)
+            attachment_kind = CallCenterComment.ATTACHMENT_PHOTO
+            attachment_name = filename
+    elif doc:
+        content, ext = _tg_download_file(doc.get("file_id"))
+        if content:
+            from django.core.files.base import ContentFile
+            base = (doc.get("file_name") or "").strip() or "file"
+            if "." not in base:
+                base += (ext or ".bin")
+            attachment_file = ContentFile(content, name=base)
+            attachment_kind = CallCenterComment.ATTACHMENT_DOCUMENT
+            attachment_name = base
+
+    if not text and not attachment_file:
         return
 
     # Til tanlanmagan bo'lsa, oddiy xabarni hali ham yozib olamiz
@@ -520,7 +686,6 @@ def _handle_message(message):
             reply_markup=_language_keyboard(),
         )
 
-    # /start emas matn — chatga yozamiz
     comment = CallCenterComment.objects.create(
         ticket=ticket,
         operator=None,
@@ -529,6 +694,9 @@ def _handle_message(message):
         old_status=ticket.status,
         new_status=ticket.status,
         telegram_message_id=str(message.get("message_id", "")),
+        attachment=attachment_file,
+        attachment_kind=attachment_kind,
+        attachment_name=attachment_name,
     )
     _broadcast_comment(ticket, comment)
     _broadcast_ticket(ticket, kind="updated")

@@ -136,7 +136,7 @@ def get_tokens_for_user(user):
     return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
-# resultCode ma'nolari (SMSFLY doc bo'yicha)
+# resultCode ma'nolari (SMSFLY doc bo'yicha) — UI tarjima uchun saqlab qoldik.
 SMSFLY_RESULT_MESSAGES = {
     0: "Muvaffaqiyatli yuborildi",
     2: "Mijoz akkaunti bloklangan",
@@ -148,62 +148,24 @@ SMSFLY_RESULT_MESSAGES = {
 
 
 def normalize_phone(phone):
-    """+998901234567 -> 998901234567 (SMSFLY '+' ni qabul qilmaydi)."""
-    if not phone:
-        return phone
-    return phone.replace("+", "").replace(" ", "").strip()
+    """Yagona normalize — sms_service.normalize_phone ga proxy.
+
+    Eski view'lar shu nomni ishlatadi; backward compatibility uchun qoldirdik.
+    """
+    from .sms_service import normalize_phone as _norm
+    return _norm(phone)
 
 
-def send_sms(phone, message):
-    api_key = getattr(settings, "SMSFLY_API_KEY", "")
-    api_url = getattr(settings, "SMSFLY_SEND_URL", "https://api.smsfly.uz/send")
+def send_sms_code(phone, code, *, user_id=None, lang=None):
+    """Tasdiqlash kodini SMS orqali — foydalanuvchining tilida.
 
-    if not api_key:
-        # Dev rejim — key yo'q bo'lsa konsolga chiqaramiz, ilova qotib qolmaydi
-        logger.warning("SMSFLY_API_KEY topilmadi. SMS yuborilmadi.")
-        print(f"[DEV SMS] {phone}: {message}")
-        return False
-
-    payload = {
-        "key": api_key,
-        "phone": normalize_phone(phone),
-        "message": message,
-    }
-
-    try:
-        resp = requests.post(api_url, json=payload, timeout=10)
-        data = resp.json()
-    except requests.RequestException as e:
-        logger.error("SMSFLY ulanish xatosi: %s", e)
-        return False
-    except ValueError:
-        logger.error("SMSFLY javobi JSON emas: %s", resp.text[:300])
-        return False
-
-    result_code = data.get("resultCode")
-    if data.get("success") and result_code == 0:
-        logger.info("SMS yuborildi: %s", phone)
-        return True
-
-    logger.error(
-        "SMSFLY xato: phone=%s reason=%s resultCode=%s (%s)",
-        phone,
-        data.get("reason"),
-        result_code,
-        SMSFLY_RESULT_MESSAGES.get(result_code, "noma'lum"),
-    )
-    return False
-
-
-def send_sms_code(phone, code):
-    """Tasdiqlash kodini SMS orqali yuboradi.
-
-    Avval lokal `send_sms()` (oddiy, sync) chaqiriladi — `SMSFLY_API_KEY`
-    env orqali ulangan. Agar muvaffaqiyatsiz bo'lsa, `sms_service.sms_client`
-    (bulk/template uchun ham ishlatiluvchi singleton) fallback sifatida
-    yuboradi. Dev rejimda (key yo'q) ikkalasi ham log'ga yozib qaytadi."""
-    message = f"JoJo tasdiqlash kodi: {code}. Kodni hech kimga bermang."
-    return send_sms(phone, message)
+    Bitta yagona `sms_service.sms_client.send_otp` orqali — har bir urinish
+    `SmsSendLog` ga yoziladi, SESSION_NOT_BOUND da avto retry ishlaydi.
+    `lang` — Accept-Language header'dan kelishi mumkin. Bo'lmasa user_id
+    bo'yicha User.language o'qiladi.
+    """
+    from .sms_service import sms_client
+    return sms_client.send_otp(phone, code, user_id=user_id, lang=lang)
 
 
 def save_user_device(user, device_id, token, device_type="android"):
@@ -294,7 +256,23 @@ class SendOTPView(APIView):
                 return Response({"status": False, "detail": f"SMS kodni qayta yuborish uchun {time_left} sekund kuting.", "time_left": time_left}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         code = generate_numeric_code(6)
         OTPCode.objects.create(phone=phone, code=code, expires_at=timezone.now() + timedelta(minutes=5))
-        send_sms_code(phone, code)
+        # Mavjud parentni topib uning id sini sms log ga bog'laymiz (debugging uchun)
+        user = User.objects.filter(phone=phone).first()
+        # Til: registratsiya bosqichida hali profil tilini bilmaymiz, shuning
+        # uchun Accept-Language header (parent ilovasi har doim qo'shadi)
+        # yoki mavjud user.language fallback. Yangi telefon raqami uchun
+        # default sifatida uz_latn qoladi (klient tilini header orqali bersa
+        # darrov to'g'rilaymiz).
+        otp_lang = (
+            getattr(request, "language", None)
+            or (user.language if user else None)
+            or None
+        )
+        send_sms_code(
+            phone, code,
+            user_id=user.id if user else None,
+            lang=otp_lang,
+        )
         return Response({"status": True, "detail": "SMS kod yuborildi.", "code": code, "lifetime": "5 minutes"}, status=status.HTTP_200_OK)
 
 
@@ -1533,24 +1511,45 @@ class KidsSOSCreateView(APIView):
         sos = SOSAlert.objects.create(child=request.user, parent=parent, latitude=latitude, longitude=longitude, address=serializer.validated_data.get("address"), note=serializer.validated_data.get("note"))
 
         # Parent dasturiga darrov xabar — WS push + inbox yozuvi + FCM.
-        # `record_parent_notification` o'zi `broadcast_parent_notification` ni
-        # chaqiradi. Qo'shimcha ravishda alohida 'sos.alert' WS xabarini ham
-        # yuboramiz — parent dasturda darhol modal/full-screen ogohlantirish
-        # ko'rinishi uchun.
+        # SOS eng kritik moment, shuning uchun har 4 tilda ham matn
+        # bo'ladi va FCM push ham jo'natiladi (app yopiq bo'lsa ham yetadi).
         try:
-            from .services import record_parent_notification
+            from .services import record_parent_notification, translations_dict
             from .realtime import broadcast_sos_alert
+            from .firebase import send_fcm_notification
             child_name = (request.user.first_name or request.user.username or "Farzand").strip()
-            title = "SOS! Farzand yordam so'ramoqda"
-            body = f"{child_name} SOS tugmasini bosdi"
-            if serializer.validated_data.get("note"):
-                body = f"{body}\n{serializer.validated_data.get('note')}"
+            note = (serializer.validated_data.get("note") or "").strip()
+
+            title_t = translations_dict(
+                uz=f"SOS! {child_name} yordam so'ramoqda",
+                uz_cyrl=f"SOS! {child_name} ёрдам сўрамоқда",
+                ru=f"SOS! {child_name} просит помощи",
+                en=f"SOS! {child_name} is asking for help",
+            )
+
+            def body_with_note(line):
+                return f"{line}\n{note}" if note else line
+
+            body_t = translations_dict(
+                uz=body_with_note(f"{child_name} SOS tugmasini bosdi"),
+                uz_cyrl=body_with_note(f"{child_name} SOS тугмасини босди"),
+                ru=body_with_note(f"{child_name} нажал(а) SOS"),
+                en=body_with_note(f"{child_name} pressed SOS"),
+            )
+
+            parent_lang = (parent.language or "uz_latn").lower()
+            from .services import pick_for_lang
+            picked_title = pick_for_lang(title_t, parent_lang, title_t["uz"])
+            picked_body = pick_for_lang(body_t, parent_lang, body_t["uz"])
+
             record_parent_notification(
                 parent=parent,
                 child=request.user,
                 category=ParentNotification.CATEGORY_SOS if hasattr(ParentNotification, "CATEGORY_SOS") else "sos",
-                title=title,
-                body=body,
+                title=picked_title,
+                body=picked_body,
+                title_translations=title_t,
+                body_translations=body_t,
                 data={
                     "sos_id": sos.id,
                     "child_id": request.user.id,
@@ -1560,6 +1559,26 @@ class KidsSOSCreateView(APIView):
                     "address": serializer.validated_data.get("address"),
                 },
             )
+
+            # FCM push — app yopiq bo'lsa ham parent eshitadi.
+            try:
+                for dt in DeviceToken.objects.filter(user=parent, is_active=True):
+                    if dt.token:
+                        send_fcm_notification(
+                            token=dt.token,
+                            title=picked_title,
+                            body=picked_body,
+                            data={
+                                "category": "sos",
+                                "sos_id": str(sos.id),
+                                "child_id": str(request.user.id),
+                                "child_name": child_name,
+                            },
+                        )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("SOS FCM failed")
+
             broadcast_sos_alert(
                 parent_id=parent.id,
                 payload={

@@ -29,7 +29,7 @@ LIBRETRANSLATE_URL = os.environ.get(
 ).rstrip("/")
 LIBRETRANSLATE_API_KEY = os.environ.get("LIBRETRANSLATE_API_KEY", "")
 
-SUPPORTED = {"uz", "ru", "en"}
+SUPPORTED = {"uz", "uz_cyrl", "ru", "en"}
 # Google bepul endpoint'i bitta requestda taxminan 5000 belgini ko'tara oladi.
 # 4500 ga cheklab xavfsiz tarafda turamiz.
 _CHUNK_LIMIT = 4500
@@ -39,7 +39,13 @@ _USER_AGENT = "Mozilla/5.0 (Jojo Admin Translate Bot)"
 def _normalize(code):
     if not code:
         return None
-    c = str(code).strip().lower()
+    c = str(code).strip().lower().replace("-", "_")
+    # uz_cyrl / uz-cyrl / uz_cyr / cyrillic — Kirill uzbek
+    if c in ("uz_cyrl", "uz_cyr", "uz_cy", "uzc", "uzcyrl"):
+        return "uz_cyrl"
+    if c.startswith("uz_") and "cyr" in c:
+        return "uz_cyrl"
+    # uz_latn / uz / uzbek — Lotin uzbek (default)
     if c.startswith("uz"):
         return "uz"
     if c.startswith("ru"):
@@ -47,6 +53,98 @@ def _normalize(code):
     if c.startswith("en"):
         return "en"
     return None
+
+
+# ----------------------------------------------------------------------------
+# Lotin ↔ Kirill transliteratsiyasi (O‘zbek tili)
+# ----------------------------------------------------------------------------
+# Tartib muhim: ko'p belgili kombinatsiyalarni (sh, ch, yo, ya...) bitta
+# belgilarning oldiga qo'yamiz, aks holda "sh" → "сҳ" bo'lib qoladi.
+
+_LATIN_TO_CYRL_PAIRS = [
+    # Apostrof variantlari — qattiq belgi
+    ("o‘", "ў"), ("O‘", "Ў"),
+    ("o'", "ў"), ("O'", "Ў"),
+    ("o`", "ў"), ("O`", "Ў"),
+    ("g‘", "ғ"), ("G‘", "Ғ"),
+    ("g'", "ғ"), ("G'", "Ғ"),
+    ("g`", "ғ"), ("G`", "Ғ"),
+    # Ko'p harfli
+    ("sh", "ш"), ("Sh", "Ш"), ("SH", "Ш"),
+    ("ch", "ч"), ("Ch", "Ч"), ("CH", "Ч"),
+    ("yo", "ё"), ("Yo", "Ё"), ("YO", "Ё"),
+    ("yu", "ю"), ("Yu", "Ю"), ("YU", "Ю"),
+    ("ya", "я"), ("Ya", "Я"), ("YA", "Я"),
+    ("ye", "е"), ("Ye", "Е"), ("YE", "Е"),
+    ("ng", "нг"), ("Ng", "Нг"), ("NG", "НГ"),
+    ("ts", "ц"), ("Ts", "Ц"), ("TS", "Ц"),
+]
+_LATIN_TO_CYRL_SINGLE = {
+    "a": "а", "b": "б", "d": "д", "e": "е", "f": "ф", "g": "г", "h": "ҳ",
+    "i": "и", "j": "ж", "k": "к", "l": "л", "m": "м", "n": "н", "o": "о",
+    "p": "п", "q": "қ", "r": "р", "s": "с", "t": "т", "u": "у", "v": "в",
+    "x": "х", "y": "й", "z": "з", "c": "к",
+}
+
+
+def latin_to_cyrillic(text):
+    """O‘zbek tilidagi lotin matnni Kirill yozuviga aylantiradi.
+
+    Idempotent emas: Kirill matnni qayta o'tkazsa, ASCII bo'lmagani sabab
+    ko'p belgilarga tegmaydi.
+    """
+    if not text:
+        return ""
+    s = str(text)
+    for lat, cyr in _LATIN_TO_CYRL_PAIRS:
+        s = s.replace(lat, cyr)
+    out = []
+    for ch in s:
+        lower = ch.lower()
+        mapped = _LATIN_TO_CYRL_SINGLE.get(lower)
+        if mapped is None:
+            out.append(ch)
+            continue
+        out.append(mapped.upper() if ch.isupper() else mapped)
+    return "".join(out)
+
+
+_CYRL_TO_LATIN_PAIRS = [
+    ("ў", "o‘"), ("Ў", "O‘"),
+    ("ғ", "g‘"), ("Ғ", "G‘"),
+    ("ш", "sh"), ("Ш", "Sh"),
+    ("ч", "ch"), ("Ч", "Ch"),
+    ("ё", "yo"), ("Ё", "Yo"),
+    ("ю", "yu"), ("Ю", "Yu"),
+    ("я", "ya"), ("Я", "Ya"),
+    ("ц", "ts"), ("Ц", "Ts"),
+]
+_CYRL_TO_LATIN_SINGLE = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ж": "j",
+    "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n",
+    "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f",
+    "х": "x", "ҳ": "h", "қ": "q", "ъ": "ʼ", "ь": "",
+}
+
+
+def cyrillic_to_latin(text):
+    """Kirill o‘zbek matnini lotin yozuviga aylantiradi."""
+    if not text:
+        return ""
+    s = str(text)
+    for cyr, lat in _CYRL_TO_LATIN_PAIRS:
+        s = s.replace(cyr, lat)
+    out = []
+    for ch in s:
+        lower = ch.lower()
+        mapped = _CYRL_TO_LATIN_SINGLE.get(lower)
+        if mapped is None:
+            out.append(ch)
+            continue
+        # capitalize map qiymatini (multi-char) muvofiqlashtirish
+        out.append(mapped.title() if ch.isupper() and len(mapped) > 1 else
+                   (mapped.upper() if ch.isupper() else mapped))
+    return "".join(out)
 
 
 def _hard_split(text, limit):
@@ -192,6 +290,8 @@ def translate(text, source, target):
     """Bir matnni tarjima qiladi (uzunligidan qat'iy nazar).
 
     Qaytaradi: tarjima matnini (string) yoki bo'sh bo'lsa asl matnni.
+    `uz_cyrl` mahsus til — lotin↔kirill o'tkazish mexanik tarzda
+    transliteratsiya qilinadi (tarmoq so'rovi yo'q).
     """
     if not text or not str(text).strip():
         return ""
@@ -203,6 +303,21 @@ def translate(text, source, target):
         return text
 
     text = str(text)
+
+    # Lotin ↔ Kirill — mexanik transliteratsiya
+    if src == "uz" and tgt == "uz_cyrl":
+        return latin_to_cyrillic(text)
+    if src == "uz_cyrl" and tgt == "uz":
+        return cyrillic_to_latin(text)
+    # Kirilldan ru/en ga: avval Lotin'ga aylantirib, keyin tarjima
+    if src == "uz_cyrl" and tgt in ("ru", "en"):
+        latin = cyrillic_to_latin(text)
+        return translate(latin, "uz", tgt)
+    # ru/en'dan Kirill'ga: avval uz lotin'ga tarjima, keyin transliteratsiya
+    if src in ("ru", "en") and tgt == "uz_cyrl":
+        latin = translate(text, src, "uz")
+        return latin_to_cyrillic(latin)
+
     if len(text) <= _CHUNK_LIMIT:
         return _translate_chunk(text, src, tgt)
 
@@ -221,13 +336,13 @@ def translate(text, source, target):
 
 
 def translate_to_all(text, source):
-    """Bitta tildagi matnni boshqa ikki tilga tarjima qiladi.
+    """Bitta tildagi matnni boshqa qolgan tillarga tarjima qiladi.
 
-    Qaytaradi: {"uz": "...", "ru": "...", "en": "..."}
+    Qaytaradi: {"uz": "...", "uz_cyrl": "...", "ru": "...", "en": "..."}
     Source tilga tegmaydi (asl bo'lib qaytadi).
     """
     src = _normalize(source) or "uz"
-    out = {"uz": "", "ru": "", "en": ""}
+    out = {"uz": "", "uz_cyrl": "", "ru": "", "en": ""}
     out[src] = text or ""
     for code in SUPPORTED:
         if code == src:

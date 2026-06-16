@@ -636,6 +636,7 @@ class GameCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="games/categories/",
         null=True,
@@ -663,6 +664,7 @@ class GameItem(models.Model):
     title = models.CharField(max_length=150)
     title_ru = models.CharField(max_length=150, blank=True, default="")
     title_en = models.CharField(max_length=150, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
 
     description = models.TextField(
         null=True,
@@ -670,6 +672,7 @@ class GameItem(models.Model):
     )
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     thumbnail = models.ImageField(
         upload_to="games/thumbnails/",
@@ -1741,6 +1744,30 @@ class CallCenterComment(models.Model):
     )
     direction = models.CharField(max_length=4, choices=DIRECTION_CHOICES, default=DIRECTION_OUT)
     telegram_message_id = models.CharField(max_length=64, blank=True, default="")
+
+    # Telegram rasm va hujjatlar uchun. Adminkadan operator ham fayl
+    # yuklab bera oladi, botdan kelganda ham shu yerga saqlanadi.
+    ATTACHMENT_NONE = ""
+    ATTACHMENT_PHOTO = "photo"
+    ATTACHMENT_DOCUMENT = "document"
+    ATTACHMENT_CHOICES = (
+        (ATTACHMENT_NONE, "Yo'q"),
+        (ATTACHMENT_PHOTO, "Rasm"),
+        (ATTACHMENT_DOCUMENT, "Hujjat"),
+    )
+    attachment = models.FileField(
+        upload_to="support/attachments/%Y/%m/",
+        blank=True,
+        null=True,
+    )
+    attachment_kind = models.CharField(
+        max_length=12,
+        choices=ATTACHMENT_CHOICES,
+        blank=True,
+        default=ATTACHMENT_NONE,
+    )
+    attachment_name = models.CharField(max_length=255, blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1754,6 +1781,7 @@ class BlogCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="blog/categories/",
         null=True,
@@ -1792,6 +1820,7 @@ class BlogPost(models.Model):
     title = models.CharField(max_length=255)
     title_ru = models.CharField(max_length=255, blank=True, default="")
     title_en = models.CharField(max_length=255, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
 
     short_description = models.CharField(
         max_length=500,
@@ -1800,6 +1829,7 @@ class BlogPost(models.Model):
     )
     short_description_ru = models.CharField(max_length=500, blank=True, default="")
     short_description_en = models.CharField(max_length=500, blank=True, default="")
+    short_description_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     content = models.TextField(
         null=True,
@@ -1807,6 +1837,7 @@ class BlogPost(models.Model):
     )
     content_ru = models.TextField(blank=True, default="")
     content_en = models.TextField(blank=True, default="")
+    content_uz_cyrl = models.TextField(blank=True, default="")
 
     post_type = models.CharField(
         max_length=20,
@@ -1940,6 +1971,7 @@ class ParentStoreCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     slug = models.SlugField(max_length=160, unique=True)
     product_type = models.CharField(
         max_length=20,
@@ -1975,6 +2007,7 @@ class ProductTag(models.Model):
     name = models.CharField(max_length=80, unique=True)
     name_ru = models.CharField(max_length=80, blank=True, default="")
     name_en = models.CharField(max_length=80, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=80, blank=True, default="")
     slug = models.SlugField(max_length=90, unique=True)
     is_active = models.BooleanField(default=True)
     usage_count = models.PositiveIntegerField(default=0)
@@ -2022,15 +2055,19 @@ class ParentStoreProduct(models.Model):
     name = models.CharField(max_length=255)
     name_ru = models.CharField(max_length=255, blank=True, default="")
     name_en = models.CharField(max_length=255, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
 
     short_description_ru = models.CharField(max_length=500, blank=True, default="")
     short_description_en = models.CharField(max_length=500, blank=True, default="")
+    short_description_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     category_label_ru = models.CharField(max_length=120, blank=True, default="")
     category_label_en = models.CharField(max_length=120, blank=True, default="")
+    category_label_uz_cyrl = models.CharField(max_length=120, blank=True, default="")
 
     tags = models.ManyToManyField(
         ProductTag,
@@ -2189,12 +2226,15 @@ class ParentStorePromoBanner(models.Model):
     kicker = models.CharField(max_length=80)
     kicker_ru = models.CharField(max_length=80, blank=True, default="")
     kicker_en = models.CharField(max_length=80, blank=True, default="")
+    kicker_uz_cyrl = models.CharField(max_length=80, blank=True, default="")
     title = models.CharField(max_length=160)
     title_ru = models.CharField(max_length=160, blank=True, default="")
     title_en = models.CharField(max_length=160, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=160, blank=True, default="")
     subtitle = models.CharField(max_length=255, blank=True, default="")
     subtitle_ru = models.CharField(max_length=255, blank=True, default="")
     subtitle_en = models.CharField(max_length=255, blank=True, default="")
+    subtitle_uz_cyrl = models.CharField(max_length=255, blank=True, default="")
     theme = models.CharField(
         max_length=10,
         choices=THEME_CHOICES,
@@ -2563,9 +2603,11 @@ class ParentNotification(models.Model):
     title = models.CharField(max_length=150)
     title_ru = models.CharField(max_length=150, blank=True, default="")
     title_en = models.CharField(max_length=150, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     body = models.CharField(max_length=500, blank=True, default="")
     body_ru = models.CharField(max_length=500, blank=True, default="")
     body_en = models.CharField(max_length=500, blank=True, default="")
+    body_uz_cyrl = models.CharField(max_length=500, blank=True, default="")
 
     data = models.JSONField(
         blank=True,
@@ -2674,9 +2716,11 @@ class NotificationRule(models.Model):
     title = models.CharField(max_length=200)
     title_ru = models.CharField(max_length=200, blank=True, default="")
     title_en = models.CharField(max_length=200, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=200, blank=True, default="")
     body = models.TextField()
     body_ru = models.TextField(blank=True, default="")
     body_en = models.TextField(blank=True, default="")
+    body_uz_cyrl = models.TextField(blank=True, default="")
     category = models.CharField(max_length=40, default="system")
 
     send_push = models.BooleanField(default=True)
@@ -2833,6 +2877,7 @@ class KidsVideoCategory(models.Model):
     name = models.CharField(max_length=150)
     name_ru = models.CharField(max_length=150, blank=True, default="")
     name_en = models.CharField(max_length=150, blank=True, default="")
+    name_uz_cyrl = models.CharField(max_length=150, blank=True, default="")
     icon = models.ImageField(
         upload_to="kids_videos/categories/",
         null=True,
@@ -2861,10 +2906,12 @@ class KidsVideo(models.Model):
     title = models.CharField(max_length=200)
     title_ru = models.CharField(max_length=200, blank=True, default="")
     title_en = models.CharField(max_length=200, blank=True, default="")
+    title_uz_cyrl = models.CharField(max_length=200, blank=True, default="")
 
     description = models.TextField(blank=True, default="")
     description_ru = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    description_uz_cyrl = models.TextField(blank=True, default="")
 
     youtube_url = models.URLField(
         help_text="Toʻliq YouTube havola, masalan https://www.youtube.com/watch?v=XXXX",
@@ -2934,3 +2981,203 @@ class KidsVideo(models.Model):
         if vid:
             return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
         return ""
+
+
+class SmsSendLog(models.Model):
+    """Har bir SMS yuborish urinishi yoziladi — operator retrospektiv ko'rishi
+    uchun. Asosiy savol: "Filan raqamga SMS yetib bordimi?" — DB dan javob.
+
+    `result_code` SMSFLY javobidan — 0 muvaffaqiyatli, qolganlari xato.
+    Mahalliy xatolar uchun `result_code=-1`, `reason` ichida tafsilot.
+    """
+
+    KIND_OTP = "otp"
+    KIND_BROADCAST = "broadcast"
+    KIND_BULK = "bulk"
+    KIND_RULE = "rule"
+    KIND_TEST = "test"
+    KIND_OTHER = "other"
+    KIND_CHOICES = (
+        (KIND_OTP, "OTP"),
+        (KIND_BROADCAST, "Broadcast"),
+        (KIND_BULK, "Bulk"),
+        (KIND_RULE, "Notif rule"),
+        (KIND_TEST, "Test"),
+        (KIND_OTHER, "Other"),
+    )
+
+    phone = models.CharField(max_length=20, db_index=True)
+    # `phone_normalized` — `998901234567` ko'rinishida (+, bo'shliqlar olib
+    # tashlangan). Search/aggr uchun.
+    phone_normalized = models.CharField(max_length=20, db_index=True, default="")
+
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_OTHER, db_index=True)
+    message = models.TextField(blank=True, default="")
+
+    # SMSFLY natijasi
+    success = models.BooleanField(default=False, db_index=True)
+    result_code = models.IntegerField(default=-1)
+    reason = models.CharField(max_length=120, blank=True, default="")
+
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    related_user_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+
+    # Bulk SMS campaign — agar bu yozuv biror kampaniyaning qismi bo'lsa
+    campaign = models.ForeignKey(
+        "BulkSmsCampaign",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="logs",
+        db_index=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "SMS send log"
+        verbose_name_plural = "SMS send logs"
+        indexes = [
+            models.Index(fields=["kind", "success", "-created_at"]),
+            models.Index(fields=["phone_normalized", "-created_at"]),
+        ]
+
+    def __str__(self):
+        status = "OK" if self.success else f"FAIL({self.reason})"
+        return f"{self.phone} {self.kind} {status}"
+
+
+class SmsContactGroup(models.Model):
+    """Telefon raqamlar guruhi — bulk SMS yuborishda qayta foydalanish uchun.
+
+    Misol: "STEM dasturlar mijozlari", "Premium parentlar 2026 Q1" va h.k.
+    Operator har safar yangi guruh yaratmasdan bir marotaba saqlangan
+    ro'yxatdan tanlasa ham bo'ladi.
+    """
+
+    name = models.CharField(max_length=120)
+    description = models.CharField(max_length=255, blank=True, default="")
+
+    # Egasi — agar shaxsiy guruh bo'lsa. Bo'sh — hammaga ko'rinadi.
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sms_contact_groups",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "SMS contact group"
+        verbose_name_plural = "SMS contact groups"
+
+    def __str__(self):
+        return self.name
+
+
+class SmsContact(models.Model):
+    """Guruh ichidagi bitta kontakt — telefon + ixtiyoriy ism/eslatma."""
+
+    group = models.ForeignKey(
+        SmsContactGroup,
+        on_delete=models.CASCADE,
+        related_name="contacts",
+    )
+    phone = models.CharField(max_length=20)
+    phone_normalized = models.CharField(max_length=20, db_index=True, default="")
+    name = models.CharField(max_length=120, blank=True, default="")
+    notes = models.CharField(max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        # Bir guruhda bir xil normalized raqam ikki marta bo'lmasin
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "phone_normalized"],
+                name="uniq_group_phone",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.phone} ({self.group.name})"
+
+
+class BulkSmsCampaign(models.Model):
+    """Bulk SMS kampaniyasi — admin tomonidan tanlangan raqamlarga matn yuborish.
+
+    Har bir kampaniya:
+      - 1 ta matn (4 tilda variantlar bo'lishi mumkin)
+      - N ta qabul qiluvchi (manual / guruh / CSV import)
+      - Status: queued (yangi yaratildi, hali start qilinmadi),
+                sending (jarayonda), done (yakunlandi)
+      - Sent/failed sonlari + per-recipient log (SmsSendLog FK orqali)
+    """
+
+    STATUS_QUEUED = "queued"
+    STATUS_SENDING = "sending"
+    STATUS_DONE = "done"
+    STATUS_CHOICES = (
+        (STATUS_QUEUED, "Navbatda"),
+        (STATUS_SENDING, "Yuborilmoqda"),
+        (STATUS_DONE, "Yakunlangan"),
+    )
+
+    SOURCE_MANUAL = "manual"
+    SOURCE_GROUP = "group"
+    SOURCE_CSV = "csv"
+    SOURCE_MIXED = "mixed"
+    SOURCE_CHOICES = (
+        (SOURCE_MANUAL, "Qo'lda kiritildi"),
+        (SOURCE_GROUP, "Guruhdan"),
+        (SOURCE_CSV, "CSV/XLSX dan"),
+        (SOURCE_MIXED, "Aralash"),
+    )
+
+    title = models.CharField(max_length=160, blank=True, default="")
+    message = models.TextField()
+    message_ru = models.TextField(blank=True, default="")
+    message_en = models.TextField(blank=True, default="")
+    message_uz_cyrl = models.TextField(blank=True, default="")
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_QUEUED, db_index=True)
+    source = models.CharField(max_length=16, choices=SOURCE_CHOICES, default=SOURCE_MANUAL)
+
+    # Tanlangan guruh (agar SOURCE_GROUP yoki SOURCE_MIXED bo'lsa)
+    group = models.ForeignKey(
+        SmsContactGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="campaigns",
+    )
+
+    total = models.PositiveIntegerField(default=0)
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bulk_sms_campaigns",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Bulk SMS campaign"
+        verbose_name_plural = "Bulk SMS campaigns"
+
+    def __str__(self):
+        return f"#{self.id} {self.title or self.message[:30]}"

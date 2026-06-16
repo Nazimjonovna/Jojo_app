@@ -10,17 +10,20 @@ Frontendlar (parent/kids) doim Accept-Language yuborishi tavsiya etiladi —
 shu sababli middleware faqat normalize qiladi va serializer'larga yetkazadi.
 """
 
-SUPPORTED = {"uz", "ru", "en"}
+SUPPORTED = {"uz", "uz_cyrl", "ru", "en"}
 DEFAULT = "uz"
 
 
 def normalize_lang(value):
     if not value:
         return None
-    v = str(value).strip().lower()
+    v = str(value).strip().lower().replace("-", "_")
     # Accept-Language quality value'larini ignor qilamiz: "ru-RU,en;q=0.9"
     v = v.split(",")[0].split(";")[0].strip()
-    # uz_Latn, uz-Latn, uz-cyrl -> uz
+    # uz_cyrl / uz_cyr / uzbek-cyrillic — Kirill o'zbek
+    if v in ("uz_cyrl", "uz_cyr", "uz_cy") or (v.startswith("uz_") and "cyr" in v):
+        return "uz_cyrl"
+    # uz_latn / uz / uzbek-latin — Lotin o'zbek (default)
     if v.startswith("uz"):
         return "uz"
     if v.startswith("ru"):
@@ -65,13 +68,16 @@ class LanguageResolutionMiddleware:
 
 
 def localized(instance, base_field, lang=None):
-    """Modelning `_uz/_ru/_en` variantlaridan tanlangan tilga mos qiymatni
-    qaytaradi. Maydon yo'q yoki bo'sh bo'lsa, asl (base) maydonga qaytadi.
+    """Modelning `_uz/_uz_cyrl/_ru/_en` variantlaridan tanlangan tilga mos
+    qiymatni qaytaradi. Maydon yo'q yoki bo'sh bo'lsa, fallback:
+    uz_cyrl → uz (transliteratsiya), uz_cyrl yo'q bo'lsa uz.
 
     Misol:
-        localized(plan, 'name', 'ru')  ->  plan.name_ru yoki plan.name
+        localized(plan, 'name', 'ru')       ->  plan.name_ru yoki plan.name
+        localized(plan, 'name', 'uz_cyrl')  ->  plan.name_uz_cyrl yoki
+                                                transliterated(plan.name)
     """
-    lang = (lang or DEFAULT).lower()
+    lang = (lang or DEFAULT)
     if lang not in SUPPORTED:
         lang = DEFAULT
     # uz uchun asosiy maydon
@@ -81,6 +87,16 @@ def localized(instance, base_field, lang=None):
     value = getattr(instance, suffix_field, None)
     if value:
         return value
+    # uz_cyrl bo'sh — uz lotin'dan transliteratsiya qilib qaytaramiz
+    if lang == "uz_cyrl":
+        base_value = getattr(instance, base_field, "") or ""
+        if base_value:
+            try:
+                from .translation import latin_to_cyrillic
+                return latin_to_cyrillic(base_value)
+            except Exception:
+                return base_value
+        return ""
     # Tarjima yo'q bo'lsa uz ga qaytamiz
     return getattr(instance, base_field, "") or ""
 

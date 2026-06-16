@@ -159,9 +159,20 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
 
 
 class UpdateLanguageSerializer(serializers.Serializer):
-    language = serializers.ChoiceField(
-        choices=["uz_latn", "uz_cyrl", "ru", "en"]
-    )
+    # Eski klientlar `uz_latn` o'rniga `uz` yuborgan — bularni rad
+    # etmasdan `uz_latn` ga normalize qilamiz. Aks holda Cyrillic tilni
+    # tanlagan foydalanuvchi server bilan sinxron bo'lmaydi.
+    language = serializers.CharField(max_length=20)
+
+    def validate_language(self, value):
+        v = (value or "").strip().lower().replace("-", "_")
+        if v in {"ru", "en", "uz_cyrl"}:
+            return v
+        if v in {"uz", "uz_latn"} or v.startswith("uz"):
+            return "uz_latn" if v != "uz_cyrl" else "uz_cyrl"
+        raise serializers.ValidationError(
+            "language uz_latn / uz_cyrl / ru / en bo'lishi kerak.",
+        )
 
 
 class PairingCodeSerializer(serializers.ModelSerializer):

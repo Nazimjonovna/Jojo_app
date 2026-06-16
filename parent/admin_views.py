@@ -14,7 +14,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -59,11 +59,150 @@ User = get_user_model()
 
 
 class IsAdminUser(BasePermission):
-    """Faqat `is_staff=True` foydalanuvchilarga ruxsat."""
+    """`is_staff=True` bo'lgan foydalanuvchilarga ruxsat — va agar view'da
+    `required_permission` o'rnatilgan bo'lsa, operatorning `admin_role`
+    permission ro'yxatida shu kalit bor-yo'qligini tekshiradi.
+
+    Superuser har doim o'tadi (admin o'zini bloklab qo'ymasligi uchun).
+    """
 
     def has_permission(self, request, view):
         user = request.user
-        return bool(user and user.is_authenticated and user.is_staff)
+        if not (user and user.is_authenticated and user.is_staff):
+            return False
+        if user.is_superuser:
+            return True
+        required = getattr(view, "required_permission", None)
+        if not required:
+            # View'da required_permission bo'lmasa, class nomi bo'yicha
+            # global jadvalga qaraymiz (VIEW_PERMISSION_MAP).
+            required = VIEW_PERMISSION_MAP.get(view.__class__.__name__)
+        if not required:
+            return True
+        perms = get_user_permissions(user)
+        if isinstance(required, (list, tuple, set)):
+            return any(r in perms for r in required)
+        return required in perms
+
+
+# Sidebar va RolesPage'dagi nav kalitlari bilan bir xil bo'lishi kerak —
+# frontend va backend "haqiqat manbai" sifatida shu ro'yxatga tayanadi.
+ADMIN_PERMISSION_KEYS = [
+    "dashboard",
+    "users",
+    "children",
+    "premium",
+    "payments",
+    "requests",
+    "leads",
+    "blocked",
+    "advice",
+    "kids_content",
+    "products",
+    "categories",
+    "banners",
+    "orders",
+    "notifications",
+    "notification_rules",
+    "sms",
+    "ads",
+    "settings",
+    "operators",
+    "roles",
+]
+
+
+# View class nomidan kerakli permission kalitiga jadval. Bu yerda yo'q
+# bo'lgan view'lar (login, me, upload, webhook) — barcha staff'ga ochiq.
+# IsAdminUser har bir request'da shu jadvalga qaraydi va `required_permission`
+# o'rnatilganidek ishlatadi.
+VIEW_PERMISSION_MAP = {
+    # Banners / store
+    "AdminBannerListCreate": "banners",
+    "AdminBannerDetail": "banners",
+    "AdminStoreCategoryListCreate": "categories",
+    "AdminStoreCategoryDetail": "categories",
+    "AdminStoreProductListCreate": "products",
+    "AdminStoreProductDetail": "products",
+    "AdminProductTagListCreate": "products",
+    "AdminProductTagDetail": "products",
+    "AdminOrderListView": "orders",
+    "AdminOrderDetailView": "orders",
+    # Blog / advice
+    "AdminBlogCategoryListCreate": "advice",
+    "AdminBlogCategoryDetail": "advice",
+    "AdminBlogPostListCreate": "advice",
+    "AdminBlogPostDetail": "advice",
+    # Users
+    "AdminUserListView": "users",
+    "AdminUserToggleActiveView": "users",
+    "AdminChildrenListView": "children",
+    # Premium / payments
+    "AdminSubscriptionPlanListCreate": "premium",
+    "AdminSubscriptionPlanDetail": "premium",
+    "AdminSubscriptionPaymentListView": "payments",
+    # Notifications / SMS / ads
+    "AdminNotificationListView": "notifications",
+    "AdminNotificationDetailView": "notifications",
+    "AdminBroadcastNotificationView": "notifications",
+    "AdminBroadcastHistoryView": "notifications",
+    "AdminNotificationRuleListCreate": "notification_rules",
+    "AdminNotificationRuleDetail": "notification_rules",
+    "AdminNotificationRuleRunNow": "notification_rules",
+    "AdminNotificationRuleLogs": "notification_rules",
+    "AdminSmsLogView": "sms",
+    "AdminSmsTestView": "sms",
+    # Support / leads / requests
+    "AdminTicketListView": "requests",
+    "AdminTicketUpdateStatusView": "requests",
+    "AdminQuickReplyListCreateView": "requests",
+    "AdminQuickReplyDetailView": "requests",
+    "AdminSOSAlertListView": "leads",
+    "AdminLeadUnreadCountView": "leads",
+    "AdminLeadBoardView": "leads",
+    "AdminLeadListCreate": "leads",
+    "AdminLeadDetailView": "leads",
+    "AdminLeadFullView": "leads",
+    "AdminLeadCommentsView": "leads",
+    # Operators / roles
+    "AdminOperatorListView": "operators",
+    "AdminOperatorCreateView": "operators",
+    "AdminOperatorDetailView": "operators",
+    "AdminRoleListCreateView": "roles",
+    "AdminRoleDetailView": "roles",
+    # Kids content
+    "AdminGameCategoryListCreate": "kids_content",
+    "AdminGameCategoryDetail": "kids_content",
+    "AdminGameListCreate": "kids_content",
+    "AdminGameDetail": "kids_content",
+    "AdminKidsVideoCategoryListCreate": "kids_content",
+    "AdminKidsVideoCategoryDetail": "kids_content",
+    "AdminKidsVideoListCreate": "kids_content",
+    "AdminKidsVideoDetail": "kids_content",
+    # Dashboard
+    "AdminDashboardStatsView": "dashboard",
+}
+
+
+def get_user_permissions(user):
+    """Foydalanuvchining samarali permission ro'yxatini qaytaradi.
+
+    - Superuser yoki `is_superuser=True` — barcha kalitlarni oladi (admin
+      hech qachon o'zini bloklab qo'ymasligi uchun).
+    - Aks holda `user.admin_role.permissions` ro'yxati (yo'q bo'lsa bo'sh).
+    """
+    if not user or not user.is_authenticated:
+        return []
+    if user.is_superuser:
+        return list(ADMIN_PERMISSION_KEYS)
+    role = getattr(user, "admin_role", None)
+    if role and isinstance(role.permissions, list):
+        return [str(p) for p in role.permissions if p]
+    return []
+
+
+# Backwards-compat alias — IsAdminUser endi permission'ni tekshiradi.
+HasAdminPermission = IsAdminUser
 
 
 # ============================================================================
@@ -106,13 +245,7 @@ class AdminLoginView(APIView):
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
-            "user": {
-                "id": user.id,
-                "phone": getattr(user, "phone", None),
-                "username": user.username,
-                "full_name": user.first_name or "",
-                "is_superuser": user.is_superuser,
-            },
+            "user": _serialize_admin_user(user),
         })
 
 
@@ -120,14 +253,34 @@ class AdminMeView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        user = request.user
-        return Response({
-            "id": user.id,
-            "phone": getattr(user, "phone", None),
-            "username": user.username,
-            "full_name": user.first_name or "",
-            "is_superuser": user.is_superuser,
-        })
+        return Response(_serialize_admin_user(request.user))
+
+
+def _serialize_admin_user(user):
+    """Login va `/me/` endpointlari uchun yagona shakl.
+
+    `admin_role` o'rnida operator rolining nomi va aniq permission kalitlari
+    qaytariladi — frontend shularga qarab sidebar va sahifalarni filtrlaydi.
+    Superuser uchun `permissions` ga barcha kalitlar joylanadi.
+    """
+    role = getattr(user, "admin_role", None)
+    return {
+        "id": user.id,
+        "phone": getattr(user, "phone", None),
+        "username": user.username,
+        "full_name": user.first_name or "",
+        "is_superuser": user.is_superuser,
+        "admin_role": (
+            {
+                "id": role.id,
+                "name": role.name,
+                "is_system": role.is_system,
+            }
+            if role
+            else None
+        ),
+        "permissions": get_user_permissions(user),
+    }
 
 
 # ============================================================================
@@ -336,7 +489,7 @@ class AdminSOSAlertListView(generics.ListAPIView):
 
 
 class AdminBroadcastNotificationView(APIView):
-    """Parentlarga bildirishnoma yuborish (hammaga yoki tanlangan ro'yxatga).
+    """Parentlarga bildirishnoma yuborish (audience bo'yicha filtrlash bilan).
 
     POST body:
       title, body            — uz (asosiy) matn — majburiy
@@ -344,16 +497,31 @@ class AdminBroadcastNotificationView(APIView):
       title_en, body_en      — en tarjima (ixtiyoriy)
       category               — ParentNotification.category (default: "system")
       send_sms               — true bo'lsa SMSFLY orqali ham yuboriladi
-      parent_ids             — int ro'yxati; bo'sh/yo'q bo'lsa hamma aktiv parent
+      audience               — kimga jo'natilsin (default: "active"):
+                                 "all"         — hamma parentlar (faol va nofaol)
+                                 "active"      — faqat is_active=True
+                                 "inactive"    — faqat is_active=False
+                                 "premium"     — faol premium (muddati o'tmagan)
+                                 "non_premium" — premium bo'lmagan faol parentlar
+                                 "selected"    — `parent_ids` ro'yxatidagilar
+      parent_ids             — int ro'yxati (audience="selected" uchun majburiy)
     """
 
     permission_classes = [IsAuthenticated, IsAdminUser]
 
+    _AUDIENCE_CHOICES = {
+        "all", "active", "inactive", "premium", "non_premium", "selected",
+    }
+
     def post(self, request):
+        from django.db.models import Q
+
         title = (request.data.get("title") or "").strip()
         body = (request.data.get("body") or "").strip()
+        title_uz_cyrl = (request.data.get("title_uz_cyrl") or "").strip()
         title_ru = (request.data.get("title_ru") or "").strip()
         title_en = (request.data.get("title_en") or "").strip()
+        body_uz_cyrl = (request.data.get("body_uz_cyrl") or "").strip()
         body_ru = (request.data.get("body_ru") or "").strip()
         body_en = (request.data.get("body_en") or "").strip()
         category = request.data.get("category", "system")
@@ -366,37 +534,76 @@ class AdminBroadcastNotificationView(APIView):
         except (TypeError, ValueError):
             return Response({"detail": "parent_ids noto'g'ri formatda"}, status=400)
 
+        # Audience tanlash. Backward-compat:
+        #   - parent_ids berilgan bo'lsa va audience yo'q bo'lsa => "selected".
+        #   - aks holda default "active" (eski "all" semantikasi shu edi).
+        audience = request.data.get("audience")
+        if not audience:
+            audience = "selected" if parent_ids else "active"
+        audience = str(audience).strip().lower()
+        if audience not in self._AUDIENCE_CHOICES:
+            return Response(
+                {"detail": f"audience noto'g'ri: {audience}"}, status=400,
+            )
+
         if not title or not body:
             return Response({"detail": "title va body majburiy"}, status=400)
 
         from .services import record_parent_notification, pick_for_lang
 
         title_translations = {"uz": title}
+        if title_uz_cyrl:
+            title_translations["uz_cyrl"] = title_uz_cyrl
         if title_ru:
             title_translations["ru"] = title_ru
         if title_en:
             title_translations["en"] = title_en
         body_translations = {"uz": body}
+        if body_uz_cyrl:
+            body_translations["uz_cyrl"] = body_uz_cyrl
         if body_ru:
             body_translations["ru"] = body_ru
         if body_en:
             body_translations["en"] = body_en
 
-        parents_qs = User.objects.filter(role=User.ROLE_PARENT, is_active=True)
-        targeted = bool(parent_ids)
-        if targeted:
-            parents_qs = parents_qs.filter(id__in=parent_ids)
+        parents_qs = User.objects.filter(role=User.ROLE_PARENT)
 
+        # has_active_premium = is_premium=True AND (premium_expires_at IS NULL OR > now)
+        now = timezone.now()
+        active_premium_q = Q(is_premium=True) & (
+            Q(premium_expires_at__isnull=True) | Q(premium_expires_at__gt=now)
+        )
+
+        if audience == "selected":
+            if not parent_ids:
+                return Response(
+                    {"detail": "selected uchun parent_ids majburiy"}, status=400,
+                )
+            # Tanlangan ro'yxatda hatto bloklangan/nofaollar ham bo'lishi mumkin
+            # — admin aniq tanlagan, hurmat qilamiz.
+            parents_qs = parents_qs.filter(id__in=parent_ids)
+        elif audience == "active":
+            parents_qs = parents_qs.filter(is_active=True)
+        elif audience == "inactive":
+            parents_qs = parents_qs.filter(is_active=False)
+        elif audience == "premium":
+            parents_qs = parents_qs.filter(is_active=True).filter(active_premium_q)
+        elif audience == "non_premium":
+            parents_qs = parents_qs.filter(is_active=True).exclude(active_premium_q)
+        # audience == "all" => filtr qo'shmaymiz (faol + nofaol hammasi)
+
+        targeted = audience == "selected"
         announcement_data = {
             "announcement": True,
-            "audience": "selected" if targeted else "all",
+            "audience": audience,
         }
+        # Tanlanganlar uchun aniq sonni ham yozamiz — history filtrida foydali.
         if targeted:
             announcement_data["audience_count"] = parents_qs.count()
 
         created = 0
         # Parent tili bo'yicha SMSlarni guruhlash — har bir tilga o'z matnida yuborish.
-        sms_by_lang = {"uz": [], "ru": [], "en": []}
+        sms_by_lang = {"uz": [], "uz_cyrl": [], "ru": [], "en": []}
         for parent in parents_qs.iterator():
             try:
                 record_parent_notification(
@@ -416,13 +623,18 @@ class AdminBroadcastNotificationView(APIView):
                         bucket = "ru"
                     elif plang.startswith("en"):
                         bucket = "en"
+                    elif "cyr" in plang:
+                        bucket = "uz_cyrl"
                     else:
                         bucket = "uz"
                     sms_by_lang[bucket].append(parent.phone)
             except Exception:
                 continue
 
+        # SMS yuborish — per-phone, har biri alohida loglanadi va SESSION_NOT_BOUND
+        # bo'lsa avto-retry qilinadi. Sekinroq, lekin per-raqam ko'rinish bor.
         sms_sent = 0
+        sms_failed = []
         if send_sms:
             from .sms_service import sms_client
             for lang_code, phones in sms_by_lang.items():
@@ -431,15 +643,19 @@ class AdminBroadcastNotificationView(APIView):
                 lang_title = pick_for_lang(title_translations, lang_code, fallback=title)
                 lang_body = pick_for_lang(body_translations, lang_code, fallback=body)
                 sms_text = f"{lang_title}\n{lang_body}"[:500]
-                ok = sms_client.send_bulk(phones, sms_text)
-                if ok:
-                    sms_sent += len(phones)
+                result = sms_client.send_bulk_per_phone(phones, sms_text, kind="broadcast")
+                sms_sent += len(result["sent"])
+                sms_failed.extend(result["failed"])
 
         return Response({
             "status": True,
             "sent_to": created,
             "sms_sent": sms_sent,
-            "audience": "selected" if targeted else "all",
+            "sms_failed_count": len(sms_failed),
+            # Birinchi 50 ta failed ni qaytaramiz — admin UI ko'rsata oladi,
+            # full ro'yxat /admin/sms-log/ orqali olinadi.
+            "sms_failed": sms_failed[:50],
+            "audience": audience,
         })
 
 
@@ -751,6 +967,18 @@ def _parent_brief(p, *, request=None):
 
 def _lead_to_dict(t, *, request=None):
     op = t.operator
+
+    # Suhbatdagi eng oxirgi va eng oxirgi USER xabarini bir ORM aylantirishda
+    # olamiz — ticket kartochkasidagi "Hali xabar yo'q" matnini almashtirish
+    # va "yangi javob keldi" jihatini tezkor aniqlash uchun.
+    last_msg = t.comments.order_by("-created_at").first()
+    last_user_msg = (
+        t.comments.filter(direction=getattr(CallCenterComment, "DIRECTION_IN", "in"))
+        .order_by("-created_at")
+        .first()
+        if hasattr(t, "comments") else None
+    )
+
     return {
         "id": t.id,
         "title": t.title,
@@ -767,25 +995,57 @@ def _lead_to_dict(t, *, request=None):
         "created_at": t.created_at.isoformat(),
         "updated_at": t.updated_at.isoformat(),
         "comments_count": t.comments.count(),
-        "source": getattr(t, "source", "app"),                      
-        "telegram": {                                               
+        "source": getattr(t, "source", "app"),
+        "telegram": {
             "chat_id": t.telegram_chat_id,
             "username": t.telegram_username,
             "name": t.telegram_name,
         } if getattr(t, "telegram_chat_id", None) else None,
+        # Bot bilan ishlovchi tikket holatlari — chat panel + kartochka uchun
+        "language": getattr(t, "language", "") or "",
+        "bot_state": getattr(t, "bot_state", "") or "",
+        # Foydalanuvchining oxirgi baholash natijasi (resolved bo'lsa)
+        "rating": getattr(t, "rating", None),
+        "rating_comment": getattr(t, "rating_comment", "") or "",
+        "rated_at": t.rated_at.isoformat() if getattr(t, "rated_at", None) else None,
+        # Kartochka ko'rinishi uchun: oxirgi xabar matni va sanasi.
+        # Frontend TS interface kalit nomi `at` (created_at o'rniga).
+        "last_message": {
+            "text": (last_msg.comment or "")[:200],
+            "direction": getattr(last_msg, "direction", "out"),
+            "is_operator": bool(last_msg.operator_id),
+            "at": last_msg.created_at.isoformat(),
+        } if last_msg else None,
+        "last_user_message_at": last_user_msg.created_at.isoformat()
+            if last_user_msg else None,
     }
 
 
-def _comment_to_dict(c):
+def _comment_to_dict(c, *, request=None):
     op = c.operator
+    attachment_url = None
+    att = getattr(c, "attachment", None)
+    if att and getattr(att, "name", ""):
+        try:
+            url = att.url
+            attachment_url = (
+                request.build_absolute_uri(url)
+                if request and not url.startswith("http")
+                else url
+            )
+        except Exception:
+            attachment_url = None
     return {
         "id": c.id,
         "ticket_id": c.ticket_id,
         "text": c.comment,
-        "direction": getattr(c, "direction", "out"),  
-        "is_operator": bool(op),  
+        "direction": getattr(c, "direction", "out"),
+        "is_operator": bool(op),
         "old_status": c.old_status or "",
         "new_status": c.new_status or "",
+        "attachment_url": attachment_url,
+        "attachment_kind": getattr(c, "attachment_kind", "") or "",
+        "attachment_name": getattr(c, "attachment_name", "") or "",
         "operator": {
             "id": op.id,
             "name": op.full_name or op.first_name or op.phone or "—",
@@ -857,6 +1117,61 @@ class AdminTicketUpdateStatusView(APIView):
 # ============================================================================
 
 
+class AdminLeadUnreadCountView(APIView):
+    """Sidebar badge sanog'i — ikki rejimi bor:
+
+    - `mode=new` (default): faqat `status=new` tikketlar soni. CRM
+      uchun mos — "Yangi" kanban kolonkasidagi kartochkalar bilan
+      to'liq mos keladi. Leadlar sahifasi uchun.
+    - `mode=needs_reply`: yopilmagan/hal qilinmagan tikketlar ichida
+      oxirgi izoh foydalanuvchidan kelgan yoki hech kim yozmagan +
+      status=new. Telegram support chat uchun mos — operator kimga
+      javob berishi kerakligini ko'rsatadi.
+
+    `source` query param bilan filterlash mumkin (CSV).
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from django.db.models import OuterRef, Subquery, Q
+
+        qs = CallCenterTicket.objects.all()
+        source = request.query_params.get("source")
+        if source:
+            wanted = [s.strip() for s in source.split(",") if s.strip()]
+            if wanted:
+                qs = qs.filter(source__in=wanted)
+
+        mode = (request.query_params.get("mode") or "new").strip().lower()
+
+        if mode == "needs_reply":
+            # Yopilmagan tikketlar ichida operator javob bermagan yoki
+            # foydalanuvchi yana yozgan tikketlar.
+            qs = qs.exclude(
+                status__in=[
+                    CallCenterTicket.STATUS_CLOSED,
+                    CallCenterTicket.STATUS_RESOLVED,
+                ],
+            )
+            last_direction = (
+                CallCenterComment.objects
+                .filter(ticket=OuterRef("pk"))
+                .order_by("-created_at")
+                .values("direction")[:1]
+            )
+            qs = qs.annotate(_last_dir=Subquery(last_direction))
+            count = qs.filter(
+                Q(_last_dir=CallCenterComment.DIRECTION_IN)
+                | Q(_last_dir__isnull=True, status=CallCenterTicket.STATUS_NEW)
+            ).count()
+        else:
+            # Default — sof "Yangi" status sanog'i (kanban kolonkasi bilan
+            # bir xil).
+            count = qs.filter(status=CallCenterTicket.STATUS_NEW).count()
+
+        return Response({"count": count})
+
+
 class AdminLeadBoardView(APIView):
     """Lead'larni status bo'yicha guruhlangan tarzda qaytaradi.
     Frontend kanban kolonkalari uchun ideal shakl."""
@@ -868,6 +1183,17 @@ class AdminLeadBoardView(APIView):
             "parent", "operator"
         ).prefetch_related("comments").order_by("-updated_at")
 
+        # Lead-CRM va Sorovlar (telegram support) ikki alohida ish oqimi.
+        # `?source=telegram` → Sorovlar (bot orqali); `?source=app,manual`
+        # yoki shunga o'xshash CSV → faqat parent app-dan / qo'lda
+        # kiritilgan murojaatlar. Aniq berilmasa hammasi qaytariladi
+        # (eski API mosligi uchun).
+        source = request.query_params.get("source")
+        if source:
+            wanted = [s.strip() for s in source.split(",") if s.strip()]
+            if wanted:
+                qs = qs.filter(source__in=wanted)
+
         q = request.query_params.get("q")
         if q:
             from django.db.models import Q
@@ -877,6 +1203,8 @@ class AdminLeadBoardView(APIView):
                 | Q(parent__phone__icontains=q)
                 | Q(parent__first_name__icontains=q)
                 | Q(parent__full_name__icontains=q)
+                | Q(telegram_username__icontains=q)
+                | Q(telegram_name__icontains=q)
             )
 
         # Operator filtersi — faqat shu operatorga biriktirilganlar
@@ -954,6 +1282,7 @@ class AdminLeadDetailView(APIView):
             if f in request.data:
                 setattr(t, f, request.data.get(f) or "")
                 update_fields.append(f)
+        rating_requested = False
         if "status" in request.data:
             s = request.data["status"]
             if s in dict(CallCenterTicket.STATUS_CHOICES):
@@ -962,6 +1291,20 @@ class AdminLeadDetailView(APIView):
                 if s == CallCenterTicket.STATUS_CLOSED and not t.closed_at:
                     t.closed_at = timezone.now()
                     update_fields.append("closed_at")
+                # Telegram orqali kelgan murojaat operator tomonidan
+                # `resolved` deb belgilanganda bot foydalanuvchidan
+                # baho so'raydi. Status `closed` qachon `awaiting_rating`
+                # tugagandan keyin qo'yiladi (callback handler).
+                if (
+                    s == CallCenterTicket.STATUS_RESOLVED
+                    and old_status != CallCenterTicket.STATUS_RESOLVED
+                    and getattr(t, "source", "") == CallCenterTicket.SOURCE_TELEGRAM
+                    and t.telegram_chat_id
+                ):
+                    if t.resolved_at is None:
+                        t.resolved_at = timezone.now()
+                        update_fields.append("resolved_at")
+                    rating_requested = True
         if "operator_id" in request.data:
             op_id = request.data["operator_id"]
             if op_id:
@@ -973,6 +1316,13 @@ class AdminLeadDetailView(APIView):
         if update_fields:
             update_fields.append("updated_at")
             t.save(update_fields=update_fields)
+        if rating_requested:
+            try:
+                from .telegram_bot import request_rating
+                request_rating(t)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("request_rating failed")
         data = _lead_to_dict(t, request=request)
         try:
             broadcast_lead_changed({
@@ -1084,15 +1434,24 @@ class AdminLeadFullView(APIView):
 
 
 class AdminLeadCommentsView(APIView):
-    """Lead izohlari — operatorlar yozadigan history."""
+    """Lead izohlari — operatorlar yozadigan history.
+
+    POST endpoint multipart/form-data ham qabul qiladi: `text` matn va
+    ixtiyoriy `attachment` fayl (rasm yoki hujjat). Telegram orqali
+    kelgan tikket bo'lsa, javob mos ravishda `tg_send_message` yoki
+    `tg_send_photo`/`tg_send_document` bilan foydalanuvchiga yetkaziladi.
+    """
     permission_classes = [IsAuthenticated, IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request, ticket_id):
         comments = CallCenterComment.objects.filter(
             ticket_id=ticket_id
         ).select_related("operator").order_by("-created_at")
         return Response({
-            "results": [_comment_to_dict(c) for c in comments[:100]],
+            "results": [
+                _comment_to_dict(c, request=request) for c in comments[:100]
+            ],
         })
 
     def post(self, request, ticket_id):
@@ -1100,28 +1459,70 @@ class AdminLeadCommentsView(APIView):
         if not ticket:
             return Response({"detail": "Lead topilmadi"}, status=404)
         text = (request.data.get("text") or "").strip()
-        if not text:
-            return Response({"detail": "text majburiy"}, status=400)
+        upload = request.FILES.get("attachment")
+        if not text and not upload:
+            return Response(
+                {"detail": "text yoki attachment majburiy"},
+                status=400,
+            )
+
+        attachment_kind = ""
+        attachment_name = ""
+        if upload:
+            attachment_name = upload.name[:255]
+            ctype = (upload.content_type or "").lower()
+            if ctype.startswith("image/") or attachment_name.lower().endswith(
+                (".jpg", ".jpeg", ".png", ".gif", ".webp")
+            ):
+                attachment_kind = CallCenterComment.ATTACHMENT_PHOTO
+            else:
+                attachment_kind = CallCenterComment.ATTACHMENT_DOCUMENT
+
         c = CallCenterComment.objects.create(
             ticket=ticket,
             operator=request.user,
             comment=text,
-            direction=CallCenterComment.DIRECTION_OUT,   # <-- qo'shildi
+            direction=CallCenterComment.DIRECTION_OUT,
             old_status=ticket.status,
             new_status=ticket.status,
+            attachment=upload if upload else None,
+            attachment_kind=attachment_kind,
+            attachment_name=attachment_name,
         )
         ticket.last_contact_at = timezone.now()
         ticket.save(update_fields=["last_contact_at", "updated_at"])
 
-        # Telegram'dan kelgan murojaat bo'lsa, javobni botga yuboramiz
+        # Telegramdan kelgan murojaat bo'lsa, javobni botga yuboramiz.
+        # Fayl bo'lsa — tegishli sendPhoto/sendDocument; matn bo'lsa
+        # oddiy sendMessage. Caption bilan rasm yuborilsa ikkalasi
+        # ham bir xil postda yetkaziladi.
         if ticket.telegram_chat_id:
-            from .telegram_bot import tg_send_message
-            mid = tg_send_message(ticket.telegram_chat_id, text)
+            from .telegram_bot import (
+                tg_send_message,
+                tg_send_photo,
+                tg_send_document,
+            )
+            mid = None
+            if attachment_kind == CallCenterComment.ATTACHMENT_PHOTO and c.attachment:
+                mid = tg_send_photo(
+                    ticket.telegram_chat_id,
+                    c.attachment.path,
+                    caption=text or None,
+                )
+            elif attachment_kind == CallCenterComment.ATTACHMENT_DOCUMENT and c.attachment:
+                mid = tg_send_document(
+                    ticket.telegram_chat_id,
+                    c.attachment.path,
+                    caption=text or None,
+                    filename=attachment_name,
+                )
+            elif text:
+                mid = tg_send_message(ticket.telegram_chat_id, text)
             if mid:
                 c.telegram_message_id = str(mid)
                 c.save(update_fields=["telegram_message_id"])
 
-        payload = _comment_to_dict(c)
+        payload = _comment_to_dict(c, request=request)
         try:
             broadcast_lead_comment({"ticket_id": ticket.id, "comment": payload})
         except Exception:
@@ -1409,6 +1810,90 @@ class AdminMediaUploadView(APIView):
 # ============================================================================
 
 
+class AdminSmsLogView(APIView):
+    """SMS yuborish jurnali — har bir urinish, success/fail, sabab bilan.
+
+    Query parametrlari:
+      kind      — otp / broadcast / rule / test / other
+      success   — true / false (string)
+      phone     — substring qidirish (normalized telefon bo'yicha)
+      page_size — default 50
+      offset    — pagination
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from .models import SmsSendLog
+        qs = SmsSendLog.objects.all()
+        kind = request.query_params.get("kind")
+        if kind:
+            qs = qs.filter(kind=kind)
+        success = request.query_params.get("success")
+        if success in ("true", "1"):
+            qs = qs.filter(success=True)
+        elif success in ("false", "0"):
+            qs = qs.filter(success=False)
+        phone = (request.query_params.get("phone") or "").strip()
+        if phone:
+            digits = "".join(c for c in phone if c.isdigit())
+            qs = qs.filter(phone_normalized__icontains=digits or phone)
+        try:
+            page_size = max(1, min(int(request.query_params.get("page_size", 50)), 200))
+        except ValueError:
+            page_size = 50
+        try:
+            offset = max(0, int(request.query_params.get("offset", 0)))
+        except ValueError:
+            offset = 0
+        total = qs.count()
+        items = []
+        for r in qs[offset:offset + page_size]:
+            items.append({
+                "id": r.id,
+                "phone": r.phone,
+                "phone_normalized": r.phone_normalized,
+                "kind": r.kind,
+                "message": r.message,
+                "success": r.success,
+                "result_code": r.result_code,
+                "reason": r.reason,
+                "retry_count": r.retry_count,
+                "related_user_id": r.related_user_id,
+                "created_at": r.created_at.isoformat(),
+            })
+
+        # Statistik xulosa — admin UI da chiroyli ko'rsatish uchun
+        from django.db.models import Count, Q
+        stats_qs = SmsSendLog.objects.all()
+        if kind:
+            stats_qs = stats_qs.filter(kind=kind)
+        stats = stats_qs.aggregate(
+            total_all=Count("id"),
+            sent_all=Count("id", filter=Q(success=True)),
+            failed_all=Count("id", filter=Q(success=False)),
+        )
+        # Eng tez-tez uchraydigan xato sabablarini ham ko'rsatamiz
+        top_reasons = list(
+            stats_qs.filter(success=False)
+            .values("reason")
+            .annotate(c=Count("id"))
+            .order_by("-c")[:10]
+        )
+
+        return Response({
+            "count": total,
+            "offset": offset,
+            "page_size": page_size,
+            "results": items,
+            "stats": {
+                "total": stats["total_all"] or 0,
+                "sent": stats["sent_all"] or 0,
+                "failed": stats["failed_all"] or 0,
+                "top_failure_reasons": top_reasons,
+            },
+        })
+
+
 class AdminSmsTestView(APIView):
     """Adminga SMSFLY kalitining ishlashini va test SMS yuborishni tekshirib
     ko'rish imkonini beradi.
@@ -1426,13 +1911,27 @@ class AdminSmsTestView(APIView):
         })
 
     def post(self, request):
-        from .sms_service import sms_client
+        from .sms_service import sms_client, normalize_phone, is_valid_uz_phone
+        from .models import SmsSendLog
         phone = (request.data.get("phone") or "").strip()
         message = (request.data.get("message") or "JoJo: test xabar").strip()
         if not phone:
             return Response({"detail": "phone majburiy"}, status=400)
-        ok = sms_client.send(phone, message)
-        return Response({"success": ok, "phone": phone})
+        ok = sms_client.send(phone, message, kind=SmsSendLog.KIND_TEST)
+        # Tegishli oxirgi log yozuvini ham qaytaramiz — UI da reason ko'rsatadi
+        normalized = normalize_phone(phone)
+        last = SmsSendLog.objects.filter(
+            phone_normalized=normalized,
+        ).order_by("-created_at").first()
+        return Response({
+            "success": ok,
+            "phone": phone,
+            "normalized": normalized,
+            "valid": is_valid_uz_phone(normalized),
+            "reason": last.reason if last else "",
+            "result_code": last.result_code if last else -1,
+            "retry_count": last.retry_count if last else 0,
+        })
 
 
 # ============================================================================
@@ -1448,6 +1947,9 @@ def _game_category_to_dict(c, request=None):
     return {
         "id": c.id,
         "name": c.name,
+        "name_uz_cyrl": getattr(c, "name_uz_cyrl", "") or "",
+        "name_ru": getattr(c, "name_ru", "") or "",
+        "name_en": getattr(c, "name_en", "") or "",
         "icon": icon,
         "is_active": c.is_active,
         "order": c.order,
@@ -1466,7 +1968,13 @@ def _game_to_dict(g, request=None):
         "category": g.category_id,
         "category_name": g.category.name if g.category else None,
         "title": g.title,
+        "title_uz_cyrl": getattr(g, "title_uz_cyrl", "") or "",
+        "title_ru": getattr(g, "title_ru", "") or "",
+        "title_en": getattr(g, "title_en", "") or "",
         "description": g.description or "",
+        "description_uz_cyrl": getattr(g, "description_uz_cyrl", "") or "",
+        "description_ru": getattr(g, "description_ru", "") or "",
+        "description_en": getattr(g, "description_en", "") or "",
         "thumbnail": _img(g.thumbnail),
         "banner": _img(g.banner),
         "game_url": g.game_url or "",
@@ -1512,6 +2020,9 @@ class AdminGameCategoryListCreate(APIView):
             return Response({"detail": "Nom majburiy"}, status=400)
         c = GameCategory.objects.create(
             name=name,
+            name_uz_cyrl=(request.data.get("name_uz_cyrl") or "").strip(),
+            name_ru=(request.data.get("name_ru") or "").strip(),
+            name_en=(request.data.get("name_en") or "").strip(),
             is_active=bool(request.data.get("is_active", True)),
             order=int(request.data.get("order") or 0),
         )
@@ -1529,7 +2040,10 @@ class AdminGameCategoryDetail(APIView):
         c = GameCategory.objects.filter(id=cat_id).first()
         if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        for f in ("name", "is_active", "order"):
+        for f in (
+            "name", "name_uz_cyrl", "name_ru", "name_en",
+            "is_active", "order",
+        ):
             if f in request.data:
                 setattr(c, f, request.data[f])
         icon = _resolve_image_path(request.data.get("icon"))
@@ -1570,7 +2084,13 @@ class AdminGameListCreate(APIView):
         g = GameItem.objects.create(
             category=category,
             title=title,
+            title_uz_cyrl=(request.data.get("title_uz_cyrl") or "").strip(),
+            title_ru=(request.data.get("title_ru") or "").strip(),
+            title_en=(request.data.get("title_en") or "").strip(),
             description=request.data.get("description") or "",
+            description_uz_cyrl=request.data.get("description_uz_cyrl") or "",
+            description_ru=request.data.get("description_ru") or "",
+            description_en=request.data.get("description_en") or "",
             game_url=request.data.get("game_url") or "",
             screen_key=request.data.get("screen_key") or "",
             age_min=int(request.data.get("age_min") or 1),
@@ -1596,7 +2116,9 @@ class AdminGameDetail(APIView):
         if not g:
             return Response({"detail": "Topilmadi"}, status=404)
         for f in (
-            "title", "description", "game_url", "screen_key",
+            "title", "title_uz_cyrl", "title_ru", "title_en",
+            "description", "description_uz_cyrl", "description_ru", "description_en",
+            "game_url", "screen_key",
             "age_min", "age_max", "reward_points",
             "is_active", "is_featured", "order",
         ):
@@ -1638,6 +2160,7 @@ def _kids_video_category_to_dict(c, request=None):
         "name": c.name,
         "name_ru": c.name_ru,
         "name_en": c.name_en,
+        "name_uz_cyrl": getattr(c, "name_uz_cyrl", "") or "",
         "icon": icon,
         "is_active": c.is_active,
         "order": c.order,
@@ -1661,9 +2184,11 @@ def _kids_video_to_dict(v, request=None):
         "category": v.category_id,
         "category_name": v.category.name if v.category else None,
         "title": v.title,
+        "title_uz_cyrl": getattr(v, "title_uz_cyrl", "") or "",
         "title_ru": v.title_ru,
         "title_en": v.title_en,
         "description": v.description or "",
+        "description_uz_cyrl": getattr(v, "description_uz_cyrl", "") or "",
         "description_ru": v.description_ru,
         "description_en": v.description_en,
         "youtube_url": v.youtube_url,
@@ -1693,6 +2218,7 @@ class AdminKidsVideoCategoryListCreate(APIView):
             return Response({"detail": "Nom majburiy"}, status=400)
         c = KidsVideoCategory.objects.create(
             name=name,
+            name_uz_cyrl=(request.data.get("name_uz_cyrl") or "").strip(),
             name_ru=(request.data.get("name_ru") or "").strip(),
             name_en=(request.data.get("name_en") or "").strip(),
             is_active=bool(request.data.get("is_active", True)),
@@ -1712,7 +2238,10 @@ class AdminKidsVideoCategoryDetail(APIView):
         c = KidsVideoCategory.objects.filter(id=cat_id).first()
         if not c:
             return Response({"detail": "Topilmadi"}, status=404)
-        for f in ("name", "name_ru", "name_en", "is_active", "order"):
+        for f in (
+            "name", "name_uz_cyrl", "name_ru", "name_en",
+            "is_active", "order",
+        ):
             if f in request.data:
                 setattr(c, f, request.data[f])
         icon = _resolve_image_path(request.data.get("icon"))
@@ -1760,9 +2289,11 @@ class AdminKidsVideoListCreate(APIView):
         v = KidsVideo.objects.create(
             category=category,
             title=title,
+            title_uz_cyrl=(request.data.get("title_uz_cyrl") or "").strip(),
             title_ru=(request.data.get("title_ru") or "").strip(),
             title_en=(request.data.get("title_en") or "").strip(),
             description=request.data.get("description") or "",
+            description_uz_cyrl=request.data.get("description_uz_cyrl") or "",
             description_ru=request.data.get("description_ru") or "",
             description_en=request.data.get("description_en") or "",
             youtube_url=youtube_url,
@@ -1788,8 +2319,8 @@ class AdminKidsVideoDetail(APIView):
         if not v:
             return Response({"detail": "Topilmadi"}, status=404)
         text_fields = (
-            "title", "title_ru", "title_en",
-            "description", "description_ru", "description_en",
+            "title", "title_uz_cyrl", "title_ru", "title_en",
+            "description", "description_uz_cyrl", "description_ru", "description_en",
             "youtube_url", "duration_label",
         )
         for f in text_fields:
@@ -1852,9 +2383,11 @@ def _rule_to_dict(r):
         "audience": r.audience,
         "audience_params": r.audience_params or {},
         "title": r.title,
+        "title_uz_cyrl": getattr(r, "title_uz_cyrl", "") or "",
         "title_ru": r.title_ru,
         "title_en": r.title_en,
         "body": r.body,
+        "body_uz_cyrl": getattr(r, "body_uz_cyrl", "") or "",
         "body_ru": r.body_ru,
         "body_en": r.body_en,
         "category": r.category,
@@ -1868,8 +2401,12 @@ def _rule_to_dict(r):
 
 
 def _rule_apply_payload(rule, data):
-    for f in ("name", "trigger_type", "audience", "title", "title_ru", "title_en",
-              "body", "body_ru", "body_en", "category"):
+    for f in (
+        "name", "trigger_type", "audience",
+        "title", "title_uz_cyrl", "title_ru", "title_en",
+        "body", "body_uz_cyrl", "body_ru", "body_en",
+        "category",
+    ):
         if f in data:
             setattr(rule, f, data[f] or "")
     if "trigger_params" in data:

@@ -190,14 +190,26 @@ def _format_text(text: str, parent, *, days_left: int | None = None) -> str:
 
 def fire_rule(rule: NotificationRule) -> NotificationRuleLog:
     """Rule'ni hozir ishga tushiradi va NotificationRuleLog yaratadi."""
-    from .services import record_parent_notification
+    from .services import record_parent_notification, translations_dict
     from .sms_service import sms_client
+    from .firebase import send_fcm_notification
+    from .models import DeviceToken
 
     push_sent = 0
     sms_sent = 0
     recipients = 0
     sms_phones: list[str] = []
     error_detail = ""
+
+    def _lang_code(value):
+        v = (value or "").lower()
+        if v.startswith("ru"):
+            return "ru"
+        if v.startswith("en"):
+            return "en"
+        if "cyr" in v:
+            return "uz_cyrl"
+        return "uz_latn"
 
     try:
         if rule.trigger_type == NotificationRule.TRIGGER_PREMIUM:
@@ -211,65 +223,71 @@ def fire_rule(rule: NotificationRule) -> NotificationRuleLog:
             if rule.trigger_type == NotificationRule.TRIGGER_PREMIUM and parent.premium_expires_at:
                 delta = parent.premium_expires_at - timezone.now()
                 days_left = max(0, delta.days)
-            # Parent tili bo'yicha tegishli matnni tanlaymiz; bo'sh bo'lsa uz.
-            parent_lang = (getattr(parent, "language", "") or "uz").lower()
-            if parent_lang.startswith("ru"):
-                base_title = rule.title_ru or rule.title
-                base_body = rule.body_ru or rule.body
-            elif parent_lang.startswith("en"):
-                base_title = rule.title_en or rule.title
-                base_body = rule.body_en or rule.body
-            else:
-                base_title = rule.title
-                base_body = rule.body
-            title = _format_text(base_title, parent, days_left=days_left)
-            body = _format_text(base_body, parent, days_left=days_left)
+            # Tilga qarab tegishli matnni tanlaymiz (4 tilli). Bo'sh
+            # variantlar uz fallback bilan to'ldiriladi.
+            parent_lang = _lang_code(getattr(parent, "language", ""))
+
+            def fmt(text):
+                return _format_text(text, parent, days_left=days_left)
+
+            t_uz = fmt(rule.title)
+            t_cyr = fmt(getattr(rule, "title_uz_cyrl", "") or rule.title)
+            t_ru = fmt(rule.title_ru) if rule.title_ru else t_uz
+            t_en = fmt(rule.title_en) if rule.title_en else t_uz
+            b_uz = fmt(rule.body)
+            b_cyr = fmt(getattr(rule, "body_uz_cyrl", "") or rule.body)
+            b_ru = fmt(rule.body_ru) if rule.body_ru else b_uz
+            b_en = fmt(rule.body_en) if rule.body_en else b_uz
+
+            t_dict = translations_dict(uz=t_uz, uz_cyrl=t_cyr, ru=t_ru, en=t_en)
+            b_dict = translations_dict(uz=b_uz, uz_cyrl=b_cyr, ru=b_ru, en=b_en)
+            title = t_dict.get(parent_lang) or t_uz
+            body = b_dict.get(parent_lang) or b_uz
 
             if rule.send_push:
                 try:
-                    notif = record_parent_notification(
+                    record_parent_notification(
                         parent=parent,
                         child=None,
                         category=rule.category or "system",
                         title=title,
                         body=body,
+                        title_translations=t_dict,
+                        body_translations=b_dict,
                         data={"rule_id": rule.id},
                     )
-                    # Boshqa tillarni ham yozib qo'yamiz — parent tilni o'zgartirsa
-                    # tarixdagi xabar ham mos tilda ko'rinadi.
-                    if notif:
-                        changed = False
-                        if rule.title_ru:
-                            tr = _format_text(rule.title_ru, parent, days_left=days_left)
-                            if tr != notif.title_ru:
-                                notif.title_ru = tr
-                                changed = True
-                        if rule.title_en:
-                            tr = _format_text(rule.title_en, parent, days_left=days_left)
-                            if tr != notif.title_en:
-                                notif.title_en = tr
-                                changed = True
-                        if rule.body_ru:
-                            tr = _format_text(rule.body_ru, parent, days_left=days_left)
-                            if tr != notif.body_ru:
-                                notif.body_ru = tr
-                                changed = True
-                        if rule.body_en:
-                            tr = _format_text(rule.body_en, parent, days_left=days_left)
-                            if tr != notif.body_en:
-                                notif.body_en = tr
-                                changed = True
-                        if changed:
-                            notif.save(update_fields=["title_ru", "title_en", "body_ru", "body_en"])
+                    # FCM push — qurilmaga yetkazadi (UI yopiq bo'lsa ham).
+                    try:
+                        for dt in DeviceToken.objects.filter(
+                            user=parent, is_active=True,
+                        ):
+                            if dt.token:
+                                send_fcm_notification(
+                                    token=dt.token,
+                                    title=title,
+                                    body=body,
+                                    data={
+                                        "category": rule.category or "system",
+                                        "rule_id": str(rule.id),
+                                    },
+                                )
+                    except Exception as e:
+                        logger.warning("rule %s FCM failed for %s: %s",
+                                       rule.id, parent.id, e)
                     push_sent += 1
                 except Exception as e:
                     logger.warning("rule %s push failed for %s: %s", rule.id, parent.id, e)
 
             if rule.send_sms and parent.phone:
                 sms_phones.append(parent.phone)
-                # Per-parent SMS uchun individual matn kerak (template'da
-                # `{name}` bor bo'lishi mumkin). Bittadan yuboramiz.
-                if sms_client.send(parent.phone, f"{title}\n{body}"[:500]):
+                # Per-parent SMS uchun individual matn (template'da `{name}`
+                # bor bo'lishi mumkin). Bittadan yuboramiz, parent tilida.
+                if sms_client.send(
+                    parent.phone,
+                    f"{title}\n{body}"[:500],
+                    kind="rule",
+                    user_id=parent.id,
+                ):
                     sms_sent += 1
 
         success = True

@@ -158,7 +158,7 @@ from .admin_views import (
     AdminBroadcastHistoryView,
     AdminTicketListView, AdminTicketUpdateStatusView,
     AdminLeadBoardView, AdminLeadListCreate, AdminLeadDetailView, AdminLeadCommentsView,
-    AdminLeadFullView,
+    AdminLeadFullView, AdminLeadUnreadCountView,
     AdminOperatorListView, AdminOperatorCreateView, AdminOperatorDetailView,
     AdminRoleListCreateView, AdminRoleDetailView,
     AdminAutoTranslateView,
@@ -170,11 +170,13 @@ from .admin_views import (
     AdminKidsVideoCategoryListCreate, AdminKidsVideoCategoryDetail,
     AdminKidsVideoListCreate, AdminKidsVideoDetail,
     AdminSmsTestView,
+    AdminSmsLogView,
     AdminNotificationRuleListCreate, AdminNotificationRuleDetail,
     AdminNotificationRuleRunNow, AdminNotificationRuleLogs,
     AdminQuickReplyListCreateView, AdminQuickReplyDetailView,
     TelegramWebhookView,
 )
+from . import admin_bulk_sms as _bulk
 
 urlpatterns += [
     path("admin/login/", AdminLoginView.as_view(), name="admin-login"),
@@ -182,6 +184,17 @@ urlpatterns += [
     path("admin/dashboard/stats/", AdminDashboardStatsView.as_view(), name="admin-dashboard-stats"),
     path("admin/upload/", AdminMediaUploadView.as_view(), name="admin-media-upload"),
     path("admin/sms/test/", AdminSmsTestView.as_view(), name="admin-sms-test"),
+    path("admin/sms/log/", AdminSmsLogView.as_view(), name="admin-sms-log"),
+
+    # Bulk SMS — contact groups + campaigns
+    path("admin/sms/parse-numbers/", _bulk.AdminSmsParseNumbersView.as_view(), name="admin-sms-parse-numbers"),
+    path("admin/sms/groups/", _bulk.AdminSmsContactGroupListCreateView.as_view(), name="admin-sms-group-list"),
+    path("admin/sms/groups/<int:group_id>/", _bulk.AdminSmsContactGroupDetailView.as_view(), name="admin-sms-group-detail"),
+    path("admin/sms/groups/<int:group_id>/contacts/", _bulk.AdminSmsContactListCreateView.as_view(), name="admin-sms-group-contacts"),
+    path("admin/sms/groups/<int:group_id>/contacts/<int:contact_id>/", _bulk.AdminSmsContactDetailView.as_view(), name="admin-sms-group-contact-detail"),
+    path("admin/sms/groups/<int:group_id>/import/", _bulk.AdminSmsGroupImportView.as_view(), name="admin-sms-group-import"),
+    path("admin/sms/campaigns/", _bulk.AdminBulkSmsCampaignListCreateView.as_view(), name="admin-sms-campaign-list"),
+    path("admin/sms/campaigns/<int:campaign_id>/", _bulk.AdminBulkSmsCampaignDetailView.as_view(), name="admin-sms-campaign-detail"),
 
     path("admin/notification-rules/", AdminNotificationRuleListCreate.as_view(), name="admin-notif-rule-list"),
     path("admin/notification-rules/<int:rule_id>/", AdminNotificationRuleDetail.as_view(), name="admin-notif-rule-detail"),
@@ -231,6 +244,7 @@ urlpatterns += [
     path("admin/tickets/", AdminTicketListView.as_view(), name="admin-ticket-list"),
     path("admin/tickets/<int:ticket_id>/status/", AdminTicketUpdateStatusView.as_view(), name="admin-ticket-status"),
     path("admin/leads/board/", AdminLeadBoardView.as_view(), name="admin-lead-board"),
+    path("admin/leads/unread-count/", AdminLeadUnreadCountView.as_view(), name="admin-lead-unread-count"),
     path("admin/leads/", AdminLeadListCreate.as_view(), name="admin-lead-create"),
     path("admin/leads/<int:ticket_id>/", AdminLeadDetailView.as_view(), name="admin-lead-detail"),
     path("admin/leads/<int:ticket_id>/full/", AdminLeadFullView.as_view(), name="admin-lead-full"),

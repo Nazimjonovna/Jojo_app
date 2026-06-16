@@ -202,7 +202,7 @@ class AdminStoreCategorySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "name_ru", "name_en",
+            "name_ru", "name_en", "name_uz_cyrl",
             "slug",
             "product_type",
             "category_type",
@@ -215,6 +215,7 @@ class AdminStoreCategorySerializer(serializers.ModelSerializer):
             "product_type": {"required": False, "allow_blank": True},
             "name_ru": {"required": False, "allow_blank": True},
             "name_en": {"required": False, "allow_blank": True},
+            "name_uz_cyrl": {"required": False, "allow_blank": True},
         }
 
     def to_internal_value(self, data):
@@ -260,7 +261,7 @@ class AdminProductTagMiniSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductTag
-        fields = ["id", "name", "name_ru", "name_en", "slug"]
+        fields = ["id", "name", "name_ru", "name_en", "name_uz_cyrl", "slug"]
 
 
 class AdminStoreProductSerializer(serializers.ModelSerializer):
@@ -304,11 +305,11 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "name_ru", "name_en",
+            "name_ru", "name_en", "name_uz_cyrl",
             "slug",
             "category",
             "category_label",
-            "category_label_ru", "category_label_en",
+            "category_label_ru", "category_label_en", "category_label_uz_cyrl",
             "age_label",
             "price",
             "old_price",
@@ -320,9 +321,9 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
             "auto_translate",
             "translate_source",
             "short_description",
-            "short_description_ru", "short_description_en",
+            "short_description_ru", "short_description_en", "short_description_uz_cyrl",
             "description",
-            "description_ru", "description_en",
+            "description_ru", "description_en", "description_uz_cyrl",
             "thumbnail",
             "cover_image",
             "product_type",
@@ -340,14 +341,18 @@ class AdminStoreProductSerializer(serializers.ModelSerializer):
             "name": {"required": True},
             "name_ru": {"required": False, "allow_blank": True},
             "name_en": {"required": False, "allow_blank": True},
+            "name_uz_cyrl": {"required": False, "allow_blank": True},
             "category_label_ru": {"required": False, "allow_blank": True},
             "category_label_en": {"required": False, "allow_blank": True},
+            "category_label_uz_cyrl": {"required": False, "allow_blank": True},
             "short_description": {"required": False, "allow_blank": True},
             "short_description_ru": {"required": False, "allow_blank": True},
             "short_description_en": {"required": False, "allow_blank": True},
+            "short_description_uz_cyrl": {"required": False, "allow_blank": True},
             "description": {"required": False, "allow_blank": True},
             "description_ru": {"required": False, "allow_blank": True},
             "description_en": {"required": False, "allow_blank": True},
+            "description_uz_cyrl": {"required": False, "allow_blank": True},
             "price": {"required": False, "default": 0},
             "category": {"required": False, "allow_null": True},
         }
@@ -452,11 +457,11 @@ class AdminBannerSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "kicker",
-            "kicker_ru", "kicker_en",
+            "kicker_uz_cyrl", "kicker_ru", "kicker_en",
             "title",
-            "title_ru", "title_en",
+            "title_uz_cyrl", "title_ru", "title_en",
             "subtitle",
-            "subtitle_ru", "subtitle_en",
+            "subtitle_uz_cyrl", "subtitle_ru", "subtitle_en",
             "theme",
             "image",
             "link_product",
@@ -469,12 +474,15 @@ class AdminBannerSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "kicker": {"required": False, "allow_blank": True, "default": ""},
+            "kicker_uz_cyrl": {"required": False, "allow_blank": True, "default": ""},
             "kicker_ru": {"required": False, "allow_blank": True, "default": ""},
             "kicker_en": {"required": False, "allow_blank": True, "default": ""},
             "title": {"required": True},
+            "title_uz_cyrl": {"required": False, "allow_blank": True, "default": ""},
             "title_ru": {"required": False, "allow_blank": True, "default": ""},
             "title_en": {"required": False, "allow_blank": True, "default": ""},
             "subtitle": {"required": False, "allow_blank": True, "default": ""},
+            "subtitle_uz_cyrl": {"required": False, "allow_blank": True, "default": ""},
             "subtitle_ru": {"required": False, "allow_blank": True, "default": ""},
             "subtitle_en": {"required": False, "allow_blank": True, "default": ""},
             "theme": {"required": False, "default": ParentStorePromoBanner.THEME_CREAM},
@@ -517,7 +525,7 @@ class AdminBlogCategorySerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "name_ru", "name_en",
+            "name_ru", "name_en", "name_uz_cyrl",
             "icon",
             "is_active",
             "order",
@@ -526,6 +534,7 @@ class AdminBlogCategorySerializer(serializers.ModelSerializer):
             "name": {"required": True},
             "name_ru": {"required": False, "allow_blank": True},
             "name_en": {"required": False, "allow_blank": True},
+            "name_uz_cyrl": {"required": False, "allow_blank": True},
             "order": {"required": False, "default": 0},
         }
 
@@ -569,13 +578,13 @@ class AdminBlogPostSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
-            "title_ru", "title_en",
+            "title_ru", "title_en", "title_uz_cyrl",
             "excerpt",
             "short_description",
-            "short_description_ru", "short_description_en",
+            "short_description_ru", "short_description_en", "short_description_uz_cyrl",
             "body",
             "content",
-            "content_ru", "content_en",
+            "content_ru", "content_en", "content_uz_cyrl",
             "category",
             "post_type",
             "read_minutes",
@@ -591,14 +600,17 @@ class AdminBlogPostSerializer(serializers.ModelSerializer):
             "title": {"required": True},
             "title_ru": {"required": False, "allow_blank": True},
             "title_en": {"required": False, "allow_blank": True},
+            "title_uz_cyrl": {"required": False, "allow_blank": True},
             "post_type": {"required": False, "default": BlogPost.TYPE_BLOG},
             "category": {"required": False, "allow_null": True},
             "short_description": {"required": False, "allow_blank": True, "allow_null": True},
             "short_description_ru": {"required": False, "allow_blank": True, "default": ""},
             "short_description_en": {"required": False, "allow_blank": True, "default": ""},
+            "short_description_uz_cyrl": {"required": False, "allow_blank": True, "default": ""},
             "content": {"required": False, "allow_blank": True, "allow_null": True},
             "content_ru": {"required": False, "allow_blank": True, "default": ""},
             "content_en": {"required": False, "allow_blank": True, "default": ""},
+            "content_uz_cyrl": {"required": False, "allow_blank": True, "default": ""},
         }
 
     def get_cover_image(self, obj):
