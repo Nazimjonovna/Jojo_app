@@ -27,8 +27,10 @@ from .models import (
     Achievement, 
     AICompanion, 
     ChildAchievement,
+    Topic, 
+    Challenge, 
+    ChildChallenge,
 )
-
 from .serializers import (
     LanguageSerializer,
     LearningCourseSerializer,
@@ -52,14 +54,18 @@ from .serializers import (
     ClaimRewardResponseSerializer,
     CompanionStateSerializer,
     SelectCompanionSerializer,
+    TopicSerializer, 
+    UpdateInterestsSerializer,
+    ChallengeSerializer, 
+    ChildChallengeSerializer,
 )
 from .services.progress_service import (
     add_xp,
     complete_lesson,
     log_mistake,
-    check_text_answer,
 )
 from .services.adaptive_service import get_recommended_learning_method
+from .services.events import emit, Event
 from .services.memory_service import (
     get_words_for_review,
     update_word_progress_from_exercise,
@@ -70,6 +76,12 @@ from .services import achievement_service, companion_service, daily_task_service
 from .services.recommendation_service import (
     get_next_lesson_for_child,
     get_review_lesson_reason,
+)
+from .services.analytics_service import update_learning_analytics
+from .services.challenge_service import update_challenge_progress, assign_active_challenges 
+from .services.topic_service import (
+    register_topic_interaction,
+    detect_interests,
 )
 
 
@@ -157,7 +169,7 @@ class SubmitExerciseAnswerView(APIView):
 
         exercise = get_object_or_404(
             Exercise.objects.filter(is_active=True),
-            id=exercise_id
+            id=exercise_id,
         )
 
         serializer = SubmitAnswerSerializer(data=request.data)
@@ -165,6 +177,7 @@ class SubmitExerciseAnswerView(APIView):
 
         answer = serializer.validated_data.get("answer")
         selected_option_id = serializer.validated_data.get("selected_option_id")
+        time_spent_seconds = int(request.data.get("time_spent_seconds", 0))
 
         is_correct = False
         given_answer = ""
@@ -172,32 +185,38 @@ class SubmitExerciseAnswerView(APIView):
         if selected_option_id:
             option = AnswerOption.objects.filter(
                 id=selected_option_id,
-                exercise=exercise
+                exercise=exercise,
             ).first()
 
             if not option:
-                return Response(
-                    {"detail": "Variant topilmadi"},
-                    status=404
-                )
+                return Response({"detail": "Variant topilmadi"}, status=404)
 
             is_correct = option.is_correct
             given_answer = option.text
 
         else:
-            given_answer = answer.strip()
-
+            given_answer = (answer or "").strip()
             is_correct = is_text_answer_correct(
                 given_answer=given_answer,
                 correct_answer=exercise.correct_answer,
                 accepted_answers=exercise.accepted_answers,
             )
 
+        profile = ChildLearningProfile.objects.get_or_create(child=child)[0]
+
+        exercise_event = emit(
+            Event.EXERCISE_ANSWERED,
+            profile,
+            is_correct=is_correct,
+            exercise_id=exercise.id,
+        )
+
         earned_xp = 0
+        xp_event = None
 
         if is_correct:
             earned_xp = max(1, exercise.difficulty)
-            add_xp(child, earned_xp)
+            xp_event = add_xp(child, earned_xp)["gamification"]
         else:
             log_mistake(child, exercise, given_answer)
 
@@ -207,18 +226,79 @@ class SubmitExerciseAnswerView(APIView):
             is_correct=is_correct,
         )
 
+        register_topic_interaction(
+            profile=profile,
+            lesson=exercise.lesson,
+            is_correct=is_correct,
+            time_spent_seconds=time_spent_seconds,
+        )
+
+        detected_interests = detect_interests(profile)
+
+        hint = None
+        if not is_correct:
+            hint = build_rule_based_hint(
+                child=child,
+                exercise=exercise,
+                given_answer=given_answer,
+            )
+            
+        analytics = update_learning_analytics(
+            child=child,
+            exercise_type=exercise.exercise_type,
+            is_correct=is_correct,
+            time_spent_seconds=time_spent_seconds,
+            )
+
+        completed_challenges = []
+
+        if is_correct:
+            completed_challenges += update_challenge_progress(
+                child=child,
+                target_type="xp",
+                amount=earned_xp,
+            )
+
+            completed_challenges += update_challenge_progress(
+                child=child,
+                target_type="word",
+                amount=1,
+            )
+
         return Response({
             "is_correct": is_correct,
             "given_answer": given_answer,
             "correct_answer": exercise.correct_answer or "",
             "explanation": exercise.explanation or "",
             "earned_xp": earned_xp,
+            "hint": hint,
             "word_progress": {
                 "state": word_progress.state,
                 "memory_strength": word_progress.memory_strength,
                 "next_review_at": word_progress.next_review_at,
             } if word_progress else None,
+            "gamification": {
+                "exercise_event": exercise_event,
+                "xp_event": xp_event,
+            },
+            "analytics": {
+            "average_accuracy": analytics.average_accuracy,
+            "learning_speed_score": analytics.learning_speed_score,
+        },
+            "detected_interests": detected_interests,
             "next_action": "continue" if is_correct else "try_again",
+            "analytics": {
+            "average_accuracy": analytics.average_accuracy,
+            "learning_speed_score": analytics.learning_speed_score,
+        },
+        "completed_challenges": [
+            {
+                "id": challenge.id,
+                "title": challenge.title,
+                "reward_xp": challenge.reward_xp,
+            }
+            for challenge in completed_challenges
+        ],
         }, status=200)
 
 
@@ -230,11 +310,12 @@ class CompleteLessonView(APIView):
 
         lesson = get_object_or_404(
             Lesson.objects.filter(is_active=True),
-            id=lesson_id
+            id=lesson_id,
         )
 
         score = int(request.data.get("score", 0))
         total = int(request.data.get("total", 0))
+        time_spent_seconds = int(request.data.get("time_spent_seconds", 0))
 
         try:
             result = complete_lesson(
@@ -242,15 +323,31 @@ class CompleteLessonView(APIView):
                 lesson=lesson,
                 score=score,
                 total=total,
+                time_spent_seconds=time_spent_seconds,
             )
         except ValueError as error:
-            return Response(
-                {"detail": str(error)},
-                status=400
+            return Response({"detail": str(error)}, status=400)
+
+        completed_challenges = []
+
+        if result["is_completed"]:
+            completed_challenges = update_challenge_progress(
+                child=child,
+                target_type="lesson",
+                amount=1,
             )
 
-        return Response(result, status=200)
+        result["completed_challenges"] = [
+            {
+                "id": challenge.id,
+                "title": challenge.title,
+                "reward_xp": challenge.reward_xp,
+            }
+            for challenge in completed_challenges
+        ]
 
+        return Response(result, status=200)
+    
 
 class MyLearningProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -611,23 +708,14 @@ class MyWordReviewView(APIView):
     
     
 class ChildProfileMixin:
-    """Barcha gamification view'lar uchun umumiy: child profilni olish.
- 
-    MUHIM: get_profile() ni loyihangizdagi child auth mexanizmiga moslang.
-    Masalan, child alohida token bilan login qilsa:
-        return request.user.child_learning_profile
-    Yoki parent token + child_id header bo'lsa:
-        child_id = request.headers["X-Child-Id"]
-        return ChildLearningProfile.objects.get(
-            id=child_id, child__parent__user=request.user
-        )
-    """
     permission_classes = [IsAuthenticated]
  
     def get_profile(self, request):
-        profile = getattr(request.user, "child_learning_profile", None)
+        profile = getattr(request.user, "learning_profile", None)
         if profile is None:
-            raise NotFound("Child learning profile topilmadi")
+            profile, _ = ChildLearningProfile.objects.get_or_create(
+                child=request.user
+            )
         return profile
  
     def get_serializer_context(self, request, profile) -> dict:
@@ -825,3 +913,87 @@ class ChildWeeklySummaryView(ParentChildMixin, APIView):
     def get(self, request, profile_id: int):
         profile = self.get_child_profile(request, profile_id)
         return Response(analytics_service.get_weekly_summary(profile))
+    
+    
+class TopicListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        topics = Topic.objects.filter(
+            is_active=True
+        ).order_by("order", "id")
+
+        serializer = TopicSerializer(
+            topics,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(serializer.data, status=200)
+
+
+class MyInterestsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = ChildLearningProfile.objects.get_or_create(
+            child=request.user
+        )
+
+        return Response({
+            "interests": profile.interests
+        }, status=200)
+
+    def patch(self, request):
+        serializer = UpdateInterestsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        profile, _ = ChildLearningProfile.objects.get_or_create(
+            child=request.user
+        )
+
+        interests = serializer.validated_data["interests"]
+
+        allowed_topics = set(
+            Topic.objects.filter(
+                is_active=True,
+                name__in=interests
+            ).values_list("name", flat=True)
+        )
+
+        profile.interests = list(allowed_topics)
+        profile.save(update_fields=["interests", "updated_at"])
+
+        return Response({
+            "message": "Interests updated",
+            "interests": profile.interests
+        }, status=200)
+        
+        
+class MyChallengesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        child = request.user
+
+        assign_active_challenges(child)
+
+        challenges = ChildChallenge.objects.filter(
+            child=child
+        ).select_related(
+            "challenge"
+        ).order_by(
+            "is_completed",
+            "challenge__challenge_type",
+            "challenge__id",
+        )
+
+        serializer = ChildChallengeSerializer(
+            challenges,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response({
+            "challenges": serializer.data
+        }, status=200)

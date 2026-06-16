@@ -124,3 +124,34 @@ def greeting(profile) -> dict | None:
  
     return get_message(profile, state, trigger)
  
+ 
+def get_companion_mood(profile):
+    streak = profile.current_streak
+
+    if streak >= 30:
+        return "proud"
+
+    if streak >= 7:
+        return "happy"
+
+    if streak == 0:
+        return "supportive"
+
+    return "normal"
+
+
+def greeting(profile):
+    mood = get_companion_mood(profile)
+
+    greetings = {
+        "proud":
+            "Wow! You are learning every day!",
+        "happy":
+            "Great job! Ready for today's lesson?",
+        "supportive":
+            "Let's start together. You can do it!",
+        "normal":
+            "Hi! Ready to learn?"
+    }
+
+    return greetings[mood]

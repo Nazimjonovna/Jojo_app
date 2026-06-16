@@ -24,6 +24,9 @@ from .models import (
     ChildAchievement,
     ChildCompanionState,
     ChildDailyTask,
+    Topic,
+    Challenge,
+    ChildChallenge,
 )
 
 
@@ -559,3 +562,58 @@ class CompanionStateSerializer(_MultilingualMixin, serializers.ModelSerializer):
  
 class SelectCompanionSerializer(serializers.Serializer):
     companion_code = serializers.SlugField(max_length=32)
+    
+    
+class TopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Topic
+        fields = [
+            "id",
+            "name",
+            "name_uz",
+            "name_ru",
+            "name_en",
+            "name_kk",
+            "icon",
+            "is_active",
+            "order",
+        ]
+
+
+class UpdateInterestsSerializer(serializers.Serializer):
+    interests = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=True
+    )
+    
+    
+class ChallengeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Challenge
+        fields = [
+            "id",
+            "title",
+            "description",
+            "challenge_type",
+            "target_type",
+            "target_value",
+            "reward_xp",
+            "is_active",
+            "starts_at",
+            "ends_at",
+        ]
+
+
+class ChildChallengeSerializer(serializers.ModelSerializer):
+    challenge = ChallengeSerializer(read_only=True)
+
+    class Meta:
+        model = ChildChallenge
+        fields = [
+            "id",
+            "challenge",
+            "progress",
+            "is_completed",
+            "completed_at",
+            "created_at",
+        ]

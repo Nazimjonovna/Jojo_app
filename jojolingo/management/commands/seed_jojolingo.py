@@ -13,6 +13,9 @@ from jojolingo.models import (
     PlacementQuestion,
     PlacementAnswerOption,
     VocabularyItem,
+    Topic,
+    Challenge,
+    AICompanion,
 )
 
 
@@ -21,10 +24,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         self.create_languages()
+        self.create_topics()
         self.create_courses()
+        self.create_challenges()
         self.create_vocabulary_items()
         self.create_learning_method_rules()
         self.create_placement_tests()
+        self.create_ai_companions()
 
         self.stdout.write(
             self.style.SUCCESS("Jojolingo seed data created successfully")
@@ -42,6 +48,29 @@ class Command(BaseCommand):
             Language.objects.update_or_create(
                 code=item["code"],
                 defaults=item,
+            )
+
+    def create_topics(self):
+        topics = [
+            ("animals", "Hayvonlar", "Животные", "Animals", "Жануарлар", 1),
+            ("cars", "Mashinalar", "Машины", "Cars", "Көліктер", 2),
+            ("football", "Futbol", "Футбол", "Football", "Футбол", 3),
+            ("space", "Kosmos", "Космос", "Space", "Ғарыш", 4),
+            ("school", "Maktab", "Школа", "School", "Мектеп", 5),
+            ("family", "Oila", "Семья", "Family", "Отбасы", 6),
+        ]
+
+        for name, name_uz, name_ru, name_en, name_kk, order in topics:
+            Topic.objects.update_or_create(
+                name=name,
+                defaults={
+                    "name_uz": name_uz,
+                    "name_ru": name_ru,
+                    "name_en": name_en,
+                    "name_kk": name_kk,
+                    "order": order,
+                    "is_active": True,
+                },
             )
 
     def create_courses(self):
@@ -98,7 +127,7 @@ class Command(BaseCommand):
         level_a0 = Level.objects.get(course=course, code="A0")
         level_a1 = Level.objects.get(course=course, code="A1")
 
-        unit_1, _ = Unit.objects.update_or_create(
+        unit_greetings, _ = Unit.objects.update_or_create(
             course=course,
             level=level_a0,
             title="Greetings",
@@ -109,7 +138,7 @@ class Command(BaseCommand):
             },
         )
 
-        unit_2, _ = Unit.objects.update_or_create(
+        unit_numbers, _ = Unit.objects.update_or_create(
             course=course,
             level=level_a0,
             title="Numbers",
@@ -120,7 +149,7 @@ class Command(BaseCommand):
             },
         )
 
-        unit_3, _ = Unit.objects.update_or_create(
+        unit_family, _ = Unit.objects.update_or_create(
             course=course,
             level=level_a1,
             title="Family",
@@ -131,9 +160,14 @@ class Command(BaseCommand):
             },
         )
 
-        self.create_greeting_lessons(course, unit_1)
-        self.create_number_lessons(course, unit_2)
-        self.create_family_lessons(course, unit_3)
+        self.create_greeting_lessons(course, unit_greetings)
+        self.create_number_lessons(course, unit_numbers)
+        self.create_family_lessons(course, unit_family)
+
+    def attach_topic_to_lesson(self, lesson, topic_name):
+        topic = Topic.objects.filter(name=topic_name, is_active=True).first()
+        if topic:
+            lesson.topics.add(topic)
 
     def create_greeting_lessons(self, course, unit):
         lesson, _ = Lesson.objects.update_or_create(
@@ -147,6 +181,8 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
+
+        self.attach_topic_to_lesson(lesson, "school")
 
         learning = course.learning_language.code
         data = self.get_greeting_data(learning)
@@ -167,15 +203,7 @@ class Command(BaseCommand):
                 },
             )
 
-            AnswerOption.objects.filter(exercise=exercise).delete()
-
-            for option_order, option_text in enumerate(item["options"], start=1):
-                AnswerOption.objects.create(
-                    exercise=exercise,
-                    text=option_text,
-                    is_correct=option_text == item["correct"],
-                    order=option_order,
-                )
+            self.recreate_options(exercise, item["options"], item["correct"])
 
     def create_number_lessons(self, course, unit):
         lesson, _ = Lesson.objects.update_or_create(
@@ -189,6 +217,8 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
+
+        self.attach_topic_to_lesson(lesson, "school")
 
         learning = course.learning_language.code
 
@@ -217,15 +247,7 @@ class Command(BaseCommand):
                 },
             )
 
-            AnswerOption.objects.filter(exercise=exercise).delete()
-
-            for option_order, option_text in enumerate(items, start=1):
-                AnswerOption.objects.create(
-                    exercise=exercise,
-                    text=option_text,
-                    is_correct=option_text == correct,
-                    order=option_order,
-                )
+            self.recreate_options(exercise, items, correct)
 
     def create_family_lessons(self, course, unit):
         lesson, _ = Lesson.objects.update_or_create(
@@ -239,6 +261,8 @@ class Command(BaseCommand):
                 "is_active": True,
             },
         )
+
+        self.attach_topic_to_lesson(lesson, "family")
 
         learning = course.learning_language.code
 
@@ -267,15 +291,18 @@ class Command(BaseCommand):
                 },
             )
 
-            AnswerOption.objects.filter(exercise=exercise).delete()
+            self.recreate_options(exercise, words, correct)
 
-            for option_order, option_text in enumerate(words, start=1):
-                AnswerOption.objects.create(
-                    exercise=exercise,
-                    text=option_text,
-                    is_correct=option_text == correct,
-                    order=option_order,
-                )
+    def recreate_options(self, exercise, options, correct):
+        AnswerOption.objects.filter(exercise=exercise).delete()
+
+        for order, option_text in enumerate(options, start=1):
+            AnswerOption.objects.create(
+                exercise=exercise,
+                text=option_text,
+                is_correct=option_text == correct,
+                order=order,
+            )
 
     def get_greeting_data(self, learning):
         greetings = {
@@ -313,6 +340,83 @@ class Command(BaseCommand):
                 "explanation": f"'{target['thanks']}' means thank you.",
             },
         ]
+
+    def create_vocabulary_items(self):
+        data = {
+            "uz": [
+                ("salom", "salom", "привет", "hello", "сәлем", "A0", "Salom, do‘stim!"),
+                ("xayr", "xayr", "пока", "bye", "сау бол", "A0", "Xayr, ko‘rishguncha!"),
+                ("rahmat", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Rahmat, Jojo!"),
+                ("bir", "bir", "один", "one", "бір", "A0", "Menda bir kitob bor."),
+                ("ikki", "ikki", "два", "two", "екі", "A0", "Menda ikki olma bor."),
+                ("uch", "uch", "три", "three", "үш", "A0", "Uchta qush uchdi."),
+                ("ota", "ota", "папа", "father", "әке", "A1", "Mening otam yaxshi inson."),
+                ("ona", "ona", "мама", "mother", "ана", "A1", "Mening onam mehribon."),
+                ("aka", "aka", "брат", "brother", "аға", "A1", "Mening akam bor."),
+            ],
+            "ru": [
+                ("привет", "salom", "привет", "hello", "сәлем", "A0", "Привет, друг!"),
+                ("пока", "xayr", "пока", "bye", "сау бол", "A0", "Пока, до встречи!"),
+                ("спасибо", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Спасибо тебе!"),
+                ("один", "bir", "один", "one", "бір", "A0", "У меня один мяч."),
+                ("два", "ikki", "два", "two", "екі", "A0", "У меня две книги."),
+                ("три", "uch", "три", "three", "үш", "A0", "Три птицы летят."),
+                ("папа", "ota", "папа", "father", "әке", "A1", "Мой папа дома."),
+                ("мама", "ona", "мама", "mother", "ана", "A1", "Моя мама добрая."),
+                ("брат", "aka", "брат", "brother", "аға", "A1", "У меня есть брат."),
+            ],
+            "en": [
+                ("hello", "salom", "привет", "hello", "сәлем", "A0", "Hello, my friend!"),
+                ("bye", "xayr", "пока", "bye", "сау бол", "A0", "Bye, see you!"),
+                ("thank you", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Thank you, Jojo!"),
+                ("one", "bir", "один", "one", "бір", "A0", "I have one book."),
+                ("two", "ikki", "два", "two", "екі", "A0", "I have two apples."),
+                ("three", "uch", "три", "three", "үш", "A0", "Three birds fly."),
+                ("father", "ota", "папа", "father", "әке", "A1", "My father is kind."),
+                ("mother", "ona", "мама", "mother", "ана", "A1", "My mother is kind."),
+                ("brother", "aka", "брат", "brother", "аға", "A1", "I have a brother."),
+            ],
+            "kk": [
+                ("сәлем", "salom", "привет", "hello", "сәлем", "A0", "Сәлем, досым!"),
+                ("сау бол", "xayr", "пока", "bye", "сау бол", "A0", "Сау бол, кездескенше!"),
+                ("рақмет", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Рақмет саған!"),
+                ("бір", "bir", "один", "one", "бір", "A0", "Менде бір кітап бар."),
+                ("екі", "ikki", "два", "two", "екі", "A0", "Менде екі алма бар."),
+                ("үш", "uch", "три", "three", "үш", "A0", "Үш құс ұшты."),
+                ("әке", "ota", "папа", "father", "әке", "A1", "Менің әкем үйде."),
+                ("ана", "ona", "мама", "mother", "ана", "A1", "Менің анам мейірімді."),
+                ("аға", "aka", "брат", "brother", "аға", "A1", "Менің ағам бар."),
+            ],
+        }
+
+        for lang_code, words in data.items():
+            language = Language.objects.get(code=lang_code)
+
+            for order, item in enumerate(words, start=1):
+                (
+                    word,
+                    translation_uz,
+                    translation_ru,
+                    translation_en,
+                    translation_kk,
+                    level_code,
+                    usage_example,
+                ) = item
+
+                VocabularyItem.objects.update_or_create(
+                    language=language,
+                    word=word,
+                    defaults={
+                        "translation_uz": translation_uz,
+                        "translation_ru": translation_ru,
+                        "translation_en": translation_en,
+                        "translation_kk": translation_kk,
+                        "level_code": level_code,
+                        "usage_example": usage_example,
+                        "order": order,
+                        "is_active": True,
+                    },
+                )
 
     def create_learning_method_rules(self):
         rules = [
@@ -508,79 +612,81 @@ class Command(BaseCommand):
             },
         ]
         
-    def create_vocabulary_items(self):
-        data = {
-            "uz": [
-                ("salom", "salom", "привет", "hello", "сәлем", "A0", "Salom, do‘stim!"),
-                ("xayr", "xayr", "пока", "bye", "сау бол", "A0", "Xayr, ko‘rishguncha!"),
-                ("rahmat", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Rahmat, Jojo!"),
-                ("bir", "bir", "один", "one", "бір", "A0", "Menda bir kitob bor."),
-                ("ikki", "ikki", "два", "two", "екі", "A0", "Menda ikki olma bor."),
-                ("uch", "uch", "три", "three", "үш", "A0", "Uchta qush uchdi."),
-                ("ota", "ota", "папа", "father", "әке", "A1", "Mening otam yaxshi inson."),
-                ("ona", "ona", "мама", "mother", "ана", "A1", "Mening onam mehribon."),
-                ("aka", "aka", "брат", "brother", "аға", "A1", "Mening akam bor."),
-            ],
-            "ru": [
-                ("привет", "salom", "привет", "hello", "сәлем", "A0", "Привет, друг!"),
-                ("пока", "xayr", "пока", "bye", "сау бол", "A0", "Пока, до встречи!"),
-                ("спасибо", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Спасибо тебе!"),
-                ("один", "bir", "один", "one", "бір", "A0", "У меня один мяч."),
-                ("два", "ikki", "два", "two", "екі", "A0", "У меня две книги."),
-                ("три", "uch", "три", "three", "үш", "A0", "Три птицы летят."),
-                ("папа", "ota", "папа", "father", "әке", "A1", "Мой папа дома."),
-                ("мама", "ona", "мама", "mother", "ана", "A1", "Моя мама добрая."),
-                ("брат", "aka", "брат", "brother", "аға", "A1", "У меня есть брат."),
-            ],
-            "en": [
-                ("hello", "salom", "привет", "hello", "сәлем", "A0", "Hello, my friend!"),
-                ("bye", "xayr", "пока", "bye", "сау бол", "A0", "Bye, see you!"),
-                ("thank you", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Thank you, Jojo!"),
-                ("one", "bir", "один", "one", "бір", "A0", "I have one book."),
-                ("two", "ikki", "два", "two", "екі", "A0", "I have two apples."),
-                ("three", "uch", "три", "three", "үш", "A0", "Three birds fly."),
-                ("father", "ota", "папа", "father", "әке", "A1", "My father is kind."),
-                ("mother", "ona", "мама", "mother", "ана", "A1", "My mother is kind."),
-                ("brother", "aka", "брат", "brother", "аға", "A1", "I have a brother."),
-            ],
-            "kk": [
-                ("сәлем", "salom", "привет", "hello", "сәлем", "A0", "Сәлем, досым!"),
-                ("сау бол", "xayr", "пока", "bye", "сау бол", "A0", "Сау бол, кездескенше!"),
-                ("рақмет", "rahmat", "спасибо", "thank you", "рақмет", "A0", "Рақмет саған!"),
-                ("бір", "bir", "один", "one", "бір", "A0", "Менде бір кітап бар."),
-                ("екі", "ikki", "два", "two", "екі", "A0", "Менде екі алма бар."),
-                ("үш", "uch", "три", "three", "үш", "A0", "Үш құс ұшты."),
-                ("әке", "ota", "папа", "father", "әке", "A1", "Менің әкем үйде."),
-                ("ана", "ona", "мама", "mother", "ана", "A1", "Менің анам мейірімді."),
-                ("аға", "aka", "брат", "brother", "аға", "A1", "Менің ағам бар."),
-            ],
-        }
+    def create_challenges(self):
+        challenges = [
+            {
+                "title": "Earn 20 XP",
+                "description": "Complete exercises and earn 20 XP today.",
+                "challenge_type": "daily",
+                "target_type": "xp",
+                "target_value": 20,
+                "reward_xp": 5,
+            },
+            {
+                "title": "Complete 1 Lesson",
+                "description": "Finish one lesson.",
+                "challenge_type": "daily",
+                "target_type": "lesson",
+                "target_value": 1,
+                "reward_xp": 10,
+            },
+            {
+                "title": "Practice 5 Words",
+                "description": "Answer 5 word exercises correctly.",
+                "challenge_type": "daily",
+                "target_type": "word",
+                "target_value": 5,
+                "reward_xp": 5,
+            },
+        ]
 
-        for lang_code, words in data.items():
-            language = Language.objects.get(code=lang_code)
+        for item in challenges:
+            Challenge.objects.update_or_create(
+                title=item["title"],
+                defaults={
+                    **item,
+                    "is_active": True,
+                },
+            )
+            
+    def create_ai_companions(self):
+        companions = [
+            {
+                "code": "jojo",
+                "level": "A0",
+                "name_uz": "Jojo",
+                "name_ru": "Джоджо",
+                "name_en": "Jojo",
+                "name_kk": "Джоджо",
+                "personality": "friendly",
+                "is_active": True,
+            },
+            {
+                "code": "miko",
+                "level": "A1",
+                "name_uz": "Miko",
+                "name_ru": "Мико",
+                "name_en": "Miko",
+                "name_kk": "Мико",
+                "personality": "playful",
+                "is_active": True,
+            },
+            {
+                "code": "luna",
+                "level": "A1",
+                "name_uz": "Luna",
+                "name_ru": "Луна",
+                "name_en": "Luna",
+                "name_kk": "Луна",
+                "personality": "calm",
+                "is_active": True,
+            },
+        ]
 
-            for order, item in enumerate(words, start=1):
-                (
-                    word,
-                    translation_uz,
-                    translation_ru,
-                    translation_en,
-                    translation_kk,
-                    level_code,
-                    usage_example,
-                ) = item
+        for item in companions:
+            code = item.pop("code")
 
-                VocabularyItem.objects.update_or_create(
-                    language=language,
-                    word=word,
-                    defaults={
-                        "translation_uz": translation_uz,
-                        "translation_ru": translation_ru,
-                        "translation_en": translation_en,
-                        "translation_kk": translation_kk,
-                        "level_code": level_code,
-                        "usage_example": usage_example,
-                        "order": order,
-                        "is_active": True,
-                    },
-                )
+            AICompanion.objects.update_or_create(
+                code=code,
+                defaults=item,
+            )

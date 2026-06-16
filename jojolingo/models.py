@@ -115,6 +115,24 @@ class Unit(models.Model):
 
     def __str__(self):
         return self.title
+    
+    
+class Topic(models.Model):
+    name = models.CharField(max_length=100)
+    name_uz = models.CharField(max_length=100, blank=True, default="")
+    name_ru = models.CharField(max_length=100, blank=True, default="")
+    name_en = models.CharField(max_length=100, blank=True, default="")
+    name_kk = models.CharField(max_length=100, blank=True, default="")
+
+    icon = models.ImageField(upload_to="jojolingo/topics/", null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.name
 
 
 class Lesson(models.Model):
@@ -140,6 +158,10 @@ class Lesson(models.Model):
 
     title = models.CharField(max_length=150)
     lesson_type = models.CharField(max_length=20, choices=LESSON_TYPE_CHOICES)
+    topics = models.ManyToManyField(
+        Topic,
+        blank=True
+    )
 
     reward_xp = models.PositiveIntegerField(default=10)
     required_accuracy = models.PositiveIntegerField(default=80)
@@ -254,6 +276,43 @@ class ChildLearningProfile(models.Model):
 
     ai_friend_name = models.CharField(max_length=50, default="Jojo")
     ai_friend_level = models.CharField(max_length=10, default="A0")
+    
+        # Gamification / streak
+    current_streak = models.PositiveIntegerField(default=0)
+    longest_streak = models.PositiveIntegerField(default=0)
+    streak_freeze_count = models.PositiveIntegerField(default=0)
+    last_activity_date = models.DateField(null=True, blank=True)
+
+    completed_lessons_count = models.PositiveIntegerField(default=0)
+    perfect_lessons_count = models.PositiveIntegerField(default=0)
+    mastered_words_count = models.PositiveIntegerField(default=0)
+
+    # Flexible studying
+    LEARNING_SPEED_SLOW = "slow"
+    LEARNING_SPEED_NORMAL = "normal"
+    LEARNING_SPEED_FAST = "fast"
+
+    LEARNING_SPEED_CHOICES = (
+        (LEARNING_SPEED_SLOW, "Slow"),
+        (LEARNING_SPEED_NORMAL, "Normal"),
+        (LEARNING_SPEED_FAST, "Fast"),
+    )
+
+    learning_speed = models.CharField(
+        max_length=20,
+        choices=LEARNING_SPEED_CHOICES,
+        default=LEARNING_SPEED_NORMAL,
+    )
+
+    interests = models.JSONField(default=list, blank=True)
+    weak_topics = models.JSONField(default=list, blank=True)
+    strong_topics = models.JSONField(default=list, blank=True)
+
+    last_recommended_method = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -755,7 +814,16 @@ class ChildDailyTask(models.Model):
  
  
 class AICompanion(models.Model):
-    """Tanlash mumkin bo'lgan personajlar: masalan Jojo qushcha, Bo'ri bolasi..."""
+    LEVEL_CHOICES = (
+        ("A0","A0"),
+        ("A1","A1"),
+        ("A2","A2"),
+        ("B1","B1"),
+    )
+    level = models.CharField(
+        max_length=10,
+        choices=LEVEL_CHOICES
+    )
     code = models.SlugField(max_length=32, unique=True)
     name_uz = models.CharField(max_length=64)
     name_ru = models.CharField(max_length=64, blank=True)
@@ -859,3 +927,122 @@ class ChildDailyActivity(models.Model):
         total = self.correct_answers + self.wrong_answers
         return round(self.correct_answers / total * 100, 1) if total else 0.0
  
+ 
+class ChildLearningAnalytics(models.Model):
+    child = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="learning_analytics"
+    )
+
+    average_accuracy = models.FloatField(default=0)
+    average_time_per_exercise = models.FloatField(default=0)
+
+    total_exercises = models.PositiveIntegerField(default=0)
+    total_correct_answers = models.PositiveIntegerField(default=0)
+    total_wrong_answers = models.PositiveIntegerField(default=0)
+
+    visual_score = models.PositiveIntegerField(default=0)
+    dialogue_score = models.PositiveIntegerField(default=0)
+    repeat_score = models.PositiveIntegerField(default=0)
+    game_score = models.PositiveIntegerField(default=0)
+
+    learning_speed_score = models.FloatField(default=0)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Analytics {self.child_id}"
+    
+    
+class Challenge(models.Model):
+    TYPE_DAILY = "daily"
+    TYPE_WEEKLY = "weekly"
+    TYPE_SPECIAL = "special"
+
+    TYPE_CHOICES = (
+        (TYPE_DAILY, "Daily"),
+        (TYPE_WEEKLY, "Weekly"),
+        (TYPE_SPECIAL, "Special"),
+    )
+
+    TARGET_XP = "xp"
+    TARGET_LESSON = "lesson"
+    TARGET_WORD = "word"
+    TARGET_STREAK = "streak"
+
+    TARGET_CHOICES = (
+        (TARGET_XP, "XP"),
+        (TARGET_LESSON, "Lesson"),
+        (TARGET_WORD, "Word"),
+        (TARGET_STREAK, "Streak"),
+    )
+
+    title = models.CharField(max_length=150)
+    description = models.TextField(blank=True, default="")
+
+    challenge_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    target_type = models.CharField(max_length=20, choices=TARGET_CHOICES)
+
+    target_value = models.PositiveIntegerField(default=1)
+    reward_xp = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
+    
+    
+class ChildChallenge(models.Model):
+    child = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="child_challenges"
+    )
+
+    challenge = models.ForeignKey(
+        Challenge,
+        on_delete=models.CASCADE,
+        related_name="child_challenges"
+    )
+
+    progress = models.PositiveIntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
+
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("child", "challenge")
+
+    def __str__(self):
+        return f"{self.child_id} - {self.challenge_id}"
+    
+    
+class ChildTopicStat(models.Model):
+    profile = models.ForeignKey(
+        ChildLearningProfile,
+        on_delete=models.CASCADE,
+        related_name="topic_stats"
+    )
+
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE
+    )
+
+    interactions = models.PositiveIntegerField(default=0)
+
+    correct_answers = models.PositiveIntegerField(default=0)
+
+    total_time_seconds = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("profile", "topic")
+        
+    def __str__(self):
+        return f"{self.profile_id} - {self.topic.name}"

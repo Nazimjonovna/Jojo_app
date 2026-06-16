@@ -9,7 +9,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('parent', '0019_parentstoreproduct_category_label_en_and_more'),
+        # ('parent', '0019_parentstoreproduct_category_label_en_and_more'),
         ('parent', '0022_callcentercomment_direction_and_more'),
     ]
 

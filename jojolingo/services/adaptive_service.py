@@ -135,3 +135,31 @@ def get_recommended_learning_method(child):
         "method": rule.recommended_method if rule else "review",
         "message": get_rule_message(rule, lang),
     }
+    
+    
+def update_learning_style(
+    child,
+    exercise_type,
+    is_correct
+):
+    analytics, _ = ChildLearningAnalytics.objects.get_or_create(
+        child=child
+    )
+
+    score = 2 if is_correct else 1
+
+    if exercise_type == "image":
+        analytics.visual_score += score
+
+    elif exercise_type == "dialogue":
+        analytics.dialogue_score += score
+
+    elif exercise_type == "translate":
+        analytics.repeat_score += score
+
+    else:
+        analytics.game_score += score
+
+    analytics.save()
+
+    return analytics

@@ -1,8 +1,7 @@
 from datetime import timedelta
- 
+from ..models import ChildLearningAnalytics
 from django.db.models import Avg, Count, F, Sum
 from django.utils import timezone
- 
 from ..models import ChildDailyActivity
  
  
@@ -195,3 +194,100 @@ def _aggregate_period(profile, days: int, offset: int = 0) -> dict:
             round(correct / (correct + wrong) * 100, 1) if (correct + wrong) else None
         ),
     }
+    
+    
+def update_learning_analytics(
+    child,
+    exercise_type,
+    is_correct,
+    time_spent_seconds=0
+):
+    analytics, _ = ChildLearningAnalytics.objects.get_or_create(
+        child=child
+    )
+
+    analytics.total_exercises += 1
+
+    if is_correct:
+        analytics.total_correct_answers += 1
+    else:
+        analytics.total_wrong_answers += 1
+
+    if analytics.total_exercises > 0:
+        analytics.average_accuracy = round(
+            (
+                analytics.total_correct_answers
+                / analytics.total_exercises
+            ) * 100,
+            2,
+        )
+
+    if time_spent_seconds:
+        old_avg = analytics.average_time_per_exercise
+        total = analytics.total_exercises
+
+        analytics.average_time_per_exercise = round(
+            (
+                (old_avg * (total - 1))
+                + time_spent_seconds
+            ) / total,
+            2,
+        )
+
+    score = 2 if is_correct else 1
+
+    if exercise_type in ["image", "match"]:
+        analytics.visual_score += score
+
+    elif exercise_type == "dialogue":
+        analytics.dialogue_score += score
+
+    elif exercise_type in ["translate", "fill_blank"]:
+        analytics.repeat_score += score
+
+    else:
+        analytics.game_score += score
+
+    analytics.learning_speed_score = (
+        calculate_learning_speed_score(analytics)
+    )
+
+    analytics.save()
+
+    return analytics
+
+
+def calculate_learning_speed_score(analytics):
+    accuracy = analytics.average_accuracy
+    avg_time = analytics.average_time_per_exercise or 0
+
+    score = accuracy
+
+    if avg_time and avg_time <= 8:
+        score += 10
+
+    elif avg_time and avg_time >= 25:
+        score -= 10
+
+    return max(0, min(score, 100))
+
+
+def detect_learning_speed(analytics):
+    if analytics.learning_speed_score >= 85:
+        return "fast"
+
+    if analytics.learning_speed_score >= 60:
+        return "normal"
+
+    return "slow"
+
+
+def detect_learning_style(analytics):
+    scores = {
+        "visual": analytics.visual_score,
+        "dialogue": analytics.dialogue_score,
+        "repeat": analytics.repeat_score,
+        "game": analytics.game_score,
+    }
+
+    return max(scores, key=scores.get)

@@ -31,6 +31,9 @@ from .views import (
     ChildMistakesView,
     ChildWordsView,
     ChildWeeklySummaryView,
+    TopicListView,
+    MyInterestsView,
+    MyChallengesView,
 )
 
 urlpatterns = [
@@ -67,4 +70,8 @@ urlpatterns = [
     path("children/<int:profile_id>/mistakes/", ChildMistakesView.as_view(), name="child-mistakes"),
     path("children/<int:profile_id>/words/", ChildWordsView.as_view(), name="child-words"),
     path("children/<int:profile_id>/weekly-summary/", ChildWeeklySummaryView.as_view(), name="child-weekly-summary"),
+    
+    path("topics/", TopicListView.as_view()),
+    path("me/interests/", MyInterestsView.as_view()),
+    path("me/challenges/", MyChallengesView.as_view()),
 ]
